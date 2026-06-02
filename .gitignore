@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# env files (keep example committed)
+.env*
+!.env.example
+
+# misc
+.DS_Store
+*.log
+*.tsbuildinfo
+next-env.d.ts
+.vscode/
+.idea/

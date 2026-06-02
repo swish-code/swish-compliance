@@ -1,0 +1,127 @@
+import "server-only";
+import { queryAll, queryOne, execute } from "@/lib/db";
+import type { Sop, SopStatus } from "./types";
+
+const SOP_SELECT = `
+  s.id, s.code, s.title, s.description, s.version, s.status, s.file_url,
+  s.brand_id, b.name AS brand_name,
+  s.department_id, d.name AS department_name,
+  s.owner_id, u_o.display_name AS owner_name,
+  s.created_by, u_c.display_name AS created_by_name,
+  s.approved_by, u_a.display_name AS approved_by_name,
+  s.approved_at, s.effective_date, s.review_date, s.created_at, s.updated_at
+FROM sops s
+LEFT JOIN brands       b   ON b.id   = s.brand_id
+LEFT JOIN departments  d   ON d.id   = s.department_id
+LEFT JOIN users        u_o ON u_o.id = s.owner_id
+LEFT JOIN users        u_c ON u_c.id = s.created_by
+LEFT JOIN users        u_a ON u_a.id = s.approved_by
+`;
+
+export type ListFilters = {
+  status?: SopStatus;
+  search?: string;
+  brandId?: number;
+  departmentId?: number;
+  limit?: number;
+  offset?: number;
+};
+
+export async function listSops(f: ListFilters = {}): Promise<{ rows: Sop[]; total: number }> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (f.status) {
+    params.push(f.status);
+    conditions.push(`s.status = $${params.length}`);
+  }
+  if (f.search) {
+    params.push(`%${f.search}%`);
+    conditions.push(`(s.title ILIKE $${params.length} OR s.code ILIKE $${params.length})`);
+  }
+  if (f.brandId) {
+    params.push(f.brandId);
+    conditions.push(`s.brand_id = $${params.length}`);
+  }
+  if (f.departmentId) {
+    params.push(f.departmentId);
+    conditions.push(`s.department_id = $${params.length}`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const limit = f.limit ?? 50;
+  const offset = f.offset ?? 0;
+  params.push(limit, offset);
+
+  const rows = await queryAll<Sop>(
+    `SELECT ${SOP_SELECT} ${where}
+     ORDER BY s.updated_at DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+
+  const totalRow = await queryOne<{ total: number }>(
+    `SELECT COUNT(*)::int AS total FROM sops s ${where}`,
+    params.slice(0, params.length - 2)
+  );
+
+  return { rows, total: totalRow?.total ?? 0 };
+}
+
+export async function getSopById(id: number): Promise<Sop | undefined> {
+  return queryOne<Sop>(`SELECT ${SOP_SELECT} WHERE s.id = $1`, [id]);
+}
+
+export type CreateSopInput = {
+  code?: string | null;
+  title: string;
+  description?: string | null;
+  version?: string;
+  file_url?: string | null;
+  brand_id?: number | null;
+  department_id?: number | null;
+  owner_id?: number | null;
+  effective_date?: string | null;
+  review_date?: string | null;
+  created_by: number;
+};
+
+export async function createSop(input: CreateSopInput): Promise<number> {
+  const row = await queryOne<{ id: number }>(
+    `INSERT INTO sops
+      (code, title, description, version, status, file_url, brand_id, department_id,
+       owner_id, created_by, effective_date, review_date)
+     VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $9, $10, $11)
+     RETURNING id`,
+    [
+      input.code ?? null,
+      input.title,
+      input.description ?? null,
+      input.version ?? "1.0",
+      input.file_url ?? null,
+      input.brand_id ?? null,
+      input.department_id ?? null,
+      input.owner_id ?? input.created_by,
+      input.created_by,
+      input.effective_date ?? null,
+      input.review_date ?? null,
+    ]
+  );
+  return row!.id;
+}
+
+export async function setSopStatus(
+  id: number,
+  status: SopStatus,
+  approverId: number | null
+): Promise<void> {
+  if (status === "approved") {
+    await execute(
+      `UPDATE sops SET status = 'approved', approved_by = $1, approved_at = NOW() WHERE id = $2`,
+      [approverId, id]
+    );
+  } else {
+    await execute(`UPDATE sops SET status = $1 WHERE id = $2`, [status, id]);
+  }
+}
