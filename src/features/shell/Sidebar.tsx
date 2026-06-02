@@ -25,7 +25,13 @@ const sections: { label: string; items: { href: string; label: string; dot?: boo
   },
   {
     label: "Administration",
-    items: [{ href: "/admin", label: "Admin Home" }],
+    items: [
+      { href: "/admin", label: "Admin Home" },
+      { href: "/admin/users", label: "Users" },
+      { href: "/admin/brands", label: "Brands" },
+      { href: "/admin/departments", label: "Departments" },
+      { href: "/admin/audit-logs", label: "Audit Logs" },
+    ],
   },
 ];
 
@@ -69,7 +75,7 @@ export default function Sidebar({ displayName }: { displayName: string }) {
               {section.items.map((item) => {
                 const active =
                   pathname === item.href ||
-                  (item.href !== "/" && pathname.startsWith(item.href));
+                  pathname.startsWith(item.href + "/");
                 return (
                   <li key={item.href}>
                     <Link

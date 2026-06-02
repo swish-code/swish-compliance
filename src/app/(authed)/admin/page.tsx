@@ -1,12 +1,85 @@
-import { requireUser } from "@/lib/auth/guard";
+import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
-import Placeholder from "@/features/shell/Placeholder";
+import { queryOne } from "@/lib/db";
 
-export default async function Page() {
-  const u = await requireUser();
+export default async function AdminHomePage() {
+  const user = await requireAdmin();
+
+  const stats = await queryOne<{
+    users: number;
+    active_users: number;
+    brands: number;
+    departments: number;
+    audit_events: number;
+  }>(
+    `SELECT
+       (SELECT COUNT(*)::int FROM users)                       AS users,
+       (SELECT COUNT(*)::int FROM users WHERE is_active)       AS active_users,
+       (SELECT COUNT(*)::int FROM brands WHERE is_active)      AS brands,
+       (SELECT COUNT(*)::int FROM departments WHERE is_active) AS departments,
+       (SELECT COUNT(*)::int FROM audit_logs)                  AS audit_events`
+  );
+
+  const tiles = [
+    {
+      href: "/admin/users",
+      title: "Users",
+      desc: "Add, edit, deactivate users. Reset passwords and assign roles.",
+      value: `${stats?.active_users ?? 0} active / ${stats?.users ?? 0} total`,
+      tone: "from-emerald-500 to-emerald-700",
+    },
+    {
+      href: "/admin/brands",
+      title: "Brands",
+      desc: "Manage the company's restaurant and service brands.",
+      value: `${stats?.brands ?? 0} active`,
+      tone: "from-indigo-500 to-indigo-700",
+    },
+    {
+      href: "/admin/departments",
+      title: "Departments",
+      desc: "Manage the company's functional departments.",
+      value: `${stats?.departments ?? 0} active`,
+      tone: "from-amber-500 to-amber-700",
+    },
+    {
+      href: "/admin/audit-logs",
+      title: "Audit Logs",
+      desc: "Full activity trail of every state-changing action.",
+      value: `${stats?.audit_events ?? 0} events recorded`,
+      tone: "from-rose-500 to-rose-700",
+    },
+  ];
+
   return (
-    <Workspace section="Administration" subtitle="Admin Home" sessionLabel="Session" userLabel={u.displayName}>
-      <Placeholder name="Admin Home" />
+    <Workspace
+      section="Administration"
+      subtitle="Admin Home"
+      sessionLabel="Session"
+      userLabel={user.displayName}
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {tiles.map((t) => (
+          <Link
+            key={t.href}
+            href={t.href}
+            className="group block bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md hover:border-gray-300 transition-all"
+          >
+            <div className={`h-1.5 bg-gradient-to-r ${t.tone}`} />
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <h2 className="text-lg font-semibold text-gray-900">{t.title}</h2>
+                <span className="text-gray-400 group-hover:text-gray-600 transition-colors">→</span>
+              </div>
+              <p className="text-sm text-gray-500 leading-relaxed mb-4">{t.desc}</p>
+              <div className="text-xs uppercase tracking-wider text-gray-400">
+                {t.value}
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
     </Workspace>
   );
 }
