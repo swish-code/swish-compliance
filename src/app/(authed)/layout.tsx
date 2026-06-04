@@ -9,7 +9,7 @@ export default async function AuthedLayout({
   const user = await requireUser();
   return (
     <>
-      <Sidebar displayName={user.displayName} />
+      <Sidebar displayName={user.displayName} role={user.role} />
       {children}
     </>
   );

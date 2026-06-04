@@ -3,43 +3,58 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-const sections: { label: string; items: { href: string; label: string; dot?: boolean }[] }[] = [
-  {
-    label: "Workspace",
-    items: [
-      { href: "/my-work", label: "My Work", dot: true },
-      { href: "/roadmap", label: "Roadmap" },
-      { href: "/tests", label: "Tests" },
-      { href: "/reports", label: "Reports" },
-    ],
-  },
-  {
-    label: "Compliance",
-    items: [
-      { href: "/sops", label: "SOPs" },
-      { href: "/checklists/templates", label: "Checklists" },
-      { href: "/audits", label: "Audits" },
-      { href: "/capa", label: "Corrective Actions" },
-      { href: "/frameworks", label: "Frameworks" },
-      { href: "/controls", label: "Controls" },
-      { href: "/policies", label: "Policies" },
-    ],
-  },
-  {
-    label: "Administration",
-    items: [
-      { href: "/admin", label: "Admin Home" },
-      { href: "/admin/users", label: "Users" },
-      { href: "/admin/brands", label: "Brands" },
-      { href: "/admin/departments", label: "Departments" },
-      { href: "/admin/audit-logs", label: "Audit Logs" },
-    ],
-  },
-];
+type Section = {
+  label: string;
+  items: { href: string; label: string; dot?: boolean }[];
+};
 
-export default function Sidebar({ displayName }: { displayName: string }) {
+const WORKSPACE: Section = {
+  label: "Workspace",
+  items: [
+    { href: "/my-work", label: "My Work", dot: true },
+    { href: "/roadmap", label: "Roadmap" },
+    { href: "/tests", label: "Tests" },
+    { href: "/reports", label: "Reports" },
+  ],
+};
+
+const COMPLIANCE: Section = {
+  label: "Compliance",
+  items: [
+    { href: "/sops", label: "SOPs" },
+    { href: "/checklists/templates", label: "Checklists" },
+    { href: "/audits", label: "Audits" },
+    { href: "/capa", label: "Corrective Actions" },
+    { href: "/frameworks", label: "Frameworks" },
+    { href: "/controls", label: "Controls" },
+    { href: "/policies", label: "Policies" },
+  ],
+};
+
+const ADMINISTRATION: Section = {
+  label: "Administration",
+  items: [
+    { href: "/admin", label: "Admin Home" },
+    { href: "/admin/users", label: "Users" },
+    { href: "/admin/brands", label: "Brands" },
+    { href: "/admin/departments", label: "Departments" },
+    { href: "/admin/audit-logs", label: "Audit Logs" },
+  ],
+};
+
+export default function Sidebar({
+  displayName,
+  role,
+}: {
+  displayName: string;
+  role: string;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Only admins see the Administration section
+  const sections: Section[] = [WORKSPACE, COMPLIANCE];
+  if (role === "admin") sections.push(ADMINISTRATION);
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -103,7 +118,10 @@ export default function Sidebar({ displayName }: { displayName: string }) {
 
       {/* Sign out */}
       <div className="p-3 border-t border-brand-700/50">
-        <div className="px-3 pb-3 text-xs text-brand-100/70 truncate">{displayName}</div>
+        <div className="px-3 pb-1 text-xs text-brand-100/70 truncate">{displayName}</div>
+        <div className="px-3 pb-3 text-[10px] uppercase tracking-widest text-brand-100/50">
+          {role.replace("_", " ")}
+        </div>
         <button
           onClick={signOut}
           className="w-full bg-brand-700/60 hover:bg-brand-700 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"

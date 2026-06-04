@@ -3,6 +3,7 @@ import { requireAdmin, USER_ROLES } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { queryAll } from "@/lib/db";
 import { createUserAction } from "@/features/admin/users/actions";
+import MultiSelect from "@/features/admin/users/MultiSelect";
 
 export default async function NewUserPage() {
   const me = await requireAdmin();
@@ -94,35 +95,23 @@ export default async function NewUserPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Brand (optional)
-              </label>
-              <select
-                name="brand_id"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">— None —</option>
-                {brands.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Department (optional)
-              </label>
-              <select
-                name="department_id"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">— None —</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
+            <MultiSelect
+              name="brand_ids"
+              label="Brands (multi-select)"
+              options={brands}
+              placeholder="Select one or more brands…"
+            />
+            <MultiSelect
+              name="department_ids"
+              label="Departments (multi-select)"
+              options={departments}
+              placeholder="Select one or more departments…"
+            />
           </div>
+          <p className="text-xs text-gray-500 -mt-2">
+            Leave both empty to grant no specific brand or department scope (admin / viewer roles
+            typically don&apos;t need scope).
+          </p>
 
           <div className="flex items-center gap-3 pt-2">
             <button

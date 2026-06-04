@@ -8,6 +8,7 @@ import {
   updateUserAction,
   resetPasswordAction,
 } from "@/features/admin/users/actions";
+import MultiSelect from "@/features/admin/users/MultiSelect";
 
 export default async function EditUserPage({
   params,
@@ -20,12 +21,12 @@ export default async function EditUserPage({
   if (!u) notFound();
 
   const brands = await queryAll<{ id: number; name: string }>(
-    `SELECT id, name FROM brands WHERE is_active OR id = $1 ORDER BY name`,
-    [u.brand_id ?? 0]
+    `SELECT id, name FROM brands WHERE is_active OR id = ANY($1) ORDER BY name`,
+    [u.brand_ids]
   );
   const departments = await queryAll<{ id: number; name: string }>(
-    `SELECT id, name FROM departments WHERE is_active OR id = $1 ORDER BY name`,
-    [u.department_id ?? 0]
+    `SELECT id, name FROM departments WHERE is_active OR id = ANY($1) ORDER BY name`,
+    [u.department_ids]
   );
 
   const isSelf = u.id === me.id;
@@ -47,9 +48,7 @@ export default async function EditUserPage({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Email
-              </label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Email</label>
               <input
                 type="email"
                 value={u.email}
@@ -57,13 +56,11 @@ export default async function EditUserPage({
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500"
               />
               <p className="text-[11px] text-gray-400 mt-1">
-                Email can't be changed. Create a new user instead.
+                Email can&apos;t be changed. Create a new user instead.
               </p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Full name
-              </label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Full name</label>
               <input
                 type="text"
                 name="display_name"
@@ -75,9 +72,7 @@ export default async function EditUserPage({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">
-              Role
-            </label>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Role</label>
             <select
               name="role"
               defaultValue={u.role}
@@ -90,42 +85,26 @@ export default async function EditUserPage({
             </select>
             {isSelf && (
               <p className="text-[11px] text-amber-700 mt-1">
-                You can't change your own role.
+                You can&apos;t change your own role.
               </p>
             )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Brand
-              </label>
-              <select
-                name="brand_id"
-                defaultValue={u.brand_id ?? ""}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">— None —</option>
-                {brands.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Department
-              </label>
-              <select
-                name="department_id"
-                defaultValue={u.department_id ?? ""}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">— None —</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
+            <MultiSelect
+              name="brand_ids"
+              label="Brands (multi-select)"
+              options={brands}
+              defaultSelected={u.brand_ids}
+              placeholder="Select brands…"
+            />
+            <MultiSelect
+              name="department_ids"
+              label="Departments (multi-select)"
+              options={departments}
+              defaultSelected={u.department_ids}
+              placeholder="Select departments…"
+            />
           </div>
 
           <div>
@@ -140,7 +119,7 @@ export default async function EditUserPage({
               <div>
                 <div className="text-sm font-medium text-gray-900">Active</div>
                 <div className="text-xs text-gray-500">
-                  Inactive users can't sign in. Their history is preserved.
+                  Inactive users can&apos;t sign in. Their history is preserved.
                 </div>
               </div>
             </label>
@@ -192,7 +171,6 @@ export default async function EditUserPage({
         </p>
       </div>
 
-      {/* Metadata */}
       <div className="text-xs text-gray-400 mt-4 px-2 flex gap-6">
         <span>Created: {new Date(u.created_at).toLocaleString()}</span>
         <span>Last login: {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : "Never"}</span>

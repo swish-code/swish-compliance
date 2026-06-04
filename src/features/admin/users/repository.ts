@@ -1,29 +1,49 @@
 import "server-only";
 import bcrypt from "bcryptjs";
-import { queryAll, queryOne, execute } from "@/lib/db";
+import { queryAll, queryOne, execute, pool } from "@/lib/db";
 
 export type UserRow = {
   id: number;
   email: string;
   display_name: string;
   role: string;
-  brand_id: number | null;
-  brand_name: string | null;
-  department_id: number | null;
-  department_name: string | null;
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
+  brand_ids: number[];
+  brand_names: string[];
+  department_ids: number[];
+  department_names: string[];
 };
 
+// Aggregates the user's brand + department scope from the junction tables.
 const USER_SELECT = `
-  u.id, u.email, u.display_name, u.role,
-  u.brand_id, b.name AS brand_name,
-  u.department_id, d.name AS department_name,
-  u.is_active, u.created_at, u.last_login_at
+  u.id, u.email, u.display_name, u.role, u.is_active, u.created_at, u.last_login_at,
+  COALESCE(
+    (SELECT array_agg(b.id ORDER BY b.name)
+       FROM user_brands ub JOIN brands b ON b.id = ub.brand_id
+       WHERE ub.user_id = u.id),
+    ARRAY[]::int[]
+  ) AS brand_ids,
+  COALESCE(
+    (SELECT array_agg(b.name ORDER BY b.name)
+       FROM user_brands ub JOIN brands b ON b.id = ub.brand_id
+       WHERE ub.user_id = u.id),
+    ARRAY[]::text[]
+  ) AS brand_names,
+  COALESCE(
+    (SELECT array_agg(d.id ORDER BY d.name)
+       FROM user_departments ud JOIN departments d ON d.id = ud.department_id
+       WHERE ud.user_id = u.id),
+    ARRAY[]::int[]
+  ) AS department_ids,
+  COALESCE(
+    (SELECT array_agg(d.name ORDER BY d.name)
+       FROM user_departments ud JOIN departments d ON d.id = ud.department_id
+       WHERE ud.user_id = u.id),
+    ARRAY[]::text[]
+  ) AS department_names
 FROM users u
-LEFT JOIN brands       b ON b.id = u.brand_id
-LEFT JOIN departments  d ON d.id = u.department_id
 `;
 
 export async function listUsers(search?: string): Promise<UserRow[]> {
@@ -47,12 +67,17 @@ export type CreateUserInput = {
   password: string;
   display_name: string;
   role: string;
-  brand_id?: number | null;
-  department_id?: number | null;
+  brand_ids?: number[];
+  department_ids?: number[];
 };
 
 export async function createUser(input: CreateUserInput): Promise<number> {
   const hash = bcrypt.hashSync(input.password, 10);
+  // Set the legacy primary columns to the first brand/department (if any) so
+  // any existing code that still reads them keeps working.
+  const primaryBrand = input.brand_ids?.[0] ?? null;
+  const primaryDept = input.department_ids?.[0] ?? null;
+
   const row = await queryOne<{ id: number }>(
     `INSERT INTO users (email, password_hash, display_name, role, brand_id, department_id, is_active)
      VALUES ($1, $2, $3, $4, $5, $6, TRUE)
@@ -62,23 +87,31 @@ export async function createUser(input: CreateUserInput): Promise<number> {
       hash,
       input.display_name,
       input.role,
-      input.brand_id ?? null,
-      input.department_id ?? null,
+      primaryBrand,
+      primaryDept,
     ]
   );
-  return row!.id;
+  const newId = row!.id;
+
+  await replaceUserBrands(newId, input.brand_ids ?? []);
+  await replaceUserDepartments(newId, input.department_ids ?? []);
+
+  return newId;
 }
 
 export type UpdateUserInput = {
   id: number;
   display_name?: string;
   role?: string;
-  brand_id?: number | null;
-  department_id?: number | null;
   is_active?: boolean;
+  brand_ids?: number[];
+  department_ids?: number[];
 };
 
 export async function updateUser(input: UpdateUserInput): Promise<void> {
+  const primaryBrand = input.brand_ids?.[0] ?? null;
+  const primaryDept = input.department_ids?.[0] ?? null;
+
   await execute(
     `UPDATE users SET
        display_name  = COALESCE($2, display_name),
@@ -91,11 +124,58 @@ export async function updateUser(input: UpdateUserInput): Promise<void> {
       input.id,
       input.display_name ?? null,
       input.role ?? null,
-      input.brand_id ?? null,
-      input.department_id ?? null,
+      primaryBrand,
+      primaryDept,
       input.is_active ?? null,
     ]
   );
+
+  if (input.brand_ids !== undefined) {
+    await replaceUserBrands(input.id, input.brand_ids);
+  }
+  if (input.department_ids !== undefined) {
+    await replaceUserDepartments(input.id, input.department_ids);
+  }
+}
+
+async function replaceUserBrands(userId: number, brandIds: number[]): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM user_brands WHERE user_id = $1`, [userId]);
+    for (const bid of brandIds) {
+      await client.query(
+        `INSERT INTO user_brands (user_id, brand_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, bid]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+async function replaceUserDepartments(userId: number, deptIds: number[]): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM user_departments WHERE user_id = $1`, [userId]);
+    for (const did of deptIds) {
+      await client.query(
+        `INSERT INTO user_departments (user_id, department_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, did]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function resetUserPassword(id: number, newPassword: string): Promise<void> {

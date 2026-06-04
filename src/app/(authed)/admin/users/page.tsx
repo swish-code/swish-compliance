@@ -21,6 +21,33 @@ const ROLE_TONE: Record<string, string> = {
   viewer: "bg-gray-50 text-gray-600 border-gray-200",
 };
 
+function chips(names: string[]) {
+  if (names.length === 0) return <span className="text-xs text-gray-400">—</span>;
+  if (names.length <= 2) {
+    return (
+      <div className="flex flex-wrap gap-1">
+        {names.map((n) => (
+          <span key={n} className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+            {n}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-1" title={names.join(", ")}>
+      {names.slice(0, 2).map((n) => (
+        <span key={n} className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+          {n}
+        </span>
+      ))}
+      <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">
+        +{names.length - 2}
+      </span>
+    </div>
+  );
+}
+
 export default async function UsersPage({
   searchParams,
 }: {
@@ -65,8 +92,8 @@ export default async function UsersPage({
               <th className="text-left px-5 py-3 font-medium">Email</th>
               <th className="text-left px-5 py-3 font-medium">Name</th>
               <th className="text-left px-5 py-3 font-medium">Role</th>
-              <th className="text-left px-5 py-3 font-medium">Brand</th>
-              <th className="text-left px-5 py-3 font-medium">Department</th>
+              <th className="text-left px-5 py-3 font-medium">Brands</th>
+              <th className="text-left px-5 py-3 font-medium">Departments</th>
               <th className="text-left px-5 py-3 font-medium">Status</th>
               <th className="text-left px-5 py-3 font-medium">Last Login</th>
             </tr>
@@ -102,8 +129,8 @@ export default async function UsersPage({
                     {ROLE_LABEL[u.role] ?? u.role}
                   </span>
                 </td>
-                <td className="px-5 py-3 text-gray-600">{u.brand_name ?? "—"}</td>
-                <td className="px-5 py-3 text-gray-600">{u.department_name ?? "—"}</td>
+                <td className="px-5 py-3">{chips(u.brand_names)}</td>
+                <td className="px-5 py-3">{chips(u.department_names)}</td>
                 <td className="px-5 py-3">
                   {u.is_active ? (
                     <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700">

@@ -27,17 +27,13 @@ const CreateSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   display_name: z.string().trim().min(1, "Name is required"),
   role: z.enum(VALID_ROLES),
-  brand_id: z.coerce.number().int().positive().optional().nullable(),
-  department_id: z.coerce.number().int().positive().optional().nullable(),
 });
 
 const UpdateSchema = z.object({
   id: z.coerce.number().int().positive(),
   display_name: z.string().trim().min(1),
   role: z.enum(VALID_ROLES),
-  brand_id: z.coerce.number().int().positive().optional().nullable(),
-  department_id: z.coerce.number().int().positive().optional().nullable(),
-  is_active: z.coerce.boolean(),
+  is_active: z.boolean(),
 });
 
 const ResetPasswordSchema = z.object({
@@ -45,24 +41,35 @@ const ResetPasswordSchema = z.object({
   new_password: z.string().min(6),
 });
 
-function clean(o: Record<string, FormDataEntryValue>) {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(o)) {
-    out[k] = v === "" ? null : v;
+/** Pull all values for a repeated form field name (e.g. brand_ids). */
+function getAllNumeric(formData: FormData, name: string): number[] {
+  const out: number[] = [];
+  for (const v of formData.getAll(name)) {
+    if (typeof v === "string" && v !== "") {
+      const n = Number(v);
+      if (Number.isInteger(n) && n > 0) out.push(n);
+    }
   }
-  return out;
+  return Array.from(new Set(out));
 }
 
 export async function createUserAction(formData: FormData) {
   const admin = await requireAdmin();
-  const raw = clean(Object.fromEntries(formData.entries()));
-  const parsed = CreateSchema.parse(raw);
+  const parsed = CreateSchema.parse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+    display_name: formData.get("display_name"),
+    role: formData.get("role"),
+  });
 
   if (await emailExists(parsed.email)) {
     throw new Error(`Email "${parsed.email}" is already taken.`);
   }
 
-  const newId = await createUser(parsed);
+  const brand_ids = getAllNumeric(formData, "brand_ids");
+  const department_ids = getAllNumeric(formData, "department_ids");
+
+  const newId = await createUser({ ...parsed, brand_ids, department_ids });
 
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
@@ -71,7 +78,12 @@ export async function createUserAction(formData: FormData) {
       admin.id,
       admin.email,
       newId,
-      JSON.stringify({ email: parsed.email, role: parsed.role }),
+      JSON.stringify({
+        email: parsed.email,
+        role: parsed.role,
+        brand_ids,
+        department_ids,
+      }),
     ]
   );
 
@@ -81,18 +93,17 @@ export async function createUserAction(formData: FormData) {
 
 export async function updateUserAction(formData: FormData) {
   const admin = await requireAdmin();
-  const raw = Object.fromEntries(formData.entries());
   const parsed = UpdateSchema.parse({
-    ...raw,
-    brand_id: raw.brand_id === "" ? null : raw.brand_id,
-    department_id: raw.department_id === "" ? null : raw.department_id,
-    is_active: raw.is_active === "on" || raw.is_active === "true",
+    id: formData.get("id"),
+    display_name: formData.get("display_name"),
+    role: formData.get("role"),
+    is_active: formData.get("is_active") === "on" || formData.get("is_active") === "true",
   });
 
   const before = await getUserById(parsed.id);
   if (!before) throw new Error("User not found.");
 
-  // Safety: don't let the last admin demote / deactivate themselves
+  // Safety: don't let an admin demote / deactivate their own account
   if (
     before.role === "admin" &&
     (parsed.role !== "admin" || !parsed.is_active) &&
@@ -101,7 +112,10 @@ export async function updateUserAction(formData: FormData) {
     throw new Error("You can't demote or deactivate your own admin account.");
   }
 
-  await updateUser(parsed);
+  const brand_ids = getAllNumeric(formData, "brand_ids");
+  const department_ids = getAllNumeric(formData, "department_ids");
+
+  await updateUser({ ...parsed, brand_ids, department_ids });
 
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
@@ -111,8 +125,18 @@ export async function updateUserAction(formData: FormData) {
       admin.email,
       parsed.id,
       JSON.stringify({
-        before: { role: before.role, is_active: before.is_active },
-        after: { role: parsed.role, is_active: parsed.is_active },
+        before: {
+          role: before.role,
+          is_active: before.is_active,
+          brand_ids: before.brand_ids,
+          department_ids: before.department_ids,
+        },
+        after: {
+          role: parsed.role,
+          is_active: parsed.is_active,
+          brand_ids,
+          department_ids,
+        },
       }),
     ]
   );
