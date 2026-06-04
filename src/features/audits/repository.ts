@@ -71,7 +71,7 @@ export async function createAudit(input: {
   department_id?: number | null;
   location?: string | null;
   auditor_id: number;
-  audit_date?: string;
+  audit_date?: string | null;
 }): Promise<number> {
   const row = await queryOne<{ id: number }>(
     `INSERT INTO audits (template_id, brand_id, department_id, location, auditor_id, audit_date)
