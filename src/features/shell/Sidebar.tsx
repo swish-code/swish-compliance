@@ -16,11 +16,13 @@ const sections: { label: string; items: { href: string; label: string; dot?: boo
   {
     label: "Compliance",
     items: [
+      { href: "/sops", label: "SOPs" },
+      { href: "/checklists/templates", label: "Checklists" },
+      { href: "/audits", label: "Audits" },
+      { href: "/capa", label: "Corrective Actions" },
       { href: "/frameworks", label: "Frameworks" },
       { href: "/controls", label: "Controls" },
       { href: "/policies", label: "Policies" },
-      { href: "/sops", label: "SOPs" },
-      { href: "/audits", label: "Audits" },
     ],
   },
   {
