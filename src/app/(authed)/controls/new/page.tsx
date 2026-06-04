@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Workspace from "@/features/shell/Workspace";
 import { queryAll } from "@/lib/db";
 import { createControlAction } from "@/features/controls/actions";
+import { listOptions } from "@/features/config/repository";
 
 export default async function NewControlPage({
   searchParams,
@@ -21,6 +22,7 @@ export default async function NewControlPage({
   const users = await queryAll<{ id: number; display_name: string }>(
     `SELECT id, display_name FROM users WHERE is_active ORDER BY display_name`
   );
+  const categories = await listOptions("control_category", true);
 
   return (
     <Workspace
@@ -68,7 +70,17 @@ export default async function NewControlPage({
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Category</label>
-            <input name="category" placeholder="e.g. Food Safety" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            {categories.length > 0 ? (
+              <select name="category" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value="">— None —</option>
+                {categories.map((c) => (<option key={c.id} value={c.label}>{c.label}</option>))}
+              </select>
+            ) : (
+              <input name="category" placeholder="e.g. Preventive" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            )}
+            <p className="text-[11px] text-gray-400 mt-1">
+              Manage the list of categories from <span className="font-medium">Admin → Config</span>.
+            </p>
           </div>
 
           <div className="flex items-center gap-3 pt-2">

@@ -11,7 +11,8 @@ import {
   addItemAction,
   deleteItemAction,
 } from "@/features/checklists/actions";
-import { CHECKLIST_CATEGORIES } from "@/features/checklists/types";
+import { CHECKLIST_CATEGORIES_FALLBACK } from "@/features/checklists/types";
+import { listOptions } from "@/features/config/repository";
 
 export default async function ChecklistTemplateDetailPage({
   params,
@@ -25,6 +26,12 @@ export default async function ChecklistTemplateDetailPage({
   if (!tpl) notFound();
   const items = await listTemplateItems(id);
   const canEdit = canEditSops(user.role);
+
+  const dbCategories = await listOptions("checklist_category", true);
+  const categories =
+    dbCategories.length > 0
+      ? dbCategories.map((o) => o.label)
+      : CHECKLIST_CATEGORIES_FALLBACK;
 
   return (
     <Workspace
@@ -56,7 +63,7 @@ export default async function ChecklistTemplateDetailPage({
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
               >
                 <option value="">— None —</option>
-                {CHECKLIST_CATEGORIES.map((c) => (
+                {categories.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>

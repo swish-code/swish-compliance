@@ -3,11 +3,18 @@ import { requireUser, canEditSops } from "@/lib/auth/guard";
 import { redirect } from "next/navigation";
 import Workspace from "@/features/shell/Workspace";
 import { createTemplateAction } from "@/features/checklists/actions";
-import { CHECKLIST_CATEGORIES } from "@/features/checklists/types";
+import { CHECKLIST_CATEGORIES_FALLBACK } from "@/features/checklists/types";
+import { listOptions } from "@/features/config/repository";
 
 export default async function NewTemplatePage() {
   const user = await requireUser();
   if (!canEditSops(user.role)) redirect("/checklists/templates");
+
+  const dbCategories = await listOptions("checklist_category", true);
+  const categories =
+    dbCategories.length > 0
+      ? dbCategories.map((o) => o.label)
+      : CHECKLIST_CATEGORIES_FALLBACK;
 
   return (
     <Workspace
@@ -51,7 +58,7 @@ export default async function NewTemplatePage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               <option value="">— None —</option>
-              {CHECKLIST_CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>

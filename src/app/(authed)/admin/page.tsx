@@ -44,6 +44,13 @@ export default async function AdminHomePage() {
       tone: "from-amber-500 to-amber-700",
     },
     {
+      href: "/admin/config",
+      title: "Config",
+      desc: "Edit dropdown options used across the app (categories, etc.).",
+      value: "System-wide lookup lists",
+      tone: "from-purple-500 to-purple-700",
+    },
+    {
       href: "/admin/audit-logs",
       title: "Audit Logs",
       desc: "Full activity trail of every state-changing action.",

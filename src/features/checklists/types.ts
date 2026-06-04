@@ -22,7 +22,9 @@ export type ChecklistItem = {
   is_critical: boolean;
 };
 
-export const CHECKLIST_CATEGORIES = [
+// Fallback used only when the DB has no `checklist_category` rows yet.
+// The live list comes from config_options and is editable from /admin/config.
+export const CHECKLIST_CATEGORIES_FALLBACK = [
   "Food Safety",
   "Fire Safety",
   "Cleanliness",

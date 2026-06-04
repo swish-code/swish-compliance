@@ -38,6 +38,7 @@ const ADMINISTRATION: Section = {
     { href: "/admin/users", label: "Users" },
     { href: "/admin/brands", label: "Brands" },
     { href: "/admin/departments", label: "Departments" },
+    { href: "/admin/config", label: "Config" },
     { href: "/admin/audit-logs", label: "Audit Logs" },
   ],
 };
