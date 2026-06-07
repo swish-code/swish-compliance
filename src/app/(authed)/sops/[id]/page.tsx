@@ -10,12 +10,12 @@ import {
   availableTransitions,
 } from "@/features/sops/types";
 import {
-  transitionSopAction,
   updateSopAttachmentAction,
   removeSopAttachmentAction,
 } from "@/features/sops/actions";
 import FilePicker from "@/features/sops/FilePicker";
 import AttachmentDisplay from "@/features/sops/AttachmentDisplay";
+import ApprovalActions from "@/features/sops/ApprovalActions";
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Administrator",
@@ -161,46 +161,20 @@ export default async function SopDetailPage({
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
             Available actions
           </h3>
-          <div className="space-y-3">
-            {transitions.map((t) => (
-              <form
-                key={t.to}
-                action={transitionSopAction}
-                className="border border-gray-200 rounded-lg p-4 bg-gray-50/30"
-              >
-                <input type="hidden" name="id" value={sop.id} />
-                <input type="hidden" name="status" value={t.to} />
-
-                <div className="flex items-start justify-between gap-4 mb-3">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{t.label}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>
-                  </div>
-                  <button
-                    type="submit"
-                    className={`${t.tone} text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap`}
-                  >
-                    {t.label}
-                  </button>
-                </div>
-
-                {t.commentRequired && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                      Comment <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      name="comment"
-                      rows={3}
-                      required
-                      placeholder="A comment is required and will be stored in the approval history."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    />
-                  </div>
-                )}
-              </form>
-            ))}
-          </div>
+          <ApprovalActions
+            sopId={sop.id}
+            transitions={transitions.map((t) => ({
+              to: t.to,
+              label: t.label,
+              description: t.description,
+              tone: t.tone,
+              commentRequired: t.commentRequired,
+            }))}
+          />
+          <p className="text-xs text-gray-500 mt-3">
+            Click any action — a popup will ask you for the comment that will be
+            stored in the approval history.
+          </p>
         </div>
       )}
 

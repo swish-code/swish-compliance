@@ -59,7 +59,17 @@ export async function notify(input: NotifyInput): Promise<void> {
       ...input.audience,
       excludeActorId: input.actor.id,
     });
-    if (recipients.length === 0) return;
+    if (recipients.length === 0) {
+      console.warn(
+        `[notifications] notify(${input.kind}) — no recipients matched audience`,
+        JSON.stringify(input.audience)
+      );
+      return;
+    }
+    console.log(
+      `[notifications] notify(${input.kind}) → ${recipients.length} recipient(s):`,
+      recipients
+    );
 
     const severity = input.severity ?? "info";
 
