@@ -3,7 +3,7 @@ import { queryAll, queryOne, execute } from "@/lib/db";
 import type { Sop, SopStatus } from "./types";
 
 const SOP_SELECT = `
-  s.id, s.code, s.title, s.description, s.version, s.status, s.file_url,
+  s.id, s.code, s.title, s.description, s.version, s.status, s.file_url, s.image_data_url,
   s.brand_id, b.name AS brand_name,
   s.department_id, d.name AS department_name,
   s.owner_id, u_o.display_name AS owner_name,
@@ -79,6 +79,7 @@ export type CreateSopInput = {
   description?: string | null;
   version?: string;
   file_url?: string | null;
+  image_data_url?: string | null;
   brand_id?: number | null;
   department_id?: number | null;
   owner_id?: number | null;
@@ -90,9 +91,9 @@ export type CreateSopInput = {
 export async function createSop(input: CreateSopInput): Promise<number> {
   const row = await queryOne<{ id: number }>(
     `INSERT INTO sops
-      (code, title, description, version, status, file_url, brand_id, department_id,
-       owner_id, created_by, effective_date, review_date)
-     VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $9, $10, $11)
+      (code, title, description, version, status, file_url, image_data_url,
+       brand_id, department_id, owner_id, created_by, effective_date, review_date)
+     VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id`,
     [
       input.code ?? null,
@@ -100,6 +101,7 @@ export async function createSop(input: CreateSopInput): Promise<number> {
       input.description ?? null,
       input.version ?? "1.0",
       input.file_url ?? null,
+      input.image_data_url ?? null,
       input.brand_id ?? null,
       input.department_id ?? null,
       input.owner_id ?? input.created_by,
@@ -109,6 +111,13 @@ export async function createSop(input: CreateSopInput): Promise<number> {
     ]
   );
   return row!.id;
+}
+
+export async function setSopImage(
+  id: number,
+  imageDataUrl: string | null
+): Promise<void> {
+  await execute(`UPDATE sops SET image_data_url = $2 WHERE id = $1`, [id, imageDataUrl]);
 }
 
 export async function setSopStatus(

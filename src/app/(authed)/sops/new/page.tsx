@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Workspace from "@/features/shell/Workspace";
 import { queryAll } from "@/lib/db";
 import { createSopAction } from "@/features/sops/actions";
+import ImagePicker from "@/features/sops/ImagePicker";
 
 export default async function NewSopPage() {
   const user = await requireUser();
@@ -137,6 +138,16 @@ export default async function NewSopPage() {
               placeholder="https://swish.sharepoint.com/..."
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              Cover image (optional)
+            </label>
+            <ImagePicker name="image_file" />
+            <p className="text-xs text-gray-500 mt-1">
+              Useful for visual SOPs (e.g. a photo of correct setup, a diagram, an example).
+            </p>
           </div>
 
           <div className="flex items-center gap-3 pt-2">

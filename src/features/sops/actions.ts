@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser, canApproveSops, canEditSops } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
-import { createSop, setSopStatus, getSopById } from "./repository";
+import { createSop, setSopStatus, getSopById, setSopImage } from "./repository";
 import type { SopStatus } from "./types";
 
 const CreateSchema = z.object({
@@ -20,13 +20,52 @@ const CreateSchema = z.object({
   review_date: z.string().optional().nullable(),
 });
 
+// Limits (also reflected in next.config.ts's serverActions.bodySizeLimit)
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;        // 2 MB raw
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
+]);
+
+/**
+ * Read a single image File from the form and convert it to a base64 data URL.
+ * Returns null when the form field is missing, empty, or not an image.
+ * Throws a clear error when the file is too large or its mime is rejected.
+ */
+async function extractImageDataUrl(
+  formData: FormData,
+  fieldName = "image_file"
+): Promise<string | null> {
+  const entry = formData.get(fieldName);
+  if (!(entry instanceof File)) return null;
+  if (entry.size === 0) return null;
+  if (entry.size > MAX_IMAGE_BYTES) {
+    throw new Error(`Image is too large. Max ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB.`);
+  }
+  if (!ALLOWED_IMAGE_TYPES.has(entry.type)) {
+    throw new Error(`Unsupported image type "${entry.type}". Use PNG, JPG, WEBP or GIF.`);
+  }
+  const buffer = Buffer.from(await entry.arrayBuffer());
+  return `data:${entry.type};base64,${buffer.toString("base64")}`;
+}
+
 export async function createSopAction(formData: FormData) {
   const user = await requireUser();
   if (!canEditSops(user.role)) {
     throw new Error("You don't have permission to create SOPs.");
   }
 
+  // The native File object must NOT go through Zod's z.string() rules. Pull it
+  // out first and parse the rest of the form normally.
+  const imageDataUrl = await extractImageDataUrl(formData, "image_file");
+
   const raw = Object.fromEntries(formData.entries());
+  // Drop the File entry (it's just metadata for Zod now)
+  delete (raw as Record<string, unknown>).image_file;
+
   const parsed = CreateSchema.parse({
     ...raw,
     file_url: raw.file_url === "" ? null : raw.file_url,
@@ -41,17 +80,60 @@ export async function createSopAction(formData: FormData) {
   const id = await createSop({
     ...parsed,
     file_url: parsed.file_url || null,
+    image_data_url: imageDataUrl,
     created_by: user.id,
   });
 
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
      VALUES ($1, $2, 'create', 'sop', $3, $4)`,
-    [user.id, user.email, id, JSON.stringify({ title: parsed.title })]
+    [
+      user.id,
+      user.email,
+      id,
+      JSON.stringify({ title: parsed.title, has_image: !!imageDataUrl }),
+    ]
   );
 
   revalidatePath("/sops");
   redirect(`/sops/${id}`);
+}
+
+export async function updateSopImageAction(formData: FormData) {
+  const user = await requireUser();
+  if (!canEditSops(user.role)) {
+    throw new Error("You don't have permission to update this SOP.");
+  }
+  const id = Number(formData.get("id"));
+  const current = await getSopById(id);
+  if (!current) throw new Error("SOP not found.");
+
+  const imageDataUrl = await extractImageDataUrl(formData, "image_file");
+  if (!imageDataUrl) throw new Error("No image was provided.");
+
+  await setSopImage(id, imageDataUrl);
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id)
+     VALUES ($1, $2, 'sop:image_updated', 'sop', $3)`,
+    [user.id, user.email, id]
+  );
+
+  revalidatePath(`/sops/${id}`);
+}
+
+export async function removeSopImageAction(formData: FormData) {
+  const user = await requireUser();
+  if (!canEditSops(user.role)) {
+    throw new Error("You don't have permission to update this SOP.");
+  }
+  const id = Number(formData.get("id"));
+  await setSopImage(id, null);
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id)
+     VALUES ($1, $2, 'sop:image_removed', 'sop', $3)`,
+    [user.id, user.email, id]
+  );
+  revalidatePath(`/sops/${id}`);
 }
 
 export async function transitionSopAction(formData: FormData) {

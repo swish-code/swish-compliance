@@ -21,6 +21,7 @@ export type Sop = {
   version: string;
   status: SopStatus;
   file_url: string | null;
+  image_data_url: string | null;
   brand_id: number | null;
   brand_name: string | null;
   department_id: number | null;

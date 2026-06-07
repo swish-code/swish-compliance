@@ -8,7 +8,12 @@ import {
   SOP_STATUS_TONE,
   type SopStatus,
 } from "@/features/sops/types";
-import { transitionSopAction } from "@/features/sops/actions";
+import {
+  transitionSopAction,
+  updateSopImageAction,
+  removeSopImageAction,
+} from "@/features/sops/actions";
+import ImagePicker from "@/features/sops/ImagePicker";
 
 export default async function SopDetailPage({
   params,
@@ -94,6 +99,18 @@ export default async function SopDetailPage({
           )}
         </div>
 
+        {/* Cover image (if any) */}
+        {sop.image_data_url && (
+          <div className="mb-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={sop.image_data_url}
+              alt={`${sop.title} cover`}
+              className="max-w-full max-h-96 rounded-lg border border-gray-200 object-contain bg-gray-50"
+            />
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
           {transitions
@@ -118,6 +135,54 @@ export default async function SopDetailPage({
           </Link>
         </div>
       </div>
+
+      {/* Manage image (editors only) */}
+      {canEdit && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+            Cover image
+          </h3>
+
+          {sop.image_data_url ? (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Replace the current cover or remove it. Changes are recorded in the audit log.
+              </p>
+              <form action={updateSopImageAction} className="space-y-3">
+                <input type="hidden" name="id" value={sop.id} />
+                <ImagePicker name="image_file" initialPreviewUrl={null} />
+                <button
+                  type="submit"
+                  className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                >
+                  Replace image
+                </button>
+              </form>
+
+              <form action={removeSopImageAction} className="pt-2 border-t border-gray-100">
+                <input type="hidden" name="id" value={sop.id} />
+                <button
+                  type="submit"
+                  className="text-sm text-red-600 hover:text-red-800 hover:underline"
+                >
+                  Remove the current image
+                </button>
+              </form>
+            </div>
+          ) : (
+            <form action={updateSopImageAction} className="space-y-3">
+              <input type="hidden" name="id" value={sop.id} />
+              <ImagePicker name="image_file" />
+              <button
+                type="submit"
+                className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
+              >
+                Upload image
+              </button>
+            </form>
+          )}
+        </div>
+      )}
 
       {/* Metadata grid */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
