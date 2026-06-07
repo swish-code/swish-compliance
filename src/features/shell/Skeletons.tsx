@@ -17,22 +17,22 @@ export function SkeletonShell({
   children: ReactNode;
 }) {
   return (
-    <main className="ml-64 min-h-screen">
-      <header className="flex justify-between items-start px-12 pt-8 pb-6">
-        <div>
-          <div className="text-xs uppercase tracking-widest text-gray-500 mb-2">
+    <main className="md:ml-64 min-h-screen pt-14 md:pt-0">
+      <header className="flex justify-between items-start px-4 sm:px-8 md:px-12 pt-5 md:pt-8 pb-4 md:pb-6 gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] md:text-xs uppercase tracking-widest text-gray-500 mb-1.5 md:mb-2 truncate">
             {section}
           </div>
-          <h1 className="text-xl font-semibold text-gray-900">{subtitle}</h1>
+          <h1 className="text-lg md:text-xl font-semibold text-gray-900 truncate">{subtitle}</h1>
         </div>
-        <div className="text-right">
+        <div className="text-right hidden sm:block shrink-0">
           <div className="text-xs uppercase tracking-widest text-gray-500 mb-1">
             Session
           </div>
           <div className="h-4 w-32 bg-gray-200 rounded skeleton-pulse" />
         </div>
       </header>
-      <div className="px-12 pb-12">{children}</div>
+      <div className="px-4 sm:px-8 md:px-12 pb-8 md:pb-12">{children}</div>
     </main>
   );
 }

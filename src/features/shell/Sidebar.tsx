@@ -11,7 +11,7 @@ type IconKey =
   | "sops" | "checklists" | "audits" | "capa"
   | "frameworks" | "controls" | "policies"
   | "admin-home" | "users" | "brands" | "departments" | "config" | "audit-logs"
-  | "logout" | "chevron-right";
+  | "logout" | "chevron-right" | "menu" | "close";
 
 const ICON_PATHS: Record<IconKey, React.ReactNode> = {
   "my-work": (
@@ -136,6 +136,19 @@ const ICON_PATHS: Record<IconKey, React.ReactNode> = {
   ),
   "chevron-right": (
     <polyline points="9 18 15 12 9 6" />
+  ),
+  menu: (
+    <>
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </>
+  ),
+  close: (
+    <>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </>
   ),
 };
 
@@ -336,6 +349,37 @@ export default function Sidebar({
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
 
+  /** Mobile drawer state. On desktop (md+) this is ignored — the sidebar
+   *  is always visible via CSS. On mobile it controls the slide-in panel. */
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Auto-close the mobile drawer whenever the route changes (the user
+  // tapped a nav link). On desktop this is harmless — the state is unused.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll while the drawer is open so the user doesn't scroll
+  // the page behind it. Only matters on mobile.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [mobileOpen]);
+
+  // Escape key closes the drawer.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
   const sections: Section[] = [WORKSPACE, COMPLIANCE];
   if (role === "admin") sections.push(ADMINISTRATION);
 
@@ -417,12 +461,65 @@ export default function Sidebar({
   }
 
   return (
-    <aside
-      className="fixed inset-y-0 left-0 w-64 flex flex-col bg-gradient-to-b from-[#0e1f18] via-[#0b1813] to-[#091410] border-r border-white/[0.06]"
-      style={{
-        boxShadow: "inset -1px 0 0 rgba(255,255,255,0.02)",
-      }}
-    >
+    <>
+      {/* ─── Mobile top bar (hamburger + brand) ─────────────────────── */}
+      <div
+        className="md:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 h-14 bg-[#0b1813] border-b border-white/[0.06] text-white"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open navigation"
+          className="p-2 -ml-2 rounded-lg text-gray-200 hover:bg-white/[0.08] active:bg-white/[0.12]"
+        >
+          <Icon name="menu" size={22} />
+        </button>
+        <Link href="/my-work" className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center font-black text-white text-xs shadow ring-1 ring-white/10">
+            S
+          </div>
+          <span className="text-sm font-bold tracking-tight">
+            Swish
+            <span className="text-emerald-400/70 ml-1 text-[10px] font-medium tracking-widest">
+              v2
+            </span>
+          </span>
+        </Link>
+        {/* Reserve symmetric space on the right so the brand stays centered */}
+        <div className="w-9" aria-hidden="true" />
+      </div>
+
+      {/* ─── Mobile backdrop ────────────────────────────────────────── */}
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setMobileOpen(false)}
+          className="md:hidden fixed inset-0 z-40 bg-black/55 backdrop-blur-sm animate-fade-in"
+        />
+      )}
+
+      {/* ─── Sidebar / drawer ───────────────────────────────────────── */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 md:w-64 flex flex-col bg-gradient-to-b from-[#0e1f18] via-[#0b1813] to-[#091410] border-r border-white/[0.06] transform transition-transform duration-200 ease-out ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0`}
+        style={{
+          boxShadow: "inset -1px 0 0 rgba(255,255,255,0.02)",
+          paddingTop: "env(safe-area-inset-top)",
+        }}
+        aria-label="Primary navigation"
+      >
+        {/* Close button — mobile only, top-right of the drawer */}
+        <button
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close navigation"
+          className="md:hidden absolute top-3 right-3 p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/[0.08]"
+        >
+          <Icon name="close" size={18} />
+        </button>
       {/* Brand header */}
       <div className="px-4 pt-5 pb-4">
         <Link href="/my-work" className="flex items-center gap-3 group">
@@ -508,21 +605,29 @@ export default function Sidebar({
         </button>
       </div>
 
-      <style>{`
-        .sidebar-scroll::-webkit-scrollbar {
-          width: 6px;
-        }
-        .sidebar-scroll::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .sidebar-scroll::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.06);
-          border-radius: 3px;
-        }
-        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.12);
-        }
-      `}</style>
-    </aside>
+        <style>{`
+          .sidebar-scroll::-webkit-scrollbar {
+            width: 6px;
+          }
+          .sidebar-scroll::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .sidebar-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 3px;
+          }
+          .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.12);
+          }
+          @keyframes fade-in {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+          }
+          .animate-fade-in {
+            animation: fade-in 150ms ease-out;
+          }
+        `}</style>
+      </aside>
+    </>
   );
 }
