@@ -21,6 +21,9 @@ import {
   type SopStatus,
 } from "./types";
 import { notify } from "@/features/notifications/service";
+import {
+  extractAttachment as extractAttachmentShared,
+} from "@/lib/attachments";
 
 /** Build the notification audience + copy for a given SOP transition. */
 type SopNotifPlan = {
@@ -126,47 +129,13 @@ const CreateSchema = z.object({
   review_date: z.string().optional().nullable(),
 });
 
-// Limits (the next.config.ts body limit is 12 MB to give us headroom).
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const ALLOWED_MIMES = new Set([
-  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "text/plain",
-  "text/csv",
-]);
-
-type ExtractedFile = { dataUrl: string; name: string; mime: string } | null;
-
+// Thin wrapper around the shared @/lib/attachments helper so the existing
+// call sites in this file keep working unchanged.
 async function extractAttachment(
   formData: FormData,
   fieldName = "attachment_file"
-): Promise<ExtractedFile> {
-  const entry = formData.get(fieldName);
-  if (!(entry instanceof File)) return null;
-  if (entry.size === 0) return null;
-  if (entry.size > MAX_ATTACHMENT_BYTES) {
-    throw new Error(
-      `File is too large. Max ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB.`
-    );
-  }
-  if (!ALLOWED_MIMES.has(entry.type)) {
-    throw new Error(
-      `Unsupported file type "${entry.type || "unknown"}". ` +
-        `Allowed: PDF, Word, Excel, PowerPoint, image, text, CSV.`
-    );
-  }
-  const buffer = Buffer.from(await entry.arrayBuffer());
-  return {
-    dataUrl: `data:${entry.type};base64,${buffer.toString("base64")}`,
-    name: entry.name || "attachment",
-    mime: entry.type,
-  };
+) {
+  return extractAttachmentShared(formData, fieldName);
 }
 
 /**

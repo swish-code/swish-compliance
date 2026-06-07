@@ -37,6 +37,8 @@ export type CheckResult = {
   status: CheckStatus;
   notes: string | null;
   evidence_url: string | null;
+  evidence_name: string | null;
+  evidence_mime: string | null;
   performed_by: number | null;
   performed_by_name: string | null;
   created_at: string;

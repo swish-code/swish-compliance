@@ -9,6 +9,7 @@ import { createCheck, recordResult, getCheck } from "./repository";
 import { recomputeControlHealth } from "../controls/repository";
 import { createCapa } from "../capa/repository";
 import { notify } from "@/features/notifications/service";
+import { extractAttachment } from "@/lib/attachments";
 
 const CreateSchema = z.object({
   code: z.string().trim().optional().nullable(),
@@ -22,8 +23,7 @@ const CreateSchema = z.object({
 const ResultSchema = z.object({
   check_id: z.coerce.number().int().positive(),
   status: z.enum(["passing", "failing", "pending_review", "accepted_risk"]),
-  notes: z.string().optional().nullable(),
-  evidence_url: z.string().optional().nullable(),
+  notes: z.string().trim().min(1, "Notes are required when recording a result."),
   spawn_capa: z.string().optional(),
 });
 
@@ -56,18 +56,22 @@ export async function createCheckAction(formData: FormData) {
 
 export async function recordResultAction(formData: FormData) {
   const user = await requireUser();
+
+  // Pull the File entry out BEFORE Zod parsing — Zod treats it as a string.
+  const file = await extractAttachment(formData, "evidence_file");
+
   const raw = Object.fromEntries(formData.entries());
-  const parsed = ResultSchema.parse({
-    ...raw,
-    notes: raw.notes === "" ? null : raw.notes,
-    evidence_url: raw.evidence_url === "" ? null : raw.evidence_url,
-  });
+  delete (raw as Record<string, unknown>).evidence_file;
+
+  const parsed = ResultSchema.parse(raw);
 
   await recordResult({
     check_id: parsed.check_id,
     status: parsed.status,
-    notes: parsed.notes ?? null,
-    evidence_url: parsed.evidence_url ?? null,
+    notes: parsed.notes,
+    evidence_url: file?.dataUrl ?? null,
+    evidence_name: file?.name ?? null,
+    evidence_mime: file?.mime ?? null,
     performed_by: user.id,
   });
 

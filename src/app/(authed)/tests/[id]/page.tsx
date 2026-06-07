@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { getCheck, listCheckResults } from "@/features/checks/repository";
 import { recordResultAction } from "@/features/checks/actions";
+import FilePicker from "@/features/sops/FilePicker";
 import {
   CHECK_STATUS_LABEL,
   CHECK_STATUS_TONE,
@@ -69,8 +70,27 @@ export default async function CheckDetailPage({
               </label>
             ))}
           </div>
-          <textarea name="notes" rows={2} placeholder="Notes (optional)" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          <input type="url" name="evidence_url" placeholder="Evidence URL (photo / file / report link)" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Notes <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              name="notes"
+              required
+              rows={3}
+              placeholder="Describe what you observed and any context for this result. Required."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Evidence (photo / file)
+            </label>
+            <FilePicker name="evidence_file" />
+            <p className="text-[11px] text-gray-400 mt-1">
+              PDF, Word, Excel, PowerPoint, image or text up to 10 MB.
+            </p>
+          </div>
           <label className="flex items-start gap-3 p-3 border border-amber-200 bg-amber-50 rounded-lg cursor-pointer text-sm">
             <input type="checkbox" name="spawn_capa" defaultChecked className="accent-amber-600 mt-0.5" />
             <div>
@@ -112,7 +132,23 @@ export default async function CheckDetailPage({
                 </td>
                 <td className="px-5 py-3 text-gray-600 text-xs max-w-md truncate">{r.notes ?? "—"}</td>
                 <td className="px-5 py-3 text-xs">
-                  {r.evidence_url ? <a href={r.evidence_url} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">Open ↗</a> : "—"}
+                  {r.evidence_url ? (
+                    <a
+                      href={r.evidence_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      download={r.evidence_name ?? undefined}
+                      className="text-brand-700 hover:underline inline-flex items-center gap-1"
+                      title={r.evidence_name ?? "Evidence"}
+                    >
+                      <span>{iconForMime(r.evidence_mime)}</span>
+                      <span className="truncate max-w-[180px]">
+                        {r.evidence_name ?? "Open"}
+                      </span>
+                    </a>
+                  ) : (
+                    "—"
+                  )}
                 </td>
               </tr>
             ))}
@@ -134,4 +170,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <dd className="text-gray-900">{children}</dd>
     </div>
   );
+}
+
+function iconForMime(mime: string | null): string {
+  if (!mime) return "📎";
+  if (mime.startsWith("image/")) return "🖼️";
+  if (mime === "application/pdf") return "📄";
+  if (mime.includes("word")) return "📝";
+  if (mime.includes("excel") || mime.includes("spreadsheet")) return "📊";
+  if (mime.includes("powerpoint") || mime.includes("presentation")) return "📑";
+  if (mime.startsWith("text/")) return "📃";
+  return "📎";
 }

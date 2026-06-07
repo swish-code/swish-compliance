@@ -36,7 +36,8 @@ export async function getCheck(id: number): Promise<Check | undefined> {
 
 export async function listCheckResults(checkId: number, limit = 25): Promise<CheckResult[]> {
   return queryAll<CheckResult>(
-    `SELECT r.id, r.check_id, r.status, r.notes, r.evidence_url,
+    `SELECT r.id, r.check_id, r.status, r.notes,
+            r.evidence_url, r.evidence_name, r.evidence_mime,
             r.performed_by, u.display_name AS performed_by_name, r.created_at
      FROM check_results r
      LEFT JOIN users u ON u.id = r.performed_by
@@ -84,14 +85,25 @@ function nextDueFor(frequency: CheckFrequency): string | null {
 export async function recordResult(input: {
   check_id: number;
   status: CheckStatus;
-  notes?: string | null;
+  notes: string;
   evidence_url?: string | null;
+  evidence_name?: string | null;
+  evidence_mime?: string | null;
   performed_by: number;
 }): Promise<number> {
   const row = await queryOne<{ id: number }>(
-    `INSERT INTO check_results (check_id, status, notes, evidence_url, performed_by)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [input.check_id, input.status, input.notes ?? null, input.evidence_url ?? null, input.performed_by]
+    `INSERT INTO check_results
+       (check_id, status, notes, evidence_url, evidence_name, evidence_mime, performed_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [
+      input.check_id,
+      input.status,
+      input.notes,
+      input.evidence_url ?? null,
+      input.evidence_name ?? null,
+      input.evidence_mime ?? null,
+      input.performed_by,
+    ]
   );
 
   // Update cached fields on the check itself
