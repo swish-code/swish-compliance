@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /* ─── Icon library (Lucide-style, inline) ──────────────────────────── */
 
@@ -139,11 +139,19 @@ const ICON_PATHS: Record<IconKey, React.ReactNode> = {
   ),
 };
 
-function Icon({ name, className = "" }: { name: IconKey; className?: string }) {
+function Icon({
+  name,
+  size = 18,
+  className = "",
+}: {
+  name: IconKey;
+  size?: number;
+  className?: string;
+}) {
   return (
     <svg
-      width="18"
-      height="18"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -160,10 +168,8 @@ function Icon({ name, className = "" }: { name: IconKey; className?: string }) {
 
 /* ─── Navigation data ──────────────────────────────────────────────── */
 
-type Section = {
-  label: string;
-  items: { href: string; label: string; icon: IconKey; indicator?: boolean }[];
-};
+type NavItem = { href: string; label: string; icon: IconKey; indicator?: boolean };
+type Section = { label: string; items: NavItem[] };
 
 const WORKSPACE: Section = {
   label: "Workspace",
@@ -216,7 +222,108 @@ function roleLabel(role: string): string {
     .join(" ");
 }
 
-/* ─── Component ────────────────────────────────────────────────────── */
+function isItemActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+function sectionHasActiveItem(pathname: string, section: Section): boolean {
+  return section.items.some((it) => isItemActive(pathname, it.href));
+}
+
+function sectionHasIndicator(section: Section): boolean {
+  return section.items.some((it) => it.indicator);
+}
+
+const LS_KEY = "swish:sidebar:open";
+
+/* ─── Collapsible section ──────────────────────────────────────────── */
+
+function CollapsibleSection({
+  section,
+  isOpen,
+  onToggle,
+  pathname,
+}: {
+  section: Section;
+  isOpen: boolean;
+  onToggle: () => void;
+  pathname: string;
+}) {
+  const showIndicator = sectionHasIndicator(section);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        className="w-full group flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] uppercase tracking-[0.18em] text-gray-500 hover:text-gray-300 font-semibold transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          {section.label}
+          {showIndicator && !isOpen && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
+          )}
+        </span>
+        <Icon
+          name="chevron-right"
+          size={12}
+          className={`transition-transform duration-200 ${
+            isOpen ? "rotate-90 text-gray-400" : "text-gray-600 group-hover:text-gray-500"
+          }`}
+        />
+      </button>
+
+      {/* Smooth collapse using CSS grid 1fr / 0fr trick */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+          isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <ul className="space-y-0.5 mt-1 mb-1">
+            {section.items.map((item) => {
+              const active = isItemActive(pathname, item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 ${
+                      active
+                        ? "bg-emerald-500/10 text-white font-medium"
+                        : "text-gray-400 hover:bg-white/[0.04] hover:text-gray-100"
+                    }`}
+                  >
+                    {active && (
+                      <span
+                        className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-emerald-400"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <Icon
+                      name={item.icon}
+                      className={`shrink-0 transition-colors ${
+                        active
+                          ? "text-emerald-400"
+                          : "text-gray-500 group-hover:text-gray-300"
+                      }`}
+                    />
+                    <span className="flex-1 truncate">{item.label}</span>
+                    {item.indicator && !active && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Sidebar ──────────────────────────────────────────────────────── */
 
 export default function Sidebar({
   displayName,
@@ -231,6 +338,76 @@ export default function Sidebar({
 
   const sections: Section[] = [WORKSPACE, COMPLIANCE];
   if (role === "admin") sections.push(ADMINISTRATION);
+
+  // Open / closed state per section. Initialized empty for SSR; the effect
+  // below opens the section that contains the active page (or restores the
+  // user's preference from localStorage).
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    sections.forEach((s) => {
+      init[s.label] = false;
+    });
+    return init;
+  });
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+    let stored: Record<string, boolean> = {};
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) stored = JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+    const next: Record<string, boolean> = {};
+    sections.forEach((s) => {
+      if (typeof stored[s.label] === "boolean") {
+        next[s.label] = stored[s.label];
+      } else {
+        // First time → open the section that contains the active page
+        next[s.label] = sectionHasActiveItem(pathname, s);
+      }
+    });
+    // Always make sure the section with the active item is open so the user
+    // can see where they are.
+    sections.forEach((s) => {
+      if (sectionHasActiveItem(pathname, s)) next[s.label] = true;
+    });
+    setOpenMap(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  function toggleSection(label: string) {
+    setOpenMap((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
+
+  function expandAll() {
+    const next: Record<string, boolean> = {};
+    sections.forEach((s) => (next[s.label] = true));
+    setOpenMap(next);
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(next));
+    } catch { /* ignore */ }
+  }
+  function collapseAll() {
+    const next: Record<string, boolean> = {};
+    sections.forEach((s) => (next[s.label] = false));
+    setOpenMap(next);
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(next));
+    } catch { /* ignore */ }
+  }
+
+  const anyOpen = Object.values(openMap).some(Boolean);
 
   async function signOut() {
     setSigningOut(true);
@@ -248,10 +425,7 @@ export default function Sidebar({
     >
       {/* Brand header */}
       <div className="px-4 pt-5 pb-4">
-        <Link
-          href="/my-work"
-          className="flex items-center gap-3 group"
-        >
+        <Link href="/my-work" className="flex items-center gap-3 group">
           <div className="relative">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center font-black text-white text-base shadow-lg shadow-emerald-900/40 ring-1 ring-white/10">
               S
@@ -272,57 +446,37 @@ export default function Sidebar({
         </Link>
       </div>
 
-      {/* Divider */}
-      <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+      {/* Divider + quick controls */}
+      <div className="px-4">
+        <div className="h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-[9px] uppercase tracking-[0.22em] text-gray-600">
+            Navigation
+          </span>
+          <button
+            type="button"
+            onClick={anyOpen ? collapseAll : expandAll}
+            className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wider"
+            aria-label={anyOpen ? "Collapse all sections" : "Expand all sections"}
+          >
+            {anyOpen ? "Collapse all" : "Expand all"}
+          </button>
+        </div>
+      </div>
 
       {/* Sections */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 sidebar-scroll">
-        {sections.map((section, sectionIdx) => (
-          <div key={section.label} className={sectionIdx > 0 ? "mt-5" : ""}>
-            <div className="px-3 mb-1.5 text-[10px] uppercase tracking-[0.18em] text-gray-500 font-semibold">
-              {section.label}
-            </div>
-            <ul className="space-y-0.5">
-              {section.items.map((item) => {
-                const active =
-                  pathname === item.href ||
-                  pathname.startsWith(item.href + "/");
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 ${
-                        active
-                          ? "bg-emerald-500/10 text-white font-medium"
-                          : "text-gray-400 hover:bg-white/[0.04] hover:text-gray-100"
-                      }`}
-                    >
-                      {/* Active accent bar */}
-                      {active && (
-                        <span
-                          className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-emerald-400"
-                          aria-hidden="true"
-                        />
-                      )}
-
-                      <Icon
-                        name={item.icon}
-                        className={`shrink-0 transition-colors ${
-                          active ? "text-emerald-400" : "text-gray-500 group-hover:text-gray-300"
-                        }`}
-                      />
-                      <span className="flex-1 truncate">{item.label}</span>
-
-                      {item.indicator && !active && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+      <nav className="flex-1 overflow-y-auto px-3 pt-3 pb-4 sidebar-scroll">
+        <div className="space-y-2">
+          {sections.map((section) => (
+            <CollapsibleSection
+              key={section.label}
+              section={section}
+              isOpen={hasMounted ? openMap[section.label] : sectionHasActiveItem(pathname, section)}
+              onToggle={() => toggleSection(section.label)}
+              pathname={pathname}
+            />
+          ))}
+        </div>
       </nav>
 
       {/* User card + sign out */}
@@ -349,7 +503,7 @@ export default function Sidebar({
           disabled={signingOut}
           className="w-full flex items-center justify-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] border border-white/[0.06] hover:border-white/[0.12] text-gray-300 hover:text-white py-2 rounded-lg text-[12px] font-medium transition-all duration-150 disabled:opacity-50"
         >
-          <Icon name="logout" className="w-4 h-4" />
+          <Icon name="logout" size={16} />
           {signingOut ? "Signing out…" : "Sign Out"}
         </button>
       </div>
