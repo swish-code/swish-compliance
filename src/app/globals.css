@@ -19,3 +19,38 @@ html, body {
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+/* ────────────────────────────────────────────────────────────────── */
+/* Skeleton shimmer — used by the loading.tsx files                   */
+/* ────────────────────────────────────────────────────────────────── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.skeleton-pulse {
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+/* Page transition — content fades in on every route change.          */
+/* Applied to <main> elements inside (authed) routes.                 */
+/* ────────────────────────────────────────────────────────────────── */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+main {
+  animation: page-fade-in 200ms ease-out;
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  main { animation: none; }
+  .skeleton-pulse { animation: none; opacity: 0.7; }
+}
