@@ -14,12 +14,16 @@ import {
 } from "./repository";
 import { notify } from "@/features/notifications/service";
 
+// Must match the catalog in src/lib/auth/guard.ts (USER_ROLES) — those
+// are the roles the rest of the app reasons about. SOP workflow v2 swapped
+// branch_manager → department_manager and added ceo as the final approver.
 const VALID_ROLES = [
   "admin",
+  "ceo",
   "business_excellence",
   "compliance",
+  "department_manager",
   "auditor",
-  "branch_manager",
   "viewer",
 ] as const;
 
