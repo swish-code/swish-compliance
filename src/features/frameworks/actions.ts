@@ -60,7 +60,7 @@ export async function toggleFrameworkAction(formData: FormData) {
 }
 
 export async function setFrameworkOwnerAction(formData: FormData) {
-  const admin = await requireAdmin();
+  await requireAdmin();
   const raw = Object.fromEntries(formData.entries());
   const parsed = OwnerSchema.parse({
     ...raw,

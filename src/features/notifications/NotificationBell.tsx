@@ -131,40 +131,56 @@ export default function NotificationBell() {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {data.items.map((n) => {
-                  const Wrapper = n.href ? Link : "div";
-                  const wrapperProps = n.href
-                    ? { href: n.href, onClick: () => { markOneRead(n.id); setOpen(false); } }
-                    : { onClick: () => markOneRead(n.id) };
+                  const itemClass = `block px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${
+                    !n.is_read ? "bg-brand-50/30" : ""
+                  }`;
+                  const inner = (
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${SEVERITY_DOT[n.severity]} ${
+                          n.is_read ? "opacity-30" : ""
+                        }`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className={`text-sm leading-snug ${
+                            n.is_read ? "text-gray-600" : "text-gray-900 font-medium"
+                          }`}
+                        >
+                          {n.title}
+                        </div>
+                        {n.body && (
+                          <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.body}</div>
+                        )}
+                        <div className="text-[11px] text-gray-400 mt-1 flex items-center gap-1.5">
+                          {n.actor_name && <span>{n.actor_name}</span>}
+                          {n.actor_name && <span>·</span>}
+                          <span>{timeAgo(n.created_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
                   return (
                     <li key={n.id}>
-                      <Wrapper
-                        // @ts-expect-error — union of Link/div props
-                        {...wrapperProps}
-                        className={`block px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${
-                          !n.is_read ? "bg-brand-50/30" : ""
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <span
-                            className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${SEVERITY_DOT[n.severity]} ${
-                              n.is_read ? "opacity-30" : ""
-                            }`}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className={`text-sm leading-snug ${n.is_read ? "text-gray-600" : "text-gray-900 font-medium"}`}>
-                              {n.title}
-                            </div>
-                            {n.body && (
-                              <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.body}</div>
-                            )}
-                            <div className="text-[11px] text-gray-400 mt-1 flex items-center gap-1.5">
-                              {n.actor_name && <span>{n.actor_name}</span>}
-                              {n.actor_name && <span>·</span>}
-                              <span>{timeAgo(n.created_at)}</span>
-                            </div>
-                          </div>
+                      {n.href ? (
+                        <Link
+                          href={n.href}
+                          onClick={() => {
+                            markOneRead(n.id);
+                            setOpen(false);
+                          }}
+                          className={itemClass}
+                        >
+                          {inner}
+                        </Link>
+                      ) : (
+                        <div
+                          onClick={() => markOneRead(n.id)}
+                          className={itemClass}
+                        >
+                          {inner}
                         </div>
-                      </Wrapper>
+                      )}
                     </li>
                   );
                 })}
