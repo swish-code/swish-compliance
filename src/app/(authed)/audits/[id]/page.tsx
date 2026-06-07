@@ -4,10 +4,10 @@ import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { getAudit, getAuditItems } from "@/features/audits/repository";
 import {
-  saveResponseAction,
   submitAuditAction,
   closeAuditAction,
 } from "@/features/audits/actions";
+import AuditItem from "@/features/audits/AuditItem";
 import {
   AUDIT_STATUS_LABEL,
   AUDIT_STATUS_TONE,
@@ -140,6 +140,28 @@ export default async function AuditDetailPage({
       {/* Items */}
       <div className="space-y-3 mb-4">
         {items.map((item) => {
+          // While the audit is still 'in_progress' AND the current viewer can
+          // edit, render the live AuditItem (auto-save on click / blur).
+          if (isOpen) {
+            return (
+              <AuditItem
+                key={item.item_id}
+                auditId={audit.id}
+                itemId={item.item_id}
+                sortOrder={item.sort_order}
+                question={item.question}
+                guidance={item.guidance}
+                weight={item.weight}
+                isCritical={item.is_critical}
+                initialResponse={item.response}
+                initialNotes={item.notes}
+                initialEvidenceUrl={item.evidence_url}
+                canEdit
+              />
+            );
+          }
+
+          // Read-only display: submitted / closed audit, or non-editor viewer.
           const r = item.response;
           return (
             <div
@@ -167,72 +189,21 @@ export default async function AuditDetailPage({
                 </div>
                 <div className="text-xs text-gray-400">×{item.weight}</div>
               </div>
-
-              {isOpen ? (
-                <form action={saveResponseAction} className="space-y-3">
-                  <input type="hidden" name="audit_id" value={audit.id} />
-                  <input type="hidden" name="item_id" value={item.item_id} />
-
-                  <div className="flex gap-2">
-                    {(["pass", "fail", "na"] as const).map((opt) => (
-                      <label
-                        key={opt}
-                        className={`flex-1 text-center text-xs font-medium uppercase tracking-wider px-3 py-2 rounded-lg cursor-pointer transition-colors border ${
-                          r === opt
-                            ? opt === "pass" ? "bg-emerald-500 text-white border-emerald-500" :
-                              opt === "fail" ? "bg-red-500 text-white border-red-500" :
-                              "bg-gray-300 text-white border-gray-300"
-                            : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
-                        }`}
-                      >
-                        <input type="radio" name="response" value={opt} defaultChecked={r === opt} className="sr-only" />
-                        {opt === "pass" ? "Pass" : opt === "fail" ? "Fail" : "N/A"}
-                      </label>
-                    ))}
-                  </div>
-
-                  <textarea
-                    name="notes"
-                    placeholder="Notes (optional)"
-                    rows={2}
-                    defaultValue={item.notes ?? ""}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-
-                  <input
-                    type="url"
-                    name="evidence_url"
-                    placeholder="Evidence URL (photo / file link)"
-                    defaultValue={item.evidence_url ?? ""}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      className="text-xs text-brand-700 hover:text-brand-800 font-medium"
-                    >
-                      Save response
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="space-y-1 pl-7">
-                  <div className="text-xs">
-                    Response: <span className={
-                      r === "pass" ? "text-emerald-700 font-medium" :
-                      r === "fail" ? "text-red-700 font-medium" :
-                      "text-gray-500"
-                    }>{r ? r.toUpperCase() : "Not answered"}</span>
-                  </div>
-                  {item.notes && <div className="text-xs text-gray-600 italic">"{item.notes}"</div>}
-                  {item.evidence_url && (
-                    <a href={item.evidence_url} target="_blank" rel="noreferrer" className="text-xs text-brand-700 hover:underline">
-                      Evidence ↗
-                    </a>
-                  )}
+              <div className="space-y-1 pl-7">
+                <div className="text-xs">
+                  Response: <span className={
+                    r === "pass" ? "text-emerald-700 font-medium" :
+                    r === "fail" ? "text-red-700 font-medium" :
+                    "text-gray-500"
+                  }>{r ? r.toUpperCase() : "Not answered"}</span>
                 </div>
-              )}
+                {item.notes && <div className="text-xs text-gray-600 italic">&ldquo;{item.notes}&rdquo;</div>}
+                {item.evidence_url && (
+                  <a href={item.evidence_url} target="_blank" rel="noreferrer" className="text-xs text-brand-700 hover:underline">
+                    Evidence ↗
+                  </a>
+                )}
+              </div>
             </div>
           );
         })}
