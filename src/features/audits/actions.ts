@@ -13,6 +13,7 @@ import {
   getAudit,
 } from "./repository";
 import { createCapa } from "../capa/repository";
+import { notify } from "@/features/notifications/service";
 
 const CreateSchema = z.object({
   template_id: z.coerce.number().int().positive(),
@@ -120,6 +121,22 @@ export async function submitAuditAction(formData: FormData) {
       });
     }
   }
+
+  // Notify reviewers. Critical fails go to a wider audience.
+  const hasCritical = criticalFailed > 0;
+  await notify({
+    audience: hasCritical
+      ? { roles: ["compliance", "business_excellence", "ceo", "admin"] }
+      : { roles: ["compliance", "admin"] },
+    actor: { id: user.id, name: user.displayName, role: user.role },
+    kind: hasCritical ? "audit:critical" : "audit:submitted",
+    title: hasCritical
+      ? `🚨 Audit "${audit.template_name}" submitted with ${criticalFailed} CRITICAL failure(s)`
+      : `Audit "${audit.template_name}" submitted (score ${scorePct}%)`,
+    body: `${audit.brand_name ?? "Brand —"} · ${audit.department_name ?? "Department —"} · ${audit.location ?? "Location —"}. ${failedItemIds.length} total fails.`,
+    severity: hasCritical ? "critical" : scorePct < 70 ? "warning" : "info",
+    entity: { type: "audit", id: parsed.id, href: `/audits/${parsed.id}` },
+  });
 
   revalidatePath("/audits");
   revalidatePath(`/audits/${parsed.id}`);

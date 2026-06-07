@@ -7,6 +7,7 @@ import { requireUser, canApproveSops } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import { createCapa, transitionCapa, getCapa } from "./repository";
 import type { CapaStatus } from "./types";
+import { notify } from "@/features/notifications/service";
 
 const CreateSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
@@ -42,6 +43,22 @@ export async function createCapaAction(formData: FormData) {
      VALUES ($1, $2, 'create', 'capa', $3, $4)`,
     [user.id, user.email, id, JSON.stringify({ title: parsed.title })]
   );
+
+  // Notify the assignee (or admins if none) about the new CAPA.
+  await notify({
+    audience: parsed.assigned_to
+      ? { userIds: [parsed.assigned_to] }
+      : { roles: ["admin", "compliance"] },
+    actor: { id: user.id, name: user.displayName, role: user.role },
+    kind: "capa:created",
+    title: parsed.assigned_to
+      ? `New CAPA assigned to you: "${parsed.title}"`
+      : `New CAPA pending assignment: "${parsed.title}"`,
+    body: `Severity: ${parsed.severity}${parsed.due_date ? `. Due ${parsed.due_date}` : ""}.`,
+    severity: parsed.severity === "critical" ? "critical" : "info",
+    entity: { type: "capa", id, href: `/capa/${id}` },
+  });
+
   revalidatePath("/capa");
   redirect(`/capa/${id}`);
 }
@@ -89,6 +106,52 @@ export async function transitionCapaAction(formData: FormData) {
       JSON.stringify({ from: before.status, to: next }),
     ]
   );
+
+  // Send the right notification per transition.
+  const assignee = before.assigned_to ? [before.assigned_to] : [];
+  const creator = before.created_by ? [before.created_by] : [];
+  const plans: Record<
+    string,
+    { audience: { userIds?: number[]; roles?: string[] }; title: string; severity: "info" | "success" | "warning" | "critical" }
+  > = {
+    submitted: {
+      audience: { roles: ["business_excellence", "admin"], userIds: creator },
+      title: `CAPA "${before.title}" submitted for verification`,
+      severity: "info",
+    },
+    verified: {
+      audience: { userIds: [...assignee, ...creator] },
+      title: `CAPA "${before.title}" was verified ✅`,
+      severity: "success",
+    },
+    closed: {
+      audience: { userIds: [...assignee, ...creator], roles: ["admin"] },
+      title: `CAPA "${before.title}" was closed`,
+      severity: "success",
+    },
+    rejected: {
+      audience: { userIds: assignee },
+      title: `CAPA "${before.title}" was rejected — please revise`,
+      severity: "warning",
+    },
+    in_progress: {
+      audience: { userIds: creator },
+      title: `Work started on CAPA "${before.title}"`,
+      severity: "info",
+    },
+  };
+  const plan = plans[next];
+  if (plan) {
+    await notify({
+      audience: plan.audience,
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: `capa:${next}`,
+      title: plan.title,
+      body: parsed.resolution_note ? `Note: "${parsed.resolution_note}"` : null,
+      severity: plan.severity,
+      entity: { type: "capa", id: parsed.id, href: `/capa/${parsed.id}` },
+    });
+  }
 
   revalidatePath("/capa");
   revalidatePath(`/capa/${parsed.id}`);

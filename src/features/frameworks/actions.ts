@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import { setFrameworkActive, setFrameworkOwner, getFramework } from "./repository";
+import { notify } from "@/features/notifications/service";
 
 const ToggleSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -37,6 +38,21 @@ export async function toggleFrameworkAction(formData: FormData) {
       JSON.stringify({ code: before.code }),
     ]
   );
+
+  // Tell the wider compliance org about the activation/deactivation.
+  await notify({
+    audience: { roles: ["compliance", "business_excellence", "admin"] },
+    actor: { id: admin.id, name: admin.displayName, role: admin.role },
+    kind: activate ? "framework:activated" : "framework:deactivated",
+    title: activate
+      ? `Framework "${before.name}" was activated`
+      : `Framework "${before.name}" was deactivated`,
+    body: activate
+      ? "Controls under this framework are now in scope for reporting."
+      : "Controls under this framework are no longer in scope.",
+    severity: activate ? "success" : "info",
+    entity: { type: "framework", id: parsed.id, href: `/frameworks/${parsed.id}` },
+  });
 
   revalidatePath("/frameworks");
   revalidatePath(`/frameworks/${parsed.id}`);

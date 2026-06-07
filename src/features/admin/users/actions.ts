@@ -12,6 +12,7 @@ import {
   emailExists,
   getUserById,
 } from "./repository";
+import { notify } from "@/features/notifications/service";
 
 const VALID_ROLES = [
   "admin",
@@ -87,6 +88,16 @@ export async function createUserAction(formData: FormData) {
     ]
   );
 
+  // Welcome the new user with a notification on their account.
+  await notify({
+    audience: { userIds: [newId] },
+    actor: { id: admin.id, name: admin.displayName, role: admin.role },
+    kind: "user:created",
+    title: `Welcome to Swish Compliance, ${parsed.display_name}!`,
+    body: `Your account was created by ${admin.displayName} with the role: ${parsed.role}. Change your password from your profile after first login.`,
+    severity: "info",
+  });
+
   revalidatePath("/admin/users");
   redirect(`/admin/users/${newId}`);
 }
@@ -140,6 +151,18 @@ export async function updateUserAction(formData: FormData) {
       }),
     ]
   );
+
+  // If the role was changed, notify the affected user.
+  if (before.role !== parsed.role) {
+    await notify({
+      audience: { userIds: [parsed.id] },
+      actor: { id: admin.id, name: admin.displayName, role: admin.role },
+      kind: "user:role_changed",
+      title: `Your role has changed to ${parsed.role.replace("_", " ")}`,
+      body: `${admin.displayName} updated your role from ${before.role.replace("_", " ")} to ${parsed.role.replace("_", " ")}.`,
+      severity: "info",
+    });
+  }
 
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${parsed.id}`);

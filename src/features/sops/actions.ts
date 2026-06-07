@@ -20,6 +20,99 @@ import {
   isSopLocked,
   type SopStatus,
 } from "./types";
+import { notify } from "@/features/notifications/service";
+
+/** Build the notification audience + copy for a given SOP transition. */
+type SopNotifPlan = {
+  audience: { roles?: string[]; userIds?: number[] };
+  title: string;
+  body: string;
+  severity: "info" | "success" | "warning" | "critical";
+};
+
+function planSopNotification(
+  next: SopStatus,
+  sopTitle: string,
+  sopId: number,
+  ownerId: number | null,
+  actorName: string,
+  comment: string | null
+): SopNotifPlan | null {
+  const ownerArr = ownerId ? [ownerId] : [];
+  switch (next) {
+    case "pending_compliance":
+      return {
+        audience: { roles: ["compliance"] },
+        title: `New SOP awaiting Compliance review: "${sopTitle}"`,
+        body: `Submitted by ${actorName}. Open it to approve or reject.`,
+        severity: "info",
+      };
+    case "pending_business_excellence":
+      return {
+        audience: { roles: ["business_excellence"], userIds: ownerArr },
+        title: `SOP forwarded to Business Excellence: "${sopTitle}"`,
+        body: comment
+          ? `Compliance approved with note: "${comment}"`
+          : `Compliance approved and forwarded to BE.`,
+        severity: "info",
+      };
+    case "pending_ceo":
+      return {
+        audience: { roles: ["ceo"], userIds: ownerArr },
+        title: `SOP awaiting final CEO approval: "${sopTitle}"`,
+        body: comment
+          ? `Business Excellence approved with note: "${comment}"`
+          : `Business Excellence approved and forwarded to the CEO.`,
+        severity: "info",
+      };
+    case "approved":
+      return {
+        audience: {
+          roles: ["compliance", "business_excellence", "admin"],
+          userIds: ownerArr,
+        },
+        title: `SOP "${sopTitle}" was given final CEO approval 🎉`,
+        body: comment
+          ? `CEO comment: "${comment}". The SOP is now locked and active.`
+          : `The SOP is now locked and active.`,
+        severity: "success",
+      };
+    case "returned_to_dm":
+      return {
+        audience: { userIds: ownerArr },
+        title: `Your SOP "${sopTitle}" was returned for changes`,
+        body: comment ? `Reviewer comment: "${comment}"` : "Review the comment and resubmit.",
+        severity: "warning",
+      };
+    case "returned_to_compliance":
+      return {
+        audience: { roles: ["compliance"], userIds: ownerArr },
+        title: `SOP "${sopTitle}" was returned to Compliance`,
+        body: comment
+          ? `BE comment: "${comment}". Apply the changes and resubmit.`
+          : `Apply the requested changes and resubmit.`,
+        severity: "warning",
+      };
+    case "returned_to_be":
+      return {
+        audience: { roles: ["business_excellence"], userIds: ownerArr },
+        title: `SOP "${sopTitle}" was returned to Business Excellence`,
+        body: comment
+          ? `CEO comment: "${comment}". Apply the changes and resubmit.`
+          : `Apply the requested changes and resubmit.`,
+        severity: "warning",
+      };
+    case "archived":
+      return {
+        audience: { roles: ["admin"], userIds: ownerArr },
+        title: `SOP "${sopTitle}" was archived`,
+        body: `${actorName} archived the SOP.`,
+        severity: "info",
+      };
+    default:
+      return null;
+  }
+}
 
 const CreateSchema = z.object({
   code: z.string().trim().optional().nullable(),
@@ -146,6 +239,27 @@ export async function createSopAction(formData: FormData) {
     ]
   );
 
+  // Notify the Compliance team about the new SOP awaiting their review.
+  const plan = planSopNotification(
+    "pending_compliance",
+    parsed.title,
+    id,
+    user.id,
+    user.displayName,
+    null
+  );
+  if (plan) {
+    await notify({
+      audience: plan.audience,
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "sop:pending_compliance",
+      title: plan.title,
+      body: plan.body,
+      severity: plan.severity,
+      entity: { type: "sop", id, href: `/sops/${id}` },
+    });
+  }
+
   revalidatePath("/sops");
   redirect(`/sops/${id}`);
 }
@@ -263,6 +377,27 @@ export async function transitionSopAction(formData: FormData) {
       }),
     ]
   );
+
+  // Fan the event out to the right audience via the notification service.
+  const plan = planSopNotification(
+    next,
+    current.title,
+    id,
+    current.created_by ?? current.owner_id,
+    user.displayName,
+    comment
+  );
+  if (plan) {
+    await notify({
+      audience: plan.audience,
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: `sop:${next}`,
+      title: plan.title,
+      body: plan.body,
+      severity: plan.severity,
+      entity: { type: "sop", id, href: `/sops/${id}` },
+    });
+  }
 
   revalidatePath("/sops");
   revalidatePath(`/sops/${id}`);

@@ -8,6 +8,7 @@ import { execute } from "@/lib/db";
 import { createCheck, recordResult, getCheck } from "./repository";
 import { recomputeControlHealth } from "../controls/repository";
 import { createCapa } from "../capa/repository";
+import { notify } from "@/features/notifications/service";
 
 const CreateSchema = z.object({
   code: z.string().trim().optional().nullable(),
@@ -104,6 +105,24 @@ export async function recordResultAction(formData: FormData) {
         [check.control_id, capaId, user.id]
       );
     }
+  }
+
+  // Notify on failing results — owner and admins should know immediately.
+  if (parsed.status === "failing") {
+    await notify({
+      audience: {
+        userIds: check?.owner_user_id ? [check.owner_user_id] : [],
+        roles: ["admin"],
+      },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "check:failing",
+      title: `🔴 Check "${check?.name ?? "Test"}" is failing`,
+      body: parsed.notes
+        ? `Note: "${parsed.notes}"`
+        : `Recorded by ${user.displayName}.`,
+      severity: "critical",
+      entity: { type: "check", id: parsed.check_id, href: `/tests/${parsed.check_id}` },
+    });
   }
 
   revalidatePath("/tests");
