@@ -14,6 +14,7 @@ import {
 } from "./repository";
 import { createCapa } from "../capa/repository";
 import { notify } from "@/features/notifications/service";
+import { extractAttachment } from "@/lib/attachments";
 
 const CreateSchema = z.object({
   template_id: z.coerce.number().int().positive(),
@@ -27,8 +28,8 @@ const ResponseSchema = z.object({
   audit_id: z.coerce.number().int().positive(),
   item_id: z.coerce.number().int().positive(),
   response: z.enum(["pass", "fail", "na"]).optional().nullable(),
-  notes: z.string().optional().nullable(),
-  evidence_url: z.string().optional().nullable(),
+  // Notes are required whenever a response is being saved.
+  notes: z.string().trim().min(1, "Notes are required to record a response."),
 });
 
 const SubmitSchema = z.object({
@@ -80,15 +81,27 @@ export async function createAuditAction(formData: FormData) {
 
 export async function saveResponseAction(formData: FormData) {
   const user = await requireUser();
+
+  // 1) Pull the File entry out BEFORE Zod parsing (Zod treats files as strings).
+  const file = await extractAttachment(formData, "evidence_file");
+
+  // 2) Look at all the other form fields.
   const raw = Object.fromEntries(formData.entries());
+  delete (raw as Record<string, unknown>).evidence_file;
+
+  // The client sets update_evidence = "true" only when there's actually a
+  // new file in the input. Otherwise we keep whatever evidence is on file.
+  const updateEvidence = raw.update_evidence === "true";
+  delete (raw as Record<string, unknown>).update_evidence;
+  const explicitRemove = raw.remove_evidence === "true";
+  delete (raw as Record<string, unknown>).remove_evidence;
+
   const parsed = ResponseSchema.parse({
     ...raw,
     response: raw.response === "" ? null : raw.response,
-    notes: raw.notes === "" ? null : raw.notes,
-    evidence_url: raw.evidence_url === "" ? null : raw.evidence_url,
   });
 
-  // Enforce the edit rules before touching the responses table.
+  // 3) Enforce the edit rules before touching the responses table.
   const audit = await getAudit(parsed.audit_id);
   if (!audit) throw new Error("Audit not found.");
   assertCanEditAudit(audit, user);
@@ -97,8 +110,14 @@ export async function saveResponseAction(formData: FormData) {
     audit_id: parsed.audit_id,
     item_id: parsed.item_id,
     response: parsed.response ?? null,
-    notes: parsed.notes ?? null,
-    evidence_url: parsed.evidence_url ?? null,
+    notes: parsed.notes,
+    // Only touch the evidence columns when the client says it has something
+    // new to write (file uploaded OR explicit removal). Plain Pass / notes
+    // re-saves leave existing evidence untouched.
+    evidence_url: file?.dataUrl ?? null,
+    evidence_name: file?.name ?? null,
+    evidence_mime: file?.mime ?? null,
+    update_evidence: updateEvidence || explicitRemove,
   });
   revalidatePath(`/audits/${parsed.audit_id}`);
 }

@@ -156,6 +156,8 @@ export default async function AuditDetailPage({
                 initialResponse={item.response}
                 initialNotes={item.notes}
                 initialEvidenceUrl={item.evidence_url}
+                initialEvidenceName={item.evidence_name}
+                initialEvidenceMime={item.evidence_mime}
                 canEdit
               />
             );
@@ -199,8 +201,23 @@ export default async function AuditDetailPage({
                 </div>
                 {item.notes && <div className="text-xs text-gray-600 italic">&ldquo;{item.notes}&rdquo;</div>}
                 {item.evidence_url && (
-                  <a href={item.evidence_url} target="_blank" rel="noreferrer" className="text-xs text-brand-700 hover:underline">
-                    Evidence ↗
+                  <a
+                    href={item.evidence_url}
+                    download={item.evidence_name ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 mt-1 text-xs text-brand-700 hover:underline"
+                    title={item.evidence_name ?? "Evidence"}
+                  >
+                    <span>
+                      {item.evidence_mime?.startsWith("image/") ? "🖼️"
+                        : item.evidence_mime === "application/pdf" ? "📄"
+                        : item.evidence_mime?.includes("word") ? "📝"
+                        : item.evidence_mime?.includes("excel") || item.evidence_mime?.includes("spreadsheet") ? "📊"
+                        : item.evidence_mime?.includes("powerpoint") || item.evidence_mime?.includes("presentation") ? "📑"
+                        : "📎"}
+                    </span>
+                    <span className="truncate max-w-xs">{item.evidence_name ?? "Evidence"}</span>
                   </a>
                 )}
               </div>

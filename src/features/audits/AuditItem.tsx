@@ -16,64 +16,125 @@ export type AuditItemProps = {
   initialResponse: Response;
   initialNotes: string | null;
   initialEvidenceUrl: string | null;
+  initialEvidenceName: string | null;
+  initialEvidenceMime: string | null;
   canEdit: boolean;
 };
+
+const MAX_BYTES = 10 * 1024 * 1024;
+const ACCEPT =
+  "image/png,image/jpeg,image/webp,image/gif,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/plain,text/csv";
+
+function iconForMime(mime: string | null | undefined): string {
+  if (!mime) return "📎";
+  if (mime.startsWith("image/")) return "🖼️";
+  if (mime === "application/pdf") return "📄";
+  if (mime.includes("word")) return "📝";
+  if (mime.includes("excel") || mime.includes("spreadsheet")) return "📊";
+  if (mime.includes("powerpoint") || mime.includes("presentation")) return "📑";
+  if (mime.startsWith("text/")) return "📃";
+  return "📎";
+}
 
 export default function AuditItem(props: AuditItemProps) {
   const [response, setResponse] = useState<Response>(props.initialResponse);
   const [notes, setNotes] = useState<string>(props.initialNotes ?? "");
-  const [evidenceUrl, setEvidenceUrl] = useState<string>(props.initialEvidenceUrl ?? "");
+
+  /** The CURRENT evidence display state — comes from DB OR a freshly picked file. */
+  const [evidence, setEvidence] = useState<{
+    url: string | null;
+    name: string | null;
+    mime: string | null;
+    isFresh: boolean; // true when picked in this session and not yet saved
+  }>({
+    url: props.initialEvidenceUrl,
+    name: props.initialEvidenceName,
+    mime: props.initialEvidenceMime,
+    isFresh: false,
+  });
 
   const [pending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [notesRequiredWarning, setNotesRequiredWarning] = useState(false);
+
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Last saved values so we don't re-submit unchanged data on blur.
   const lastSavedRef = useRef({
     response: props.initialResponse,
     notes: props.initialNotes ?? "",
-    evidenceUrl: props.initialEvidenceUrl ?? "",
   });
 
-  // Hide the "Saved ✓" pill after 1.8 s.
   useEffect(() => {
     if (!savedAt) return;
     const t = setTimeout(() => setSavedAt(null), 1800);
     return () => clearTimeout(t);
   }, [savedAt]);
 
-  function save(overrides?: Partial<{ response: Response; notes: string; evidenceUrl: string }>) {
-    const nextResponse = overrides?.response !== undefined ? overrides.response : response;
-    const nextNotes = overrides?.notes !== undefined ? overrides.notes : notes;
-    const nextEvidence =
-      overrides?.evidenceUrl !== undefined ? overrides.evidenceUrl : evidenceUrl;
-
-    // Skip if nothing meaningful changed since the last save.
-    const last = lastSavedRef.current;
-    if (
-      last.response === nextResponse &&
-      last.notes === nextNotes &&
-      last.evidenceUrl === nextEvidence
-    ) {
-      return;
-    }
-
+  function buildFormData(opts: {
+    response: Response;
+    notes: string;
+    file?: File | null;
+    removeEvidence?: boolean;
+  }): FormData {
     const fd = new FormData();
     fd.append("audit_id", String(props.auditId));
     fd.append("item_id", String(props.itemId));
-    fd.append("response", nextResponse ?? "");
-    fd.append("notes", nextNotes);
-    fd.append("evidence_url", nextEvidence);
+    fd.append("response", opts.response ?? "");
+    fd.append("notes", opts.notes);
+    if (opts.file) {
+      fd.append("evidence_file", opts.file);
+      fd.append("update_evidence", "true");
+    } else if (opts.removeEvidence) {
+      fd.append("update_evidence", "true");
+      fd.append("remove_evidence", "true");
+    }
+    return fd;
+  }
+
+  function save(opts: {
+    response?: Response;
+    notes?: string;
+    file?: File | null;
+    removeEvidence?: boolean;
+    force?: boolean; // bypass the "nothing changed" guard
+  } = {}) {
+    const nextResponse = opts.response !== undefined ? opts.response : response;
+    const nextNotes = opts.notes !== undefined ? opts.notes : notes;
+
+    // Notes are required to record any response.
+    if (!nextNotes.trim()) {
+      setNotesRequiredWarning(true);
+      notesRef.current?.focus();
+      return;
+    }
+
+    // Skip if nothing meaningful changed AND there's no file / removal pending.
+    if (!opts.force && !opts.file && !opts.removeEvidence) {
+      const last = lastSavedRef.current;
+      if (last.response === nextResponse && last.notes === nextNotes) {
+        return;
+      }
+    }
 
     setErrorMsg(null);
+    setNotesRequiredWarning(false);
+    const fd = buildFormData({
+      response: nextResponse,
+      notes: nextNotes,
+      file: opts.file ?? null,
+      removeEvidence: opts.removeEvidence,
+    });
+
     startTransition(async () => {
       try {
         await saveResponseAction(fd);
-        lastSavedRef.current = {
-          response: nextResponse,
-          notes: nextNotes,
-          evidenceUrl: nextEvidence,
-        };
+        lastSavedRef.current = { response: nextResponse, notes: nextNotes };
+        if (opts.file || opts.removeEvidence) {
+          setEvidence((prev) => ({ ...prev, isFresh: false }));
+        }
         setSavedAt(Date.now());
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : "Save failed");
@@ -83,8 +144,51 @@ export default function AuditItem(props: AuditItemProps) {
 
   function pick(next: "pass" | "fail" | "na") {
     if (!props.canEdit) return;
+    if (!notes.trim()) {
+      setNotesRequiredWarning(true);
+      notesRef.current?.focus();
+      return;
+    }
     setResponse(next);
     save({ response: next });
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_BYTES) {
+      setErrorMsg(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 10 MB.`);
+      e.target.value = "";
+      return;
+    }
+    // Build a temporary preview URL for the freshly-picked file.
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEvidence({
+        url: typeof reader.result === "string" ? reader.result : null,
+        name: file.name,
+        mime: file.type,
+        isFresh: true,
+      });
+    };
+    reader.readAsDataURL(file);
+
+    // Auto-save on pick — but only if notes is already filled.
+    if (!notes.trim()) {
+      setNotesRequiredWarning(true);
+      notesRef.current?.focus();
+      return;
+    }
+    save({ file });
+  }
+
+  function removeEvidence() {
+    setEvidence({ url: null, name: null, mime: null, isFresh: false });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    // Only round-trip the removal if there was something saved.
+    if (props.initialEvidenceUrl) {
+      save({ removeEvidence: true });
+    }
   }
 
   const cardTone =
@@ -155,27 +259,91 @@ export default function AuditItem(props: AuditItemProps) {
         </button>
       </div>
 
-      {/* Notes */}
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        onBlur={() => save()}
-        disabled={!props.canEdit}
-        placeholder="Notes (optional)"
-        rows={2}
-        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 mb-2"
-      />
+      {/* Notes — REQUIRED */}
+      <div className="mb-3">
+        <label className="block text-xs font-medium text-gray-700 mb-1">
+          Notes <span className="text-red-500">*</span>
+        </label>
+        <textarea
+          ref={notesRef}
+          value={notes}
+          onChange={(e) => {
+            setNotes(e.target.value);
+            if (notesRequiredWarning && e.target.value.trim()) {
+              setNotesRequiredWarning(false);
+            }
+          }}
+          onBlur={() => save()}
+          disabled={!props.canEdit}
+          required
+          placeholder="Notes are required — describe what you saw."
+          rows={2}
+          className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 ${
+            notesRequiredWarning
+              ? "border-red-400 ring-2 ring-red-200"
+              : "border-gray-300"
+          }`}
+        />
+        {notesRequiredWarning && (
+          <p className="text-[11px] text-red-700 mt-1">
+            Please write a note before recording the response.
+          </p>
+        )}
+      </div>
 
-      {/* Evidence URL */}
-      <input
-        type="url"
-        value={evidenceUrl}
-        onChange={(e) => setEvidenceUrl(e.target.value)}
-        onBlur={() => save()}
-        disabled={!props.canEdit}
-        placeholder="Evidence URL (photo / file / report link)"
-        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
-      />
+      {/* Evidence — file upload */}
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">
+          Evidence (photo / file)
+        </label>
+        {evidence.url ? (
+          <div className="flex items-center gap-3 p-2.5 border border-gray-200 rounded-lg bg-white">
+            <span className="text-xl">{iconForMime(evidence.mime)}</span>
+            <a
+              href={evidence.url}
+              download={evidence.name ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 text-sm text-brand-700 hover:underline truncate"
+              title={evidence.name ?? "Evidence"}
+            >
+              {evidence.name ?? "View evidence"}
+            </a>
+            {evidence.isFresh && (
+              <span className="text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                New
+              </span>
+            )}
+            {props.canEdit && (
+              <button
+                type="button"
+                onClick={removeEvidence}
+                disabled={pending}
+                className="text-xs text-red-600 hover:text-red-800 hover:underline"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ) : (
+          <label
+            className={`flex items-center gap-2 px-3 py-2.5 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 ${
+              props.canEdit ? "cursor-pointer hover:border-brand-500 hover:bg-brand-50/20" : "opacity-60 cursor-not-allowed"
+            }`}
+          >
+            <span className="text-lg">📎</span>
+            <span>Click to attach a photo or file (up to 10 MB)</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPT}
+              onChange={onFileChange}
+              disabled={!props.canEdit}
+              className="sr-only"
+            />
+          </label>
+        )}
+      </div>
 
       {/* Status pill */}
       <div className="flex justify-end items-center gap-3 mt-2 h-5 text-xs">

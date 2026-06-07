@@ -56,7 +56,7 @@ export async function getAuditItems(
        COALESCE(r.id, 0)         AS id,
        $1::int                   AS audit_id,
        i.id                      AS item_id,
-       r.response, r.notes, r.evidence_url
+       r.response, r.notes, r.evidence_url, r.evidence_name, r.evidence_mime
      FROM checklist_items i
      LEFT JOIN audit_responses r ON r.item_id = i.id AND r.audit_id = $1
      WHERE i.template_id = (SELECT template_id FROM audits WHERE id = $1)
@@ -88,21 +88,48 @@ export async function createAudit(input: {
   return row!.id;
 }
 
+/**
+ * Upsert a response.
+ *
+ * The evidence columns are write-PROTECTED by default:
+ *   - When `update_evidence` is false (or omitted), the SQL keeps the old
+ *     evidence_url / evidence_name / evidence_mime even if the caller passes
+ *     nulls. This is what lets the auto-save flow re-fire on every Pass /
+ *     Fail / notes-blur without wiping the file the user already attached.
+ *   - When `update_evidence` is true, the caller is explicitly replacing the
+ *     evidence with whatever values are passed (including null = remove).
+ */
 export async function upsertResponse(input: {
   audit_id: number;
   item_id: number;
   response: "pass" | "fail" | "na" | null;
   notes?: string | null;
   evidence_url?: string | null;
+  evidence_name?: string | null;
+  evidence_mime?: string | null;
+  update_evidence?: boolean;
 }): Promise<void> {
+  const updateEv = !!input.update_evidence;
   await execute(
-    `INSERT INTO audit_responses (audit_id, item_id, response, notes, evidence_url)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO audit_responses
+       (audit_id, item_id, response, notes, evidence_url, evidence_name, evidence_mime)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (audit_id, item_id) DO UPDATE SET
-       response     = EXCLUDED.response,
-       notes        = EXCLUDED.notes,
-       evidence_url = EXCLUDED.evidence_url`,
-    [input.audit_id, input.item_id, input.response, input.notes ?? null, input.evidence_url ?? null]
+       response      = EXCLUDED.response,
+       notes         = EXCLUDED.notes,
+       evidence_url  = CASE WHEN $8 THEN EXCLUDED.evidence_url  ELSE audit_responses.evidence_url  END,
+       evidence_name = CASE WHEN $8 THEN EXCLUDED.evidence_name ELSE audit_responses.evidence_name END,
+       evidence_mime = CASE WHEN $8 THEN EXCLUDED.evidence_mime ELSE audit_responses.evidence_mime END`,
+    [
+      input.audit_id,
+      input.item_id,
+      input.response,
+      input.notes ?? null,
+      input.evidence_url ?? null,
+      input.evidence_name ?? null,
+      input.evidence_mime ?? null,
+      updateEv,
+    ]
   );
 }
 

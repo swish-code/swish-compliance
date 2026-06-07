@@ -31,6 +31,8 @@ export type AuditResponse = {
   response: "pass" | "fail" | "na" | null;
   notes: string | null;
   evidence_url: string | null;
+  evidence_name: string | null;
+  evidence_mime: string | null;
 };
 
 export const AUDIT_STATUS_LABEL: Record<AuditStatus, string> = {
