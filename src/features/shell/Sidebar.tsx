@@ -2,46 +2,221 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+
+/* ─── Icon library (Lucide-style, inline) ──────────────────────────── */
+
+type IconKey =
+  | "my-work" | "roadmap" | "tests" | "reports"
+  | "sops" | "checklists" | "audits" | "capa"
+  | "frameworks" | "controls" | "policies"
+  | "admin-home" | "users" | "brands" | "departments" | "config" | "audit-logs"
+  | "logout" | "chevron-right";
+
+const ICON_PATHS: Record<IconKey, React.ReactNode> = {
+  "my-work": (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M8 2v4M16 2v4M3 10h18" />
+      <path d="m9 16 2 2 4-4" />
+    </>
+  ),
+  roadmap: (
+    <>
+      <path d="M9 18l-6 3V8l6-3M9 18V5M9 18l6 3M9 5l6 3M15 21V8M15 21l6-3V5l-6 3" />
+    </>
+  ),
+  tests: (
+    <>
+      <path d="M9 12l2 2 4-4" />
+      <circle cx="12" cy="12" r="9" />
+    </>
+  ),
+  reports: (
+    <>
+      <line x1="3" y1="3" x2="3" y2="21" />
+      <line x1="3" y1="21" x2="21" y2="21" />
+      <rect x="6" y="13" width="3" height="5" />
+      <rect x="11" y="9" width="3" height="9" />
+      <rect x="16" y="5" width="3" height="13" />
+    </>
+  ),
+  sops: (
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="9" y1="13" x2="15" y2="13" />
+      <line x1="9" y1="17" x2="13" y2="17" />
+    </>
+  ),
+  checklists: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M9 2v4M15 2v4" />
+      <path d="m9 14 2 2 4-4" />
+    </>
+  ),
+  audits: (
+    <>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </>
+  ),
+  capa: (
+    <>
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </>
+  ),
+  frameworks: (
+    <>
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
+    </>
+  ),
+  controls: (
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+  policies: (
+    <>
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </>
+  ),
+  "admin-home": (
+    <>
+      <rect x="3" y="3" width="7" height="9" rx="1" />
+      <rect x="14" y="3" width="7" height="5" rx="1" />
+      <rect x="14" y="12" width="7" height="9" rx="1" />
+      <rect x="3" y="16" width="7" height="5" rx="1" />
+    </>
+  ),
+  users: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  brands: (
+    <>
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+    </>
+  ),
+  departments: (
+    <>
+      <rect x="4" y="2" width="16" height="20" rx="2" />
+      <path d="M9 22v-4h6v4" />
+      <path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01" />
+    </>
+  ),
+  config: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </>
+  ),
+  "audit-logs": (
+    <>
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+      <polyline points="12 7 12 12 16 14" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </>
+  ),
+  "chevron-right": (
+    <polyline points="9 18 15 12 9 6" />
+  ),
+};
+
+function Icon({ name, className = "" }: { name: IconKey; className?: string }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {ICON_PATHS[name]}
+    </svg>
+  );
+}
+
+/* ─── Navigation data ──────────────────────────────────────────────── */
 
 type Section = {
   label: string;
-  items: { href: string; label: string; dot?: boolean }[];
+  items: { href: string; label: string; icon: IconKey; indicator?: boolean }[];
 };
 
 const WORKSPACE: Section = {
   label: "Workspace",
   items: [
-    { href: "/my-work", label: "My Work", dot: true },
-    { href: "/roadmap", label: "Roadmap" },
-    { href: "/tests", label: "Tests" },
-    { href: "/reports", label: "Reports" },
+    { href: "/my-work", label: "My Work", icon: "my-work", indicator: true },
+    { href: "/roadmap", label: "Roadmap", icon: "roadmap" },
+    { href: "/tests", label: "Tests", icon: "tests" },
+    { href: "/reports", label: "Reports", icon: "reports" },
   ],
 };
 
 const COMPLIANCE: Section = {
   label: "Compliance",
   items: [
-    { href: "/sops", label: "SOPs" },
-    { href: "/checklists/templates", label: "Checklists" },
-    { href: "/audits", label: "Audits" },
-    { href: "/capa", label: "Corrective Actions" },
-    { href: "/frameworks", label: "Frameworks" },
-    { href: "/controls", label: "Controls" },
-    { href: "/policies", label: "Policies" },
+    { href: "/sops", label: "SOPs", icon: "sops" },
+    { href: "/checklists/templates", label: "Checklists", icon: "checklists" },
+    { href: "/audits", label: "Audits", icon: "audits" },
+    { href: "/capa", label: "Corrective Actions", icon: "capa" },
+    { href: "/frameworks", label: "Frameworks", icon: "frameworks" },
+    { href: "/controls", label: "Controls", icon: "controls" },
+    { href: "/policies", label: "Policies", icon: "policies" },
   ],
 };
 
 const ADMINISTRATION: Section = {
   label: "Administration",
   items: [
-    { href: "/admin", label: "Admin Home" },
-    { href: "/admin/users", label: "Users" },
-    { href: "/admin/brands", label: "Brands" },
-    { href: "/admin/departments", label: "Departments" },
-    { href: "/admin/config", label: "Config" },
-    { href: "/admin/audit-logs", label: "Audit Logs" },
+    { href: "/admin", label: "Admin Home", icon: "admin-home" },
+    { href: "/admin/users", label: "Users", icon: "users" },
+    { href: "/admin/brands", label: "Brands", icon: "brands" },
+    { href: "/admin/departments", label: "Departments", icon: "departments" },
+    { href: "/admin/config", label: "Config", icon: "config" },
+    { href: "/admin/audit-logs", label: "Audit Logs", icon: "audit-logs" },
   ],
 };
+
+/* ─── Helpers ──────────────────────────────────────────────────────── */
+
+function initialsFrom(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0 || parts[0].length === 0) return "?";
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function roleLabel(role: string): string {
+  return role
+    .split("_")
+    .map((p) => p[0].toUpperCase() + p.slice(1))
+    .join(" ");
+}
+
+/* ─── Component ────────────────────────────────────────────────────── */
 
 export default function Sidebar({
   displayName,
@@ -52,41 +227,59 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
 
-  // Only admins see the Administration section
   const sections: Section[] = [WORKSPACE, COMPLIANCE];
   if (role === "admin") sections.push(ADMINISTRATION);
 
   async function signOut() {
+    setSigningOut(true);
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/login");
     router.refresh();
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-64 bg-brand-800 text-gray-100 flex flex-col">
+    <aside
+      className="fixed inset-y-0 left-0 w-64 flex flex-col bg-gradient-to-b from-[#0e1f18] via-[#0b1813] to-[#091410] border-r border-white/[0.06]"
+      style={{
+        boxShadow: "inset -1px 0 0 rgba(255,255,255,0.02)",
+      }}
+    >
       {/* Brand header */}
-      <div className="px-5 pt-6 pb-8">
-        <div className="bg-white rounded-xl p-3 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-brand-700 flex items-center justify-center font-black text-white text-base">
-            S
+      <div className="px-4 pt-5 pb-4">
+        <Link
+          href="/my-work"
+          className="flex items-center gap-3 group"
+        >
+          <div className="relative">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center font-black text-white text-base shadow-lg shadow-emerald-900/40 ring-1 ring-white/10">
+              S
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0b1813]" />
           </div>
-          <div className="text-brand-900">
-            <div className="text-[10px] uppercase tracking-widest font-semibold text-brand-600">
+          <div>
+            <div className="text-[9px] uppercase tracking-[0.22em] font-semibold text-emerald-300/70">
               Swish
             </div>
-            <div className="text-sm font-bold leading-tight">
-              Compliance<br />App
+            <div className="text-[13px] font-bold text-white leading-tight tracking-tight">
+              Compliance
+              <span className="text-emerald-400/70 ml-1.5 text-[10px] font-medium tracking-widest">
+                v2
+              </span>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
+      {/* Divider */}
+      <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+
       {/* Sections */}
-      <nav className="flex-1 overflow-y-auto px-3">
-        {sections.map((section) => (
-          <div key={section.label} className="mb-4">
-            <div className="px-3 text-[10px] uppercase tracking-widest text-brand-100/60 mb-1.5">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 sidebar-scroll">
+        {sections.map((section, sectionIdx) => (
+          <div key={section.label} className={sectionIdx > 0 ? "mt-5" : ""}>
+            <div className="px-3 mb-1.5 text-[10px] uppercase tracking-[0.18em] text-gray-500 font-semibold">
               {section.label}
             </div>
             <ul className="space-y-0.5">
@@ -98,15 +291,30 @@ export default function Sidebar({
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                      className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 ${
                         active
-                          ? "bg-brand-500 text-white font-medium"
-                          : "text-gray-200 hover:bg-brand-700/60"
+                          ? "bg-emerald-500/10 text-white font-medium"
+                          : "text-gray-400 hover:bg-white/[0.04] hover:text-gray-100"
                       }`}
                     >
-                      <span>{item.label}</span>
-                      {item.dot && !active && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-brand-100" />
+                      {/* Active accent bar */}
+                      {active && (
+                        <span
+                          className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-emerald-400"
+                          aria-hidden="true"
+                        />
+                      )}
+
+                      <Icon
+                        name={item.icon}
+                        className={`shrink-0 transition-colors ${
+                          active ? "text-emerald-400" : "text-gray-500 group-hover:text-gray-300"
+                        }`}
+                      />
+                      <span className="flex-1 truncate">{item.label}</span>
+
+                      {item.indicator && !active && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
                       )}
                     </Link>
                   </li>
@@ -117,19 +325,50 @@ export default function Sidebar({
         ))}
       </nav>
 
-      {/* Sign out */}
-      <div className="p-3 border-t border-brand-700/50">
-        <div className="px-3 pb-1 text-xs text-brand-100/70 truncate">{displayName}</div>
-        <div className="px-3 pb-3 text-[10px] uppercase tracking-widest text-brand-100/50">
-          {role.replace("_", " ")}
+      {/* User card + sign out */}
+      <div className="p-3 border-t border-white/[0.06]">
+        <div className="flex items-center gap-3 px-2 py-2 rounded-lg mb-2">
+          <div className="relative shrink-0">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-700 flex items-center justify-center text-white text-xs font-bold ring-1 ring-white/10 shadow">
+              {initialsFrom(displayName)}
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#0b1813]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-medium text-white truncate">
+              {displayName}
+            </div>
+            <div className="text-[10px] uppercase tracking-wider text-emerald-300/60 font-medium">
+              {roleLabel(role)}
+            </div>
+          </div>
         </div>
+
         <button
           onClick={signOut}
-          className="w-full bg-brand-700/60 hover:bg-brand-700 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
+          disabled={signingOut}
+          className="w-full flex items-center justify-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] border border-white/[0.06] hover:border-white/[0.12] text-gray-300 hover:text-white py-2 rounded-lg text-[12px] font-medium transition-all duration-150 disabled:opacity-50"
         >
-          Sign Out
+          <Icon name="logout" className="w-4 h-4" />
+          {signingOut ? "Signing out…" : "Sign Out"}
         </button>
       </div>
+
+      <style>{`
+        .sidebar-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: 3px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.12);
+        }
+      `}</style>
     </aside>
   );
 }
