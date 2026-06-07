@@ -25,7 +25,14 @@ export default async function AuditDetailPage({
   if (!audit) notFound();
   const items = await getAuditItems(id);
 
-  const isOpen = audit.status === "in_progress";
+  // Editing rules:
+  //  - Only the auditor (creator) or an admin can edit
+  //  - Once closed, NOBODY can edit
+  const isOwner = audit.auditor_id === user.id;
+  const isAdmin = user.role === "admin";
+  const isClosed = audit.status === "closed";
+  const canEdit = !isClosed && (isOwner || isAdmin);
+  const isOpen = audit.status === "in_progress" && canEdit;
   const answered = items.filter((i) => i.response).length;
   const failed = items.filter((i) => i.response === "fail").length;
 
@@ -103,6 +110,32 @@ export default async function AuditDetailPage({
               : "Submitted with no summary."}
         </div>
       </div>
+
+      {/* Edit-rights notice */}
+      {isClosed && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-4 flex items-start gap-3">
+          <span className="text-xl leading-none">🔒</span>
+          <div className="text-sm text-emerald-900">
+            <div className="font-semibold mb-0.5">This audit is closed</div>
+            <div className="text-xs text-emerald-800">
+              No further changes are allowed by any user. The audit is preserved for the record.
+            </div>
+          </div>
+        </div>
+      )}
+      {!isClosed && !canEdit && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 flex items-start gap-3">
+          <span className="text-xl leading-none">👁️</span>
+          <div className="text-sm text-amber-900">
+            <div className="font-semibold mb-0.5">Read-only view</div>
+            <div className="text-xs text-amber-800">
+              Only the auditor who created this audit
+              {audit.auditor_name ? <> ({audit.auditor_name})</> : null} can edit responses,
+              submit it, or close it.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Items */}
       <div className="space-y-3 mb-4">
@@ -245,17 +278,21 @@ export default async function AuditDetailPage({
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between">
           <div className="text-sm text-gray-600">
             Submitted {audit.submitted_at && new Date(audit.submitted_at).toLocaleString()}.
-            Mark as closed when all related CAPAs are addressed.
+            {canEdit
+              ? " Mark as closed when all related CAPAs are addressed."
+              : " Only the auditor who created this audit can close it."}
           </div>
-          <form action={closeAuditAction}>
-            <input type="hidden" name="id" value={audit.id} />
-            <button
-              type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-            >
-              Close audit
-            </button>
-          </form>
+          {canEdit && (
+            <form action={closeAuditAction}>
+              <input type="hidden" name="id" value={audit.id} />
+              <button
+                type="submit"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+              >
+                Close audit
+              </button>
+            </form>
+          )}
         </div>
       )}
     </Workspace>

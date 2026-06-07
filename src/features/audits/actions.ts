@@ -37,6 +37,27 @@ const SubmitSchema = z.object({
   spawn_capa: z.string().optional(),
 });
 
+/**
+ * Editing rules for audits:
+ *   1. Only the auditor (creator) — or an admin — may edit the audit.
+ *   2. Once the audit is closed, no further edits are allowed by anyone.
+ */
+type AuditGuardSubject = { auditor_id: number | null; status: string };
+type AuditGuardActor = { id: number; role: string };
+
+function assertCanEditAudit(audit: AuditGuardSubject, actor: AuditGuardActor): void {
+  if (audit.status === "closed") {
+    throw new Error("This audit is closed and can't be edited anymore.");
+  }
+  const isOwner = audit.auditor_id === actor.id;
+  const isAdmin = actor.role === "admin";
+  if (!isOwner && !isAdmin) {
+    throw new Error(
+      "Only the auditor who created this audit can edit it."
+    );
+  }
+}
+
 export async function createAuditAction(formData: FormData) {
   const user = await requireUser();
   const raw = Object.fromEntries(formData.entries());
@@ -58,7 +79,7 @@ export async function createAuditAction(formData: FormData) {
 }
 
 export async function saveResponseAction(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const raw = Object.fromEntries(formData.entries());
   const parsed = ResponseSchema.parse({
     ...raw,
@@ -66,6 +87,12 @@ export async function saveResponseAction(formData: FormData) {
     notes: raw.notes === "" ? null : raw.notes,
     evidence_url: raw.evidence_url === "" ? null : raw.evidence_url,
   });
+
+  // Enforce the edit rules before touching the responses table.
+  const audit = await getAudit(parsed.audit_id);
+  if (!audit) throw new Error("Audit not found.");
+  assertCanEditAudit(audit, user);
+
   await upsertResponse({
     audit_id: parsed.audit_id,
     item_id: parsed.item_id,
@@ -82,6 +109,8 @@ export async function submitAuditAction(formData: FormData) {
   const parsed = SubmitSchema.parse({ ...raw });
   const audit = await getAudit(parsed.id);
   if (!audit) throw new Error("Audit not found.");
+  // Editing rules: owner / admin only, and not closed.
+  assertCanEditAudit(audit, user);
   if (audit.status !== "in_progress") throw new Error("Audit is no longer in progress.");
 
   const { scorePct, criticalFailed, failedItemIds } = await submitAudit(
@@ -146,6 +175,17 @@ export async function submitAuditAction(formData: FormData) {
 export async function closeAuditAction(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
+
+  const audit = await getAudit(id);
+  if (!audit) throw new Error("Audit not found.");
+  // The same edit gate guards close: only the auditor/admin can close, and
+  // a closed audit can't be 'closed' again (assertCanEditAudit throws on
+  // closed).
+  assertCanEditAudit(audit, user);
+  if (audit.status !== "submitted") {
+    throw new Error("Only a submitted audit can be closed.");
+  }
+
   await closeAudit(id);
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id)
