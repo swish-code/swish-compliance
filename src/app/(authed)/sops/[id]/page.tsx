@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser, canApproveSops, canEditSops } from "@/lib/auth/guard";
+import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { getSopById, listSopEvents } from "@/features/sops/repository";
 import {
   SOP_STATUS_LABEL,
   SOP_STATUS_TONE,
-  type SopStatus,
+  isSopLocked,
+  availableTransitions,
 } from "@/features/sops/types";
 import {
   transitionSopAction,
@@ -16,15 +17,14 @@ import {
 import FilePicker from "@/features/sops/FilePicker";
 import AttachmentDisplay from "@/features/sops/AttachmentDisplay";
 
-type Transition = {
-  label: string;
-  next: SopStatus;
-  tone: string;
-  show: boolean;
-  needsComment: boolean;
-  commentLabel: string;
-  commentPlaceholder: string;
-  commentRequired: boolean;
+const ROLE_LABEL: Record<string, string> = {
+  admin: "Administrator",
+  ceo: "CEO",
+  business_excellence: "Business Excellence",
+  compliance: "Compliance",
+  department_manager: "Department Manager",
+  auditor: "Auditor",
+  viewer: "Viewer",
 };
 
 export default async function SopDetailPage({
@@ -38,54 +38,38 @@ export default async function SopDetailPage({
   const sop = await getSopById(id);
   if (!sop) notFound();
 
-  const canApprove = canApproveSops(user.role);
-  const canEdit = canEditSops(user.role);
-  const isOwner = sop.owner_id === user.id || sop.created_by === user.id;
-
-  const transitions: Transition[] = [
-    {
-      label: "Submit for review",
-      next: "pending_review",
-      tone: "bg-amber-600 hover:bg-amber-700",
-      show: (sop.status === "draft" || sop.status === "rejected") && (canEdit || isOwner),
-      needsComment: true,
-      commentLabel: "Reviewer notes (optional)",
-      commentPlaceholder: "Anything the approver should know before reviewing…",
-      commentRequired: false,
-    },
-    {
-      label: "Approve",
-      next: "approved",
-      tone: "bg-emerald-600 hover:bg-emerald-700",
-      show: sop.status === "pending_review" && canApprove,
-      needsComment: true,
-      commentLabel: "Approval comment (optional)",
-      commentPlaceholder: "Comment that will be recorded with the approval…",
-      commentRequired: false,
-    },
-    {
-      label: "Reject",
-      next: "rejected",
-      tone: "bg-red-600 hover:bg-red-700",
-      show: sop.status === "pending_review" && canApprove,
-      needsComment: true,
-      commentLabel: "Reason for rejection (required)",
-      commentPlaceholder: "Explain what needs to be fixed before resubmission…",
-      commentRequired: true,
-    },
-    {
-      label: "Archive",
-      next: "archived",
-      tone: "bg-gray-600 hover:bg-gray-700",
-      show: sop.status === "approved" && canEdit,
-      needsComment: false,
-      commentLabel: "",
-      commentPlaceholder: "",
-      commentRequired: false,
-    },
-  ];
-
+  const locked = isSopLocked(sop.status);
+  const transitions = availableTransitions(user.role, sop.status);
   const events = await listSopEvents(id);
+
+  // Editing the attachment is allowed for:
+  //  - admin always (until locked)
+  //  - department_manager when status is draft or returned_to_dm and they own it
+  //  - compliance when status is pending_compliance or returned_to_compliance
+  //  - business_excellence when status is pending_business_excellence or returned_to_be
+  //  - ceo when status is pending_ceo
+  const canEditAttachment =
+    !locked &&
+    (user.role === "admin" ||
+      (user.role === "department_manager" &&
+        (sop.status === "draft" || sop.status === "returned_to_dm") &&
+        (sop.owner_id === user.id || sop.created_by === user.id)) ||
+      (user.role === "compliance" &&
+        (sop.status === "pending_compliance" || sop.status === "returned_to_compliance")) ||
+      (user.role === "business_excellence" &&
+        (sop.status === "pending_business_excellence" || sop.status === "returned_to_be")) ||
+      (user.role === "ceo" && sop.status === "pending_ceo"));
+
+  // Most-recent rejection comment to surface above the actions card so the
+  // current actor can read it without scrolling to history.
+  const recentRejection = events.find(
+    (e) =>
+      (e.action === "sop:returned_to_dm" ||
+        e.action === "sop:returned_to_compliance" ||
+        e.action === "sop:returned_to_be") &&
+      e.details &&
+      (e.details as Record<string, unknown>).comment
+  );
 
   return (
     <Workspace
@@ -98,7 +82,7 @@ export default async function SopDetailPage({
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 mb-4">
         <div className="flex items-start justify-between gap-6 mb-6">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               {sop.code && (
                 <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                   {sop.code}
@@ -110,6 +94,11 @@ export default async function SopDetailPage({
                 {SOP_STATUS_LABEL[sop.status]}
               </span>
               <span className="text-xs text-gray-500">v{sop.version}</span>
+              {locked && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                  🔒 Locked — read only
+                </span>
+              )}
             </div>
             <h2 className="text-2xl font-bold text-gray-900">{sop.title}</h2>
             {sop.description && (
@@ -140,70 +129,91 @@ export default async function SopDetailPage({
           </div>
         )}
 
-        {/* Back link only — transitions are below in their own cards */}
         <Link href="/sops" className="text-sm text-gray-500 hover:text-gray-700">
           ← Back to list
         </Link>
       </div>
 
-      {/* Workflow actions — each with its own comment textarea */}
-      {transitions.some((t) => t.show) && (
+      {/* Highlight the most-recent rejection comment so the current actor sees it */}
+      {recentRejection && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 mb-4">
+          <div className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-1">
+            Last rejection comment
+          </div>
+          <div className="text-sm text-red-900 italic">
+            &ldquo;{((recentRejection.details ?? {}) as { comment?: string }).comment}&rdquo;
+          </div>
+          <div className="text-xs text-red-700 mt-2">
+            by {((recentRejection.details ?? {}) as { user_name?: string }).user_name ?? recentRejection.user_email}
+            {" · "}
+            {ROLE_LABEL[
+              ((recentRejection.details ?? {}) as { user_role?: string }).user_role ?? ""
+            ] ?? "—"}
+            {" · "}
+            {new Date(recentRejection.created_at).toLocaleString()}
+          </div>
+        </div>
+      )}
+
+      {/* Workflow actions */}
+      {transitions.length > 0 && !locked && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
             Available actions
           </h3>
           <div className="space-y-3">
-            {transitions
-              .filter((t) => t.show)
-              .map((t) => (
-                <form
-                  key={t.next}
-                  action={transitionSopAction}
-                  className="border border-gray-200 rounded-lg p-4 bg-gray-50/30"
-                >
-                  <input type="hidden" name="id" value={sop.id} />
-                  <input type="hidden" name="status" value={t.next} />
+            {transitions.map((t) => (
+              <form
+                key={t.to}
+                action={transitionSopAction}
+                className="border border-gray-200 rounded-lg p-4 bg-gray-50/30"
+              >
+                <input type="hidden" name="id" value={sop.id} />
+                <input type="hidden" name="status" value={t.to} />
 
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{t.label}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        {t.next === "pending_review" && "Send the SOP to Business Excellence / Admin for approval."}
-                        {t.next === "approved" && "Approve the SOP. It will appear under Policies."}
-                        {t.next === "rejected" && "Reject the SOP and send it back to the author. A reason is required."}
-                        {t.next === "archived" && "Archive an approved SOP. It stays in history but is no longer current."}
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      className={`${t.tone} text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap`}
-                    >
-                      {t.label}
-                    </button>
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{t.label}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>
                   </div>
+                  <button
+                    type="submit"
+                    className={`${t.tone} text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap`}
+                  >
+                    {t.label}
+                  </button>
+                </div>
 
-                  {t.needsComment && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                        {t.commentLabel}
-                      </label>
-                      <textarea
-                        name="comment"
-                        rows={t.next === "rejected" ? 3 : 2}
-                        required={t.commentRequired}
-                        placeholder={t.commentPlaceholder}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      />
-                    </div>
-                  )}
-                </form>
-              ))}
+                {t.commentRequired && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                      Comment <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      name="comment"
+                      rows={3}
+                      required
+                      placeholder="A comment is required and will be stored in the approval history."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+                )}
+              </form>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Manage attachment (editors only) */}
-      {canEdit && (
+      {/* Locked banner */}
+      {locked && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 mb-4 text-sm text-emerald-800">
+          🔒 This SOP has been given final approval by the CEO and is now locked.
+          No further modifications are allowed by any user.
+        </div>
+      )}
+
+      {/* Manage attachment */}
+      {canEditAttachment && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 mb-4">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
             Attachment
@@ -250,30 +260,45 @@ export default async function SopDetailPage({
         </div>
       )}
 
-      {/* Workflow history */}
+      {/* Approval history */}
       {events.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
-            Workflow history ({events.length})
+            Approval history ({events.length})
           </h3>
           <ol className="space-y-3">
             {events.map((e) => {
-              const detail = (e.details ?? {}) as { from?: string; to?: string; comment?: string; name?: string };
+              const detail = (e.details ?? {}) as {
+                from?: string;
+                to?: string;
+                comment?: string;
+                user_name?: string;
+                user_role?: string;
+                name?: string;
+              };
               const friendly = friendlyAction(e.action);
+              const userName = detail.user_name ?? e.user_email ?? "system";
+              const userRole = ROLE_LABEL[detail.user_role ?? ""] ?? detail.user_role ?? "";
               return (
                 <li key={e.id} className="border-l-2 border-gray-200 pl-4 pb-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${friendly.tone}`}>
+                  <div className="flex items-center gap-2 text-sm flex-wrap">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${friendly.tone}`}
+                    >
                       {friendly.label}
                     </span>
-                    <span className="text-gray-700">{e.user_email ?? "system"}</span>
+                    <span className="text-gray-800 font-medium">{userName}</span>
+                    {userRole && (
+                      <span className="text-xs text-gray-500">({userRole})</span>
+                    )}
                     <span className="text-xs text-gray-400">
                       · {new Date(e.created_at).toLocaleString()}
                     </span>
                   </div>
                   {detail.from && detail.to && (
                     <div className="text-xs text-gray-500 mt-1">
-                      Status: <span className="font-medium">{detail.from}</span> → <span className="font-medium">{detail.to}</span>
+                      Status: <span className="font-mono">{detail.from}</span> →{" "}
+                      <span className="font-mono">{detail.to}</span>
                     </div>
                   )}
                   {detail.comment && (
@@ -336,12 +361,16 @@ function formatDateTime(d: string | null | undefined): string {
 }
 
 function friendlyAction(action: string): { label: string; tone: string } {
-  if (action === "create") return { label: "Created", tone: "bg-gray-100 text-gray-700" };
-  if (action === "sop:pending_review") return { label: "Submitted for review", tone: "bg-amber-50 text-amber-700" };
-  if (action === "sop:approved") return { label: "Approved", tone: "bg-emerald-50 text-emerald-700" };
-  if (action === "sop:rejected") return { label: "Rejected", tone: "bg-red-50 text-red-700" };
-  if (action === "sop:archived") return { label: "Archived", tone: "bg-gray-100 text-gray-700" };
-  if (action === "sop:attachment_updated") return { label: "Attachment updated", tone: "bg-indigo-50 text-indigo-700" };
-  if (action === "sop:attachment_removed") return { label: "Attachment removed", tone: "bg-gray-100 text-gray-600" };
+  if (action === "create")                       return { label: "Created", tone: "bg-gray-100 text-gray-700" };
+  if (action === "sop:pending_compliance")       return { label: "Sent to Compliance", tone: "bg-amber-50 text-amber-700" };
+  if (action === "sop:returned_to_dm")           return { label: "Rejected → returned to DM", tone: "bg-red-50 text-red-700" };
+  if (action === "sop:pending_business_excellence") return { label: "Approved → forwarded to BE", tone: "bg-indigo-50 text-indigo-700" };
+  if (action === "sop:returned_to_compliance")   return { label: "Rejected → returned to Compliance", tone: "bg-red-50 text-red-700" };
+  if (action === "sop:pending_ceo")              return { label: "Approved → forwarded to CEO", tone: "bg-purple-50 text-purple-700" };
+  if (action === "sop:returned_to_be")           return { label: "Rejected → returned to BE", tone: "bg-red-50 text-red-700" };
+  if (action === "sop:approved")                 return { label: "Final Approved 🔒", tone: "bg-emerald-50 text-emerald-700" };
+  if (action === "sop:archived")                 return { label: "Archived", tone: "bg-gray-100 text-gray-700" };
+  if (action === "sop:attachment_updated")       return { label: "Attachment updated", tone: "bg-indigo-50 text-indigo-700" };
+  if (action === "sop:attachment_removed")       return { label: "Attachment removed", tone: "bg-gray-100 text-gray-600" };
   return { label: action, tone: "bg-gray-100 text-gray-700" };
 }

@@ -23,9 +23,18 @@ type CapaItem = {
 export default async function MyWorkPage() {
   const user = await requireUser();
 
+  // The "SOPs awaiting MY review" tile depends on the user's role.
+  const pendingStatusForRole: Record<string, string> = {
+    compliance:           "pending_compliance",
+    business_excellence:  "pending_business_excellence",
+    ceo:                  "pending_ceo",
+    department_manager:   "returned_to_dm",
+  };
+  const pendingStatus = pendingStatusForRole[user.role] ?? "pending_compliance";
+
   const stats = await queryOne<Row>(
     `SELECT
-       (SELECT COUNT(*)::int FROM sops WHERE status = 'pending_review')                        AS pending_sops,
+       (SELECT COUNT(*)::int FROM sops WHERE status = $2)                                       AS pending_sops,
        (SELECT COUNT(*)::int FROM corrective_actions
         WHERE assigned_to = $1 AND status IN ('open','in_progress'))                            AS my_capas,
        (SELECT COUNT(*)::int FROM corrective_actions
@@ -34,7 +43,7 @@ export default async function MyWorkPage() {
        (SELECT COUNT(*)::int FROM audits WHERE auditor_id = $1 AND status = 'in_progress')      AS audits_in_progress,
        (SELECT COUNT(*)::int FROM audits
         WHERE submitted_at::date = CURRENT_DATE AND critical_failed > 0)                        AS failed_critical_today`,
-    [user.id]
+    [user.id, pendingStatus]
   );
 
   const myCapas = await queryAll<CapaItem>(
@@ -53,7 +62,18 @@ export default async function MyWorkPage() {
       userLabel={user.displayName}
     >
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <StatCard label="SOPs awaiting review" value={stats?.pending_sops ?? 0} href="/sops?status=pending_review" tone="amber" />
+        <StatCard
+          label={
+            user.role === "department_manager"
+              ? "SOPs returned to me"
+              : user.role === "ceo"
+                ? "SOPs awaiting my final approval"
+                : "SOPs awaiting my review"
+          }
+          value={stats?.pending_sops ?? 0}
+          href={`/sops?status=${pendingStatus}`}
+          tone="amber"
+        />
         <StatCard label="My open CAPAs" value={stats?.my_capas ?? 0} href="/capa" tone="indigo" />
         <StatCard label="Overdue CAPAs" value={stats?.overdue_capas ?? 0} href="/capa" tone="red" emphasize />
         <StatCard label="Audits in progress" value={stats?.audits_in_progress ?? 0} href="/audits?status=in_progress" tone="brand" />

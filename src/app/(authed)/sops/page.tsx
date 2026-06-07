@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser, canEditSops } from "@/lib/auth/guard";
+import { requireUser, canCreateSops } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { listSops } from "@/features/sops/repository";
 import { SOP_STATUS_LABEL, SOP_STATUS_TONE, type SopStatus } from "@/features/sops/types";
@@ -55,7 +55,7 @@ export default async function SopsPage({
           </button>
         </form>
 
-        {canEditSops(user.role) && (
+        {canCreateSops(user.role) && (
           <Link
             href="/sops/new"
             className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"

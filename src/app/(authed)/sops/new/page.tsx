@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser, canEditSops } from "@/lib/auth/guard";
+import { requireUser, canCreateSops } from "@/lib/auth/guard";
 import { redirect } from "next/navigation";
 import Workspace from "@/features/shell/Workspace";
 import { queryAll } from "@/lib/db";
@@ -8,7 +8,7 @@ import FilePicker from "@/features/sops/FilePicker";
 
 export default async function NewSopPage() {
   const user = await requireUser();
-  if (!canEditSops(user.role)) redirect("/sops");
+  if (!canCreateSops(user.role)) redirect("/sops");
 
   const brands = await queryAll<{ id: number; name: string }>(
     `SELECT id, name FROM brands WHERE is_active ORDER BY name`

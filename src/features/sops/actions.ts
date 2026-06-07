@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireUser, canApproveSops, canEditSops } from "@/lib/auth/guard";
+import {
+  requireUser,
+  canCreateSops,
+  canEditSops,
+} from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import {
   createSop,
@@ -11,7 +15,11 @@ import {
   getSopById,
   setSopAttachment,
 } from "./repository";
-import type { SopStatus } from "./types";
+import {
+  findTransition,
+  isSopLocked,
+  type SopStatus,
+} from "./types";
 
 const CreateSchema = z.object({
   code: z.string().trim().optional().nullable(),
@@ -26,38 +34,22 @@ const CreateSchema = z.object({
 });
 
 // Limits (the next.config.ts body limit is 12 MB to give us headroom).
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB raw
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIMES = new Set([
-  // Images
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-  "image/webp",
-  "image/gif",
-  // PDF
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
   "application/pdf",
-  // Word
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  // Excel
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  // PowerPoint
   "application/vnd.ms-powerpoint",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  // Plain text & CSV
   "text/plain",
   "text/csv",
 ]);
 
-type ExtractedFile = {
-  dataUrl: string;
-  name: string;
-  mime: string;
-} | null;
+type ExtractedFile = { dataUrl: string; name: string; mime: string } | null;
 
-/** Read a single File from a FormData field, validate it, and produce a
- *  base64 data URL plus original name + mime for storage. */
 async function extractAttachment(
   formData: FormData,
   fieldName = "attachment_file"
@@ -84,10 +76,15 @@ async function extractAttachment(
   };
 }
 
+/**
+ * SOP creation. Per the v2 workflow, only the Department Manager (and admin
+ * for support) can create SOPs, and the new SOP goes straight into the
+ * Compliance team's review queue.
+ */
 export async function createSopAction(formData: FormData) {
   const user = await requireUser();
-  if (!canEditSops(user.role)) {
-    throw new Error("You don't have permission to create SOPs.");
+  if (!canCreateSops(user.role)) {
+    throw new Error("Only Department Managers can create SOPs.");
   }
 
   const file = await extractAttachment(formData, "attachment_file");
@@ -115,6 +112,9 @@ export async function createSopAction(formData: FormData) {
     created_by: user.id,
   });
 
+  // New SOPs are not drafts in v2 — they go straight into the Compliance queue.
+  await setSopStatus(id, "pending_compliance", null);
+
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
      VALUES ($1, $2, 'create', 'sop', $3, $4)`,
@@ -125,6 +125,23 @@ export async function createSopAction(formData: FormData) {
       JSON.stringify({
         title: parsed.title,
         attachment: file?.name ?? null,
+        user_name: user.displayName,
+        user_role: user.role,
+      }),
+    ]
+  );
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'sop:pending_compliance', 'sop', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      id,
+      JSON.stringify({
+        from: "draft",
+        to: "pending_compliance",
+        user_name: user.displayName,
+        user_role: user.role,
       }),
     ]
   );
@@ -135,12 +152,15 @@ export async function createSopAction(formData: FormData) {
 
 export async function updateSopAttachmentAction(formData: FormData) {
   const user = await requireUser();
-  if (!canEditSops(user.role)) {
+  if (!canEditSops(user.role) && user.role !== "department_manager") {
     throw new Error("You don't have permission to update this SOP.");
   }
   const id = Number(formData.get("id"));
   const current = await getSopById(id);
   if (!current) throw new Error("SOP not found.");
+  if (isSopLocked(current.status)) {
+    throw new Error("This SOP is locked. No further modifications are allowed.");
+  }
 
   const file = await extractAttachment(formData, "attachment_file");
   if (!file) throw new Error("No file was provided.");
@@ -149,61 +169,79 @@ export async function updateSopAttachmentAction(formData: FormData) {
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
      VALUES ($1, $2, 'sop:attachment_updated', 'sop', $3, $4)`,
-    [user.id, user.email, id, JSON.stringify({ name: file.name, mime: file.mime })]
+    [
+      user.id,
+      user.email,
+      id,
+      JSON.stringify({
+        name: file.name,
+        mime: file.mime,
+        user_name: user.displayName,
+        user_role: user.role,
+      }),
+    ]
   );
-
   revalidatePath(`/sops/${id}`);
 }
 
 export async function removeSopAttachmentAction(formData: FormData) {
   const user = await requireUser();
-  if (!canEditSops(user.role)) {
+  if (!canEditSops(user.role) && user.role !== "department_manager") {
     throw new Error("You don't have permission to update this SOP.");
   }
   const id = Number(formData.get("id"));
+  const current = await getSopById(id);
+  if (!current) throw new Error("SOP not found.");
+  if (isSopLocked(current.status)) {
+    throw new Error("This SOP is locked. No further modifications are allowed.");
+  }
+
   await setSopAttachment(id, null, null, null);
   await execute(
-    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id)
-     VALUES ($1, $2, 'sop:attachment_removed', 'sop', $3)`,
-    [user.id, user.email, id]
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'sop:attachment_removed', 'sop', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      id,
+      JSON.stringify({ user_name: user.displayName, user_role: user.role }),
+    ]
   );
   revalidatePath(`/sops/${id}`);
 }
 
+/**
+ * Workflow transition. Validates against the central SOP_TRANSITIONS map:
+ *   - the transition must exist
+ *   - the caller's role must be in the transition's allowedRoles
+ *   - if the transition requires a comment, it must be present
+ * The comment is persisted with the user's name and role in audit_logs.details
+ * so the Approval History can render it later even if the user changes role.
+ */
 export async function transitionSopAction(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
   const next = formData.get("status") as SopStatus;
   const commentRaw = (formData.get("comment") ?? "").toString().trim();
-  const comment = commentRaw.length > 0 ? commentRaw.slice(0, 1000) : null;
+  const comment = commentRaw.length > 0 ? commentRaw.slice(0, 2000) : null;
 
   const current = await getSopById(id);
   if (!current) throw new Error("SOP not found.");
+  if (isSopLocked(current.status) && next !== "archived") {
+    throw new Error("This SOP is locked. No further modifications are allowed.");
+  }
 
-  // Transition rules
-  if (next === "pending_review") {
-    if (current.status !== "draft" && current.status !== "rejected") {
-      throw new Error("Only draft / rejected SOPs can be submitted.");
-    }
-    if (!canEditSops(user.role) && current.owner_id !== user.id) {
-      throw new Error("You don't have permission to submit this SOP.");
-    }
-  } else if (next === "approved" || next === "rejected") {
-    if (current.status !== "pending_review") {
-      throw new Error("Only SOPs pending review can be approved or rejected.");
-    }
-    if (!canApproveSops(user.role)) {
-      throw new Error("You don't have permission to approve SOPs.");
-    }
-    if (next === "rejected" && !comment) {
-      throw new Error("A reason is required when rejecting a SOP.");
-    }
-  } else if (next === "archived") {
-    if (!canEditSops(user.role)) {
-      throw new Error("You don't have permission to archive SOPs.");
-    }
-  } else {
-    throw new Error(`Unsupported transition to "${next}".`);
+  const transition = findTransition(current.status, next);
+  if (!transition) {
+    throw new Error(
+      `Transition from "${current.status}" to "${next}" is not allowed.`
+    );
+  }
+  if (!transition.allowedRoles.includes(user.role)) {
+    throw new Error(`Your role (${user.role}) can't perform this action.`);
+  }
+  if (transition.commentRequired && !comment) {
+    throw new Error("A comment is required for this action.");
   }
 
   await setSopStatus(id, next, next === "approved" ? user.id : null);
@@ -219,6 +257,8 @@ export async function transitionSopAction(formData: FormData) {
       JSON.stringify({
         from: current.status,
         to: next,
+        user_name: user.displayName,
+        user_role: user.role,
         ...(comment ? { comment } : {}),
       }),
     ]
