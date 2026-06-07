@@ -199,3 +199,22 @@ export async function closeAudit(id: number): Promise<void> {
     [id]
   );
 }
+
+/**
+ * Reopen a submitted audit back to 'in_progress' so the auditor can edit
+ * responses. Clears the computed score / submitted_at fields — they'll be
+ * recomputed the next time the audit is submitted. Responses themselves are
+ * preserved untouched.
+ */
+export async function reopenAudit(id: number): Promise<void> {
+  await execute(
+    `UPDATE audits SET
+       status          = 'in_progress',
+       score           = NULL,
+       max_score       = NULL,
+       critical_failed = 0,
+       submitted_at    = NULL
+     WHERE id = $1 AND status = 'submitted'`,
+    [id]
+  );
+}

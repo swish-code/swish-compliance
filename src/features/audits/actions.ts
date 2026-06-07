@@ -10,6 +10,7 @@ import {
   upsertResponse,
   submitAudit,
   closeAudit,
+  reopenAudit,
   getAudit,
 } from "./repository";
 import { createCapa } from "../capa/repository";
@@ -189,6 +190,47 @@ export async function submitAuditAction(formData: FormData) {
   revalidatePath("/audits");
   revalidatePath(`/audits/${parsed.id}`);
   revalidatePath("/capa");
+}
+
+/**
+ * Reopen a submitted audit so the auditor can edit responses again.
+ * Allowed for the auditor (owner) or admin, and ONLY when the audit is
+ * currently 'submitted'. Closed audits stay closed.
+ */
+export async function reopenAuditAction(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid audit id.");
+
+  const audit = await getAudit(id);
+  if (!audit) throw new Error("Audit not found.");
+  // The standard edit gate already blocks 'closed' and non-owners.
+  assertCanEditAudit(audit, user);
+  if (audit.status !== "submitted") {
+    throw new Error("Only a submitted audit can be reopened.");
+  }
+
+  await reopenAudit(id);
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id)
+     VALUES ($1, $2, 'audit:reopened', 'audit', $3)`,
+    [user.id, user.email, id]
+  );
+
+  // Let compliance know the audit is being edited again — useful for the
+  // audit trail and so anyone watching the result knows the score is stale.
+  await notify({
+    audience: { roles: ["compliance", "admin"] },
+    actor: { id: user.id, name: user.displayName, role: user.role },
+    kind: "audit:reopened",
+    title: `Audit "${audit.template_name}" reopened for editing`,
+    body: `${audit.brand_name ?? "Brand —"} · ${audit.department_name ?? "Department —"}. Previous score (${audit.score ?? "—"}%) cleared; will be recomputed on resubmit.`,
+    severity: "info",
+    entity: { type: "audit", id, href: `/audits/${id}` },
+  });
+
+  revalidatePath("/audits");
+  revalidatePath(`/audits/${id}`);
 }
 
 export async function closeAuditAction(formData: FormData) {

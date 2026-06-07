@@ -6,6 +6,7 @@ import { getAudit, getAuditItems } from "@/features/audits/repository";
 import {
   submitAuditAction,
   closeAuditAction,
+  reopenAuditAction,
 } from "@/features/audits/actions";
 import AuditItem from "@/features/audits/AuditItem";
 import {
@@ -263,23 +264,39 @@ export default async function AuditDetailPage({
       )}
 
       {audit.status === "submitted" && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between">
-          <div className="text-sm text-gray-600">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-gray-600 flex-1 min-w-[260px]">
             Submitted {audit.submitted_at && new Date(audit.submitted_at).toLocaleString()}.
             {canEdit
-              ? " Mark as closed when all related CAPAs are addressed."
-              : " Only the auditor who created this audit can close it."}
+              ? " You can edit the audit until it's closed, or mark it as closed when all related CAPAs are addressed."
+              : " Only the auditor who created this audit can edit or close it."}
           </div>
           {canEdit && (
-            <form action={closeAuditAction}>
-              <input type="hidden" name="id" value={audit.id} />
-              <button
-                type="submit"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-              >
-                Close audit
-              </button>
-            </form>
+            <div className="flex gap-2">
+              <form action={reopenAuditAction}>
+                <input type="hidden" name="id" value={audit.id} />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium"
+                  title="Reopen this audit so you can change responses. Score will be recomputed on resubmit."
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                  Edit audit
+                </button>
+              </form>
+              <form action={closeAuditAction}>
+                <input type="hidden" name="id" value={audit.id} />
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                >
+                  Close audit
+                </button>
+              </form>
+            </div>
           )}
         </div>
       )}
