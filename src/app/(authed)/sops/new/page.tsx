@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import Workspace from "@/features/shell/Workspace";
 import { queryAll } from "@/lib/db";
 import { createSopAction } from "@/features/sops/actions";
-import ImagePicker from "@/features/sops/ImagePicker";
+import FilePicker from "@/features/sops/FilePicker";
 
 export default async function NewSopPage() {
   const user = await requireUser();
@@ -142,11 +142,11 @@ export default async function NewSopPage() {
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">
-              Cover image (optional)
+              Attachment (optional)
             </label>
-            <ImagePicker name="image_file" />
+            <FilePicker name="attachment_file" />
             <p className="text-xs text-gray-500 mt-1">
-              Useful for visual SOPs (e.g. a photo of correct setup, a diagram, an example).
+              Upload the actual SOP document (Word / PDF / Excel) or a reference image. Max 10 MB.
             </p>
           </div>
 

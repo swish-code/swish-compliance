@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, canApproveSops, canEditSops } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
-import { getSopById } from "@/features/sops/repository";
+import { getSopById, listSopEvents } from "@/features/sops/repository";
 import {
   SOP_STATUS_LABEL,
   SOP_STATUS_TONE,
@@ -10,10 +10,22 @@ import {
 } from "@/features/sops/types";
 import {
   transitionSopAction,
-  updateSopImageAction,
-  removeSopImageAction,
+  updateSopAttachmentAction,
+  removeSopAttachmentAction,
 } from "@/features/sops/actions";
-import ImagePicker from "@/features/sops/ImagePicker";
+import FilePicker from "@/features/sops/FilePicker";
+import AttachmentDisplay from "@/features/sops/AttachmentDisplay";
+
+type Transition = {
+  label: string;
+  next: SopStatus;
+  tone: string;
+  show: boolean;
+  needsComment: boolean;
+  commentLabel: string;
+  commentPlaceholder: string;
+  commentRequired: boolean;
+};
 
 export default async function SopDetailPage({
   params,
@@ -30,32 +42,50 @@ export default async function SopDetailPage({
   const canEdit = canEditSops(user.role);
   const isOwner = sop.owner_id === user.id || sop.created_by === user.id;
 
-  const transitions: { label: string; next: SopStatus; tone: string; show: boolean }[] = [
+  const transitions: Transition[] = [
     {
       label: "Submit for review",
       next: "pending_review",
       tone: "bg-amber-600 hover:bg-amber-700",
       show: (sop.status === "draft" || sop.status === "rejected") && (canEdit || isOwner),
+      needsComment: true,
+      commentLabel: "Reviewer notes (optional)",
+      commentPlaceholder: "Anything the approver should know before reviewing…",
+      commentRequired: false,
     },
     {
       label: "Approve",
       next: "approved",
       tone: "bg-emerald-600 hover:bg-emerald-700",
       show: sop.status === "pending_review" && canApprove,
+      needsComment: true,
+      commentLabel: "Approval comment (optional)",
+      commentPlaceholder: "Comment that will be recorded with the approval…",
+      commentRequired: false,
     },
     {
       label: "Reject",
       next: "rejected",
       tone: "bg-red-600 hover:bg-red-700",
       show: sop.status === "pending_review" && canApprove,
+      needsComment: true,
+      commentLabel: "Reason for rejection (required)",
+      commentPlaceholder: "Explain what needs to be fixed before resubmission…",
+      commentRequired: true,
     },
     {
       label: "Archive",
       next: "archived",
       tone: "bg-gray-600 hover:bg-gray-700",
       show: sop.status === "approved" && canEdit,
+      needsComment: false,
+      commentLabel: "",
+      commentPlaceholder: "",
+      commentRequired: false,
     },
   ];
+
+  const events = await listSopEvents(id);
 
   return (
     <Workspace
@@ -94,93 +124,170 @@ export default async function SopDetailPage({
               rel="noreferrer"
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
             >
-              Open file ↗
+              Open external link ↗
             </a>
           )}
         </div>
 
-        {/* Cover image (if any) */}
-        {sop.image_data_url && (
+        {/* Attachment (if any) */}
+        {sop.attachment_data_url && (
           <div className="mb-6">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={sop.image_data_url}
-              alt={`${sop.title} cover`}
-              className="max-w-full max-h-96 rounded-lg border border-gray-200 object-contain bg-gray-50"
+            <AttachmentDisplay
+              dataUrl={sop.attachment_data_url}
+              name={sop.attachment_name}
+              mime={sop.attachment_mime}
             />
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex flex-wrap gap-2">
-          {transitions
-            .filter((t) => t.show)
-            .map((t) => (
-              <form key={t.next} action={transitionSopAction}>
-                <input type="hidden" name="id" value={sop.id} />
-                <input type="hidden" name="status" value={t.next} />
-                <button
-                  type="submit"
-                  className={`${t.tone} text-white px-4 py-2 rounded-lg text-sm font-medium`}
-                >
-                  {t.label}
-                </button>
-              </form>
-            ))}
-          <Link
-            href="/sops"
-            className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm"
-          >
-            ← Back to list
-          </Link>
-        </div>
+        {/* Back link only — transitions are below in their own cards */}
+        <Link href="/sops" className="text-sm text-gray-500 hover:text-gray-700">
+          ← Back to list
+        </Link>
       </div>
 
-      {/* Manage image (editors only) */}
+      {/* Workflow actions — each with its own comment textarea */}
+      {transitions.some((t) => t.show) && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+            Available actions
+          </h3>
+          <div className="space-y-3">
+            {transitions
+              .filter((t) => t.show)
+              .map((t) => (
+                <form
+                  key={t.next}
+                  action={transitionSopAction}
+                  className="border border-gray-200 rounded-lg p-4 bg-gray-50/30"
+                >
+                  <input type="hidden" name="id" value={sop.id} />
+                  <input type="hidden" name="status" value={t.next} />
+
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{t.label}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {t.next === "pending_review" && "Send the SOP to Business Excellence / Admin for approval."}
+                        {t.next === "approved" && "Approve the SOP. It will appear under Policies."}
+                        {t.next === "rejected" && "Reject the SOP and send it back to the author. A reason is required."}
+                        {t.next === "archived" && "Archive an approved SOP. It stays in history but is no longer current."}
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      className={`${t.tone} text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap`}
+                    >
+                      {t.label}
+                    </button>
+                  </div>
+
+                  {t.needsComment && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                        {t.commentLabel}
+                      </label>
+                      <textarea
+                        name="comment"
+                        rows={t.next === "rejected" ? 3 : 2}
+                        required={t.commentRequired}
+                        placeholder={t.commentPlaceholder}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      />
+                    </div>
+                  )}
+                </form>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Manage attachment (editors only) */}
       {canEdit && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 mb-4">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
-            Cover image
+            Attachment
           </h3>
 
-          {sop.image_data_url ? (
+          {sop.attachment_data_url ? (
             <div className="space-y-3">
               <p className="text-sm text-gray-600">
-                Replace the current cover or remove it. Changes are recorded in the audit log.
+                Replace the current file or remove it. Every change is recorded in the audit log.
               </p>
-              <form action={updateSopImageAction} className="space-y-3">
+              <form action={updateSopAttachmentAction} className="space-y-3">
                 <input type="hidden" name="id" value={sop.id} />
-                <ImagePicker name="image_file" initialPreviewUrl={null} />
+                <FilePicker name="attachment_file" />
                 <button
                   type="submit"
                   className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
                 >
-                  Replace image
+                  Replace attachment
                 </button>
               </form>
 
-              <form action={removeSopImageAction} className="pt-2 border-t border-gray-100">
+              <form action={removeSopAttachmentAction} className="pt-2 border-t border-gray-100">
                 <input type="hidden" name="id" value={sop.id} />
                 <button
                   type="submit"
                   className="text-sm text-red-600 hover:text-red-800 hover:underline"
                 >
-                  Remove the current image
+                  Remove the current attachment
                 </button>
               </form>
             </div>
           ) : (
-            <form action={updateSopImageAction} className="space-y-3">
+            <form action={updateSopAttachmentAction} className="space-y-3">
               <input type="hidden" name="id" value={sop.id} />
-              <ImagePicker name="image_file" />
+              <FilePicker name="attachment_file" />
               <button
                 type="submit"
                 className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
               >
-                Upload image
+                Upload attachment
               </button>
             </form>
           )}
+        </div>
+      )}
+
+      {/* Workflow history */}
+      {events.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+            Workflow history ({events.length})
+          </h3>
+          <ol className="space-y-3">
+            {events.map((e) => {
+              const detail = (e.details ?? {}) as { from?: string; to?: string; comment?: string; name?: string };
+              const friendly = friendlyAction(e.action);
+              return (
+                <li key={e.id} className="border-l-2 border-gray-200 pl-4 pb-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${friendly.tone}`}>
+                      {friendly.label}
+                    </span>
+                    <span className="text-gray-700">{e.user_email ?? "system"}</span>
+                    <span className="text-xs text-gray-400">
+                      · {new Date(e.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  {detail.from && detail.to && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Status: <span className="font-medium">{detail.from}</span> → <span className="font-medium">{detail.to}</span>
+                    </div>
+                  )}
+                  {detail.comment && (
+                    <div className="mt-2 p-3 bg-gray-50 rounded-lg text-sm text-gray-800 italic">
+                      &ldquo;{detail.comment}&rdquo;
+                    </div>
+                  )}
+                  {detail.name && !detail.comment && (
+                    <div className="text-xs text-gray-500 mt-1">File: {detail.name}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
         </div>
       )}
 
@@ -226,4 +333,15 @@ function formatDate(d: string | null | undefined): string {
 function formatDateTime(d: string | null | undefined): string {
   if (!d) return "—";
   return new Date(d).toLocaleString();
+}
+
+function friendlyAction(action: string): { label: string; tone: string } {
+  if (action === "create") return { label: "Created", tone: "bg-gray-100 text-gray-700" };
+  if (action === "sop:pending_review") return { label: "Submitted for review", tone: "bg-amber-50 text-amber-700" };
+  if (action === "sop:approved") return { label: "Approved", tone: "bg-emerald-50 text-emerald-700" };
+  if (action === "sop:rejected") return { label: "Rejected", tone: "bg-red-50 text-red-700" };
+  if (action === "sop:archived") return { label: "Archived", tone: "bg-gray-100 text-gray-700" };
+  if (action === "sop:attachment_updated") return { label: "Attachment updated", tone: "bg-indigo-50 text-indigo-700" };
+  if (action === "sop:attachment_removed") return { label: "Attachment removed", tone: "bg-gray-100 text-gray-600" };
+  return { label: action, tone: "bg-gray-100 text-gray-700" };
 }

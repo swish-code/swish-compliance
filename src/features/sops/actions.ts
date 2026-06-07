@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser, canApproveSops, canEditSops } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
-import { createSop, setSopStatus, getSopById, setSopImage } from "./repository";
+import {
+  createSop,
+  setSopStatus,
+  getSopById,
+  setSopAttachment,
+} from "./repository";
 import type { SopStatus } from "./types";
 
 const CreateSchema = z.object({
@@ -20,36 +25,63 @@ const CreateSchema = z.object({
   review_date: z.string().optional().nullable(),
 });
 
-// Limits (also reflected in next.config.ts's serverActions.bodySizeLimit)
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;        // 2 MB raw
-const ALLOWED_IMAGE_TYPES = new Set([
+// Limits (the next.config.ts body limit is 12 MB to give us headroom).
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB raw
+const ALLOWED_MIMES = new Set([
+  // Images
   "image/png",
   "image/jpeg",
   "image/jpg",
   "image/webp",
   "image/gif",
+  // PDF
+  "application/pdf",
+  // Word
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  // Excel
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  // PowerPoint
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  // Plain text & CSV
+  "text/plain",
+  "text/csv",
 ]);
 
-/**
- * Read a single image File from the form and convert it to a base64 data URL.
- * Returns null when the form field is missing, empty, or not an image.
- * Throws a clear error when the file is too large or its mime is rejected.
- */
-async function extractImageDataUrl(
+type ExtractedFile = {
+  dataUrl: string;
+  name: string;
+  mime: string;
+} | null;
+
+/** Read a single File from a FormData field, validate it, and produce a
+ *  base64 data URL plus original name + mime for storage. */
+async function extractAttachment(
   formData: FormData,
-  fieldName = "image_file"
-): Promise<string | null> {
+  fieldName = "attachment_file"
+): Promise<ExtractedFile> {
   const entry = formData.get(fieldName);
   if (!(entry instanceof File)) return null;
   if (entry.size === 0) return null;
-  if (entry.size > MAX_IMAGE_BYTES) {
-    throw new Error(`Image is too large. Max ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB.`);
+  if (entry.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error(
+      `File is too large. Max ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB.`
+    );
   }
-  if (!ALLOWED_IMAGE_TYPES.has(entry.type)) {
-    throw new Error(`Unsupported image type "${entry.type}". Use PNG, JPG, WEBP or GIF.`);
+  if (!ALLOWED_MIMES.has(entry.type)) {
+    throw new Error(
+      `Unsupported file type "${entry.type || "unknown"}". ` +
+        `Allowed: PDF, Word, Excel, PowerPoint, image, text, CSV.`
+    );
   }
   const buffer = Buffer.from(await entry.arrayBuffer());
-  return `data:${entry.type};base64,${buffer.toString("base64")}`;
+  return {
+    dataUrl: `data:${entry.type};base64,${buffer.toString("base64")}`,
+    name: entry.name || "attachment",
+    mime: entry.type,
+  };
 }
 
 export async function createSopAction(formData: FormData) {
@@ -58,13 +90,10 @@ export async function createSopAction(formData: FormData) {
     throw new Error("You don't have permission to create SOPs.");
   }
 
-  // The native File object must NOT go through Zod's z.string() rules. Pull it
-  // out first and parse the rest of the form normally.
-  const imageDataUrl = await extractImageDataUrl(formData, "image_file");
+  const file = await extractAttachment(formData, "attachment_file");
 
   const raw = Object.fromEntries(formData.entries());
-  // Drop the File entry (it's just metadata for Zod now)
-  delete (raw as Record<string, unknown>).image_file;
+  delete (raw as Record<string, unknown>).attachment_file;
 
   const parsed = CreateSchema.parse({
     ...raw,
@@ -80,7 +109,9 @@ export async function createSopAction(formData: FormData) {
   const id = await createSop({
     ...parsed,
     file_url: parsed.file_url || null,
-    image_data_url: imageDataUrl,
+    attachment_data_url: file?.dataUrl ?? null,
+    attachment_name: file?.name ?? null,
+    attachment_mime: file?.mime ?? null,
     created_by: user.id,
   });
 
@@ -91,7 +122,10 @@ export async function createSopAction(formData: FormData) {
       user.id,
       user.email,
       id,
-      JSON.stringify({ title: parsed.title, has_image: !!imageDataUrl }),
+      JSON.stringify({
+        title: parsed.title,
+        attachment: file?.name ?? null,
+      }),
     ]
   );
 
@@ -99,7 +133,7 @@ export async function createSopAction(formData: FormData) {
   redirect(`/sops/${id}`);
 }
 
-export async function updateSopImageAction(formData: FormData) {
+export async function updateSopAttachmentAction(formData: FormData) {
   const user = await requireUser();
   if (!canEditSops(user.role)) {
     throw new Error("You don't have permission to update this SOP.");
@@ -108,29 +142,29 @@ export async function updateSopImageAction(formData: FormData) {
   const current = await getSopById(id);
   if (!current) throw new Error("SOP not found.");
 
-  const imageDataUrl = await extractImageDataUrl(formData, "image_file");
-  if (!imageDataUrl) throw new Error("No image was provided.");
+  const file = await extractAttachment(formData, "attachment_file");
+  if (!file) throw new Error("No file was provided.");
 
-  await setSopImage(id, imageDataUrl);
+  await setSopAttachment(id, file.dataUrl, file.name, file.mime);
   await execute(
-    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id)
-     VALUES ($1, $2, 'sop:image_updated', 'sop', $3)`,
-    [user.id, user.email, id]
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'sop:attachment_updated', 'sop', $3, $4)`,
+    [user.id, user.email, id, JSON.stringify({ name: file.name, mime: file.mime })]
   );
 
   revalidatePath(`/sops/${id}`);
 }
 
-export async function removeSopImageAction(formData: FormData) {
+export async function removeSopAttachmentAction(formData: FormData) {
   const user = await requireUser();
   if (!canEditSops(user.role)) {
     throw new Error("You don't have permission to update this SOP.");
   }
   const id = Number(formData.get("id"));
-  await setSopImage(id, null);
+  await setSopAttachment(id, null, null, null);
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id)
-     VALUES ($1, $2, 'sop:image_removed', 'sop', $3)`,
+     VALUES ($1, $2, 'sop:attachment_removed', 'sop', $3)`,
     [user.id, user.email, id]
   );
   revalidatePath(`/sops/${id}`);
@@ -140,6 +174,8 @@ export async function transitionSopAction(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
   const next = formData.get("status") as SopStatus;
+  const commentRaw = (formData.get("comment") ?? "").toString().trim();
+  const comment = commentRaw.length > 0 ? commentRaw.slice(0, 1000) : null;
 
   const current = await getSopById(id);
   if (!current) throw new Error("SOP not found.");
@@ -159,6 +195,9 @@ export async function transitionSopAction(formData: FormData) {
     if (!canApproveSops(user.role)) {
       throw new Error("You don't have permission to approve SOPs.");
     }
+    if (next === "rejected" && !comment) {
+      throw new Error("A reason is required when rejecting a SOP.");
+    }
   } else if (next === "archived") {
     if (!canEditSops(user.role)) {
       throw new Error("You don't have permission to archive SOPs.");
@@ -177,7 +216,11 @@ export async function transitionSopAction(formData: FormData) {
       user.email,
       `sop:${next}`,
       id,
-      JSON.stringify({ from: current.status, to: next }),
+      JSON.stringify({
+        from: current.status,
+        to: next,
+        ...(comment ? { comment } : {}),
+      }),
     ]
   );
 

@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   // Run migrations on every cold boot in production (idempotent via IF NOT EXISTS).
   // Keep build clean of DB access.
   experimental: {
-    serverActions: { bodySizeLimit: "5mb" },
+    serverActions: { bodySizeLimit: "12mb" },
   },
 };
 
