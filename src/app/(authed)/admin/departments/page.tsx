@@ -6,13 +6,34 @@ import {
   renameDepartmentAction,
   toggleDepartmentAction,
 } from "@/features/admin/reference/actions";
+import { seedPlaybookDepartmentsAction } from "@/features/admin/seeds/actions";
 
 type Row = { id: number; name: string; is_active: boolean; created_at: string };
+
+// Departments referenced by the Wave 1 & 2 Playbook (June 2026). We surface
+// a one-click seed button below when any of these are still missing.
+const PLAYBOOK_DEPARTMENTS = [
+  "L&D",
+  "CPU",
+  "Warehouse",
+  "Procurement",
+  "Cost Control",
+  "Maintenance",
+  "Customer Care",
+  "IT",
+  "OPEX",
+];
 
 export default async function DepartmentsAdminPage() {
   const me = await requireAdmin();
   const rows = await queryAll<Row>(
     `SELECT id, name, is_active, created_at FROM departments ORDER BY name`
+  );
+
+  // Which playbook departments are still missing? (case-insensitive match)
+  const existingLower = new Set(rows.map((r) => r.name.toLowerCase()));
+  const missingPlaybook = PLAYBOOK_DEPARTMENTS.filter(
+    (n) => !existingLower.has(n.toLowerCase())
   );
 
   return (
@@ -44,6 +65,38 @@ export default async function DepartmentsAdminPage() {
           </button>
         </form>
       </div>
+
+      {/* Playbook seed banner — shown only while at least one of the
+          Wave 1 & 2 Playbook departments is missing. */}
+      {missingPlaybook.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 mb-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl shrink-0">
+              📚
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-amber-900">
+                {missingPlaybook.length} department{missingPlaybook.length === 1 ? "" : "s"} from the SOPs Wave 1 &amp; 2 Playbook are missing
+              </div>
+              <div className="text-xs text-amber-800 mt-0.5">
+                {missingPlaybook.join(" · ")}
+              </div>
+              <div className="text-[11px] text-amber-700/80 mt-1">
+                These are referenced by the playbook SOPs. Add them in one click so the SOPs can be assigned to the right owner.
+              </div>
+            </div>
+          </div>
+
+          <form action={seedPlaybookDepartmentsAction} className="shrink-0">
+            <button
+              type="submit"
+              className="inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm"
+            >
+              <span>⬆️</span> Add all {missingPlaybook.length} now
+            </button>
+          </form>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
