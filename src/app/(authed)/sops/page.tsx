@@ -3,6 +3,8 @@ import { requireUser, canCreateSops } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { listSops } from "@/features/sops/repository";
 import { SOP_STATUS_LABEL, SOP_STATUS_TONE, type SopStatus } from "@/features/sops/types";
+import { queryOne } from "@/lib/db";
+import { importRecruitmentSopAction } from "@/features/admin/seeds/actions";
 
 type Search = { search?: string; status?: SopStatus };
 
@@ -17,6 +19,17 @@ export default async function SopsPage({
     search: sp.search,
     status: sp.status,
   });
+
+  // Admin-only: surface the one-click Recruitment SOP importer right on
+  // this page (in addition to Admin Home), so it's findable where SOPs
+  // actually live. Hide entirely once the seed is in the system.
+  const isAdmin = user.role === "admin";
+  const seededSop = isAdmin
+    ? await queryOne<{ id: number }>(
+        `SELECT id FROM sops WHERE code = 'HRD-REC-01' LIMIT 1`
+      )
+    : null;
+  const showImportButton = isAdmin && !seededSop;
 
   return (
     <Workspace
@@ -55,14 +68,27 @@ export default async function SopsPage({
           </button>
         </form>
 
-        {canCreateSops(user.role) && (
-          <Link
-            href="/sops/new"
-            className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
-          >
-            + New SOP
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {showImportButton && (
+            <form action={importRecruitmentSopAction}>
+              <button
+                type="submit"
+                title="Import the Recruitment SOP Universal Template (xlsx) as a Draft"
+                className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-2 rounded-lg text-sm font-medium"
+              >
+                📥 Import Recruitment SOP
+              </button>
+            </form>
+          )}
+          {canCreateSops(user.role) && (
+            <Link
+              href="/sops/new"
+              className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
+            >
+              + New SOP
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Table */}
