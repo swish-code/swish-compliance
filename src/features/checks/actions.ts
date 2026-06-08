@@ -18,6 +18,7 @@ const CreateSchema = z.object({
   control_id: z.coerce.number().int().positive().optional().nullable(),
   owner_user_id: z.coerce.number().int().positive().optional().nullable(),
   frequency: z.enum(["daily", "weekly", "monthly", "quarterly", "annual", "on_demand"]),
+  checklist_template_id: z.coerce.number().int().positive().optional().nullable(),
 });
 
 const ResultSchema = z.object({
@@ -25,6 +26,7 @@ const ResultSchema = z.object({
   status: z.enum(["passing", "failing", "pending_review", "accepted_risk"]),
   notes: z.string().trim().min(1, "Notes are required when recording a result."),
   spawn_capa: z.string().optional(),
+  checklist_template_id: z.coerce.number().int().positive().optional().nullable(),
 });
 
 function nullEmpty<T extends Record<string, FormDataEntryValue>>(o: T) {
@@ -73,6 +75,7 @@ export async function recordResultAction(formData: FormData) {
     evidence_name: file?.name ?? null,
     evidence_mime: file?.mime ?? null,
     performed_by: user.id,
+    checklist_template_id: parsed.checklist_template_id ?? null,
   });
 
   await execute(

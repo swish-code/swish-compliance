@@ -5,6 +5,7 @@ import Workspace from "@/features/shell/Workspace";
 import { getCheck, listCheckResults } from "@/features/checks/repository";
 import { recordResultAction } from "@/features/checks/actions";
 import FilePicker from "@/features/sops/FilePicker";
+import { queryAll } from "@/lib/db";
 import {
   CHECK_STATUS_LABEL,
   CHECK_STATUS_TONE,
@@ -22,6 +23,14 @@ export default async function CheckDetailPage({
   const check = await getCheck(id);
   if (!check) notFound();
   const results = await listCheckResults(id, 50);
+
+  // Active checklists for the "Record a new result" dropdown.
+  const checklists = await queryAll<{ id: number; name: string; category: string | null }>(
+    `SELECT id, name, category
+     FROM checklist_templates
+     WHERE is_active
+     ORDER BY name`
+  );
 
   return (
     <Workspace
@@ -45,10 +54,20 @@ export default async function CheckDetailPage({
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-1">{check.name}</h2>
         {check.description && <p className="text-sm text-gray-600 mb-3">{check.description}</p>}
-        <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
+        <dl className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
           <Field label="Control">
             {check.control_id ? (
               <Link href={`/controls/${check.control_id}`} className="text-brand-700 hover:underline">{check.control_name}</Link>
+            ) : "—"}
+          </Field>
+          <Field label="Checklist">
+            {check.checklist_template_id ? (
+              <Link
+                href={`/checklists/templates/${check.checklist_template_id}`}
+                className="text-brand-700 hover:underline"
+              >
+                {check.checklist_template_name}
+              </Link>
             ) : "—"}
           </Field>
           <Field label="Owner">{check.owner_name ?? "—"}</Field>
@@ -69,6 +88,31 @@ export default async function CheckDetailPage({
                 <span className="text-sm font-medium">{CHECK_STATUS_LABEL[s]}</span>
               </label>
             ))}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Checklist used
+              {check.checklist_template_id && (
+                <span className="ml-1 text-[10px] text-gray-400 normal-case">
+                  (defaults to this test&rsquo;s checklist)
+                </span>
+              )}
+            </label>
+            <select
+              name="checklist_template_id"
+              defaultValue={
+                check.checklist_template_id ? String(check.checklist_template_id) : ""
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="">— No checklist —</option>
+              {checklists.map((cl) => (
+                <option key={cl.id} value={cl.id}>
+                  {cl.name}
+                  {cl.category ? ` · ${cl.category}` : ""}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">
@@ -113,13 +157,14 @@ export default async function CheckDetailPage({
               <th className="text-left px-5 py-3 font-medium">When</th>
               <th className="text-left px-5 py-3 font-medium">By</th>
               <th className="text-left px-5 py-3 font-medium">Status</th>
+              <th className="text-left px-5 py-3 font-medium">Checklist</th>
               <th className="text-left px-5 py-3 font-medium">Notes</th>
               <th className="text-left px-5 py-3 font-medium">Evidence</th>
             </tr>
           </thead>
           <tbody>
             {results.length === 0 && (
-              <tr><td colSpan={5} className="px-5 py-8 text-center text-gray-400">No results recorded yet.</td></tr>
+              <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400">No results recorded yet.</td></tr>
             )}
             {results.map((r) => (
               <tr key={r.id} className="border-t border-gray-100">
@@ -129,6 +174,18 @@ export default async function CheckDetailPage({
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${CHECK_STATUS_TONE[r.status]}`}>
                     {CHECK_STATUS_LABEL[r.status]}
                   </span>
+                </td>
+                <td className="px-5 py-3 text-xs">
+                  {r.checklist_template_id ? (
+                    <Link
+                      href={`/checklists/templates/${r.checklist_template_id}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {r.checklist_template_name}
+                    </Link>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </td>
                 <td className="px-5 py-3 text-gray-600 text-xs max-w-md truncate">{r.notes ?? "—"}</td>
                 <td className="px-5 py-3 text-xs">

@@ -26,6 +26,9 @@ export type Check = {
   last_status: CheckStatus | null;
   last_result_at: string | null;
   next_due_date: string | null;
+  /** Default checklist template this test is based on. Nullable. */
+  checklist_template_id: number | null;
+  checklist_template_name: string | null;
   created_at: string;
   updated_at: string;
   result_count: number;
@@ -41,6 +44,9 @@ export type CheckResult = {
   evidence_mime: string | null;
   performed_by: number | null;
   performed_by_name: string | null;
+  /** Checklist actually used when recording this specific result. */
+  checklist_template_id: number | null;
+  checklist_template_name: string | null;
   created_at: string;
 };
 

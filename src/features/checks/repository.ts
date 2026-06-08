@@ -7,26 +7,37 @@ const CHECK_SELECT = `
   ch.control_id, c.name AS control_name,
   ch.owner_user_id, u.display_name AS owner_name,
   ch.frequency, ch.is_active, ch.last_status, ch.last_result_at, ch.next_due_date,
+  ch.checklist_template_id, t.name AS checklist_template_name,
   ch.created_at, ch.updated_at,
   (SELECT COUNT(*)::int FROM check_results r WHERE r.check_id = ch.id) AS result_count
 FROM checks ch
-LEFT JOIN controls c ON c.id = ch.control_id
-LEFT JOIN users    u ON u.id = ch.owner_user_id
+LEFT JOIN controls            c ON c.id = ch.control_id
+LEFT JOIN users               u ON u.id = ch.owner_user_id
+LEFT JOIN checklist_templates t ON t.id = ch.checklist_template_id
 `;
 
-export async function listChecks(filters: { status?: CheckStatus } = {}): Promise<Check[]> {
+export async function listChecks(filters: {
+  status?: CheckStatus;
+  checklistTemplateId?: number;
+} = {}): Promise<Check[]> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
   if (filters.status) {
-    return queryAll<Check>(
-      `SELECT ${CHECK_SELECT} WHERE ch.last_status = $1
-       ORDER BY ch.next_due_date NULLS FIRST, ch.name`,
-      [filters.status]
-    );
+    params.push(filters.status);
+    conditions.push(`ch.last_status = $${params.length}`);
   }
+  if (filters.checklistTemplateId) {
+    params.push(filters.checklistTemplateId);
+    conditions.push(`ch.checklist_template_id = $${params.length}`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   return queryAll<Check>(
     `SELECT ${CHECK_SELECT}
+     ${where}
      ORDER BY
        CASE ch.last_status WHEN 'failing' THEN 0 WHEN 'pending_review' THEN 1 WHEN 'accepted_risk' THEN 2 WHEN 'passing' THEN 3 ELSE 4 END,
-       ch.next_due_date NULLS LAST, ch.name`
+       ch.next_due_date NULLS LAST, ch.name`,
+    params
   );
 }
 
@@ -38,9 +49,12 @@ export async function listCheckResults(checkId: number, limit = 25): Promise<Che
   return queryAll<CheckResult>(
     `SELECT r.id, r.check_id, r.status, r.notes,
             r.evidence_url, r.evidence_name, r.evidence_mime,
-            r.performed_by, u.display_name AS performed_by_name, r.created_at
+            r.performed_by, u.display_name AS performed_by_name,
+            r.checklist_template_id, t.name AS checklist_template_name,
+            r.created_at
      FROM check_results r
-     LEFT JOIN users u ON u.id = r.performed_by
+     LEFT JOIN users               u ON u.id = r.performed_by
+     LEFT JOIN checklist_templates t ON t.id = r.checklist_template_id
      WHERE r.check_id = $1
      ORDER BY r.created_at DESC
      LIMIT $2`,
@@ -55,10 +69,12 @@ export async function createCheck(input: {
   control_id?: number | null;
   owner_user_id?: number | null;
   frequency: CheckFrequency;
+  checklist_template_id?: number | null;
 }): Promise<number> {
   const row = await queryOne<{ id: number }>(
-    `INSERT INTO checks (code, name, description, control_id, owner_user_id, frequency)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    `INSERT INTO checks
+       (code, name, description, control_id, owner_user_id, frequency, checklist_template_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
     [
       input.code ?? null,
       input.name,
@@ -66,6 +82,7 @@ export async function createCheck(input: {
       input.control_id ?? null,
       input.owner_user_id ?? null,
       input.frequency,
+      input.checklist_template_id ?? null,
     ]
   );
   return row!.id;
@@ -90,11 +107,12 @@ export async function recordResult(input: {
   evidence_name?: string | null;
   evidence_mime?: string | null;
   performed_by: number;
+  checklist_template_id?: number | null;
 }): Promise<number> {
   const row = await queryOne<{ id: number }>(
     `INSERT INTO check_results
-       (check_id, status, notes, evidence_url, evidence_name, evidence_mime, performed_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+       (check_id, status, notes, evidence_url, evidence_name, evidence_mime, performed_by, checklist_template_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
     [
       input.check_id,
       input.status,
@@ -103,6 +121,7 @@ export async function recordResult(input: {
       input.evidence_name ?? null,
       input.evidence_mime ?? null,
       input.performed_by,
+      input.checklist_template_id ?? null,
     ]
   );
 

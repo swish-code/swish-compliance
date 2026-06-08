@@ -9,17 +9,31 @@ import { createCheckAction } from "@/features/checks/actions";
 export default async function TestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: CheckStatus }>;
+  searchParams: Promise<{ status?: CheckStatus; checklist?: string }>;
 }) {
   const user = await requireUser();
   const sp = await searchParams;
-  const checks = await listChecks({ status: sp.status });
+  const checklistFilter = sp.checklist ? Number(sp.checklist) : undefined;
+  const checks = await listChecks({
+    status: sp.status,
+    checklistTemplateId:
+      Number.isFinite(checklistFilter) && checklistFilter ? checklistFilter : undefined,
+  });
   const canEdit = canEditSops(user.role);
   const controls = canEdit
     ? await queryAll<{ id: number; name: string }>(
         `SELECT id, name FROM controls WHERE is_active ORDER BY name`
       )
     : [];
+
+  // Always load active checklist templates — they power both the create
+  // form's dropdown (for admins) and the filter dropdown (for everyone).
+  const checklists = await queryAll<{ id: number; name: string; category: string | null }>(
+    `SELECT id, name, category
+     FROM checklist_templates
+     WHERE is_active
+     ORDER BY name`
+  );
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -30,23 +44,69 @@ export default async function TestsPage({
       sessionLabel="Session"
       userLabel={user.displayName}
     >
-      {/* Filter chips */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {(["failing", "pending_review", "passing", "accepted_risk"] as CheckStatus[]).map((s) => (
-          <Link
-            key={s}
-            href={sp.status === s ? "/tests" : `/tests?status=${s}`}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
-              sp.status === s
-                ? CHECK_STATUS_TONE[s]
-                : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-            }`}
-          >
-            {CHECK_STATUS_LABEL[s]}
+      {/* Filter chips — status */}
+      <div className="flex gap-2 mb-3 flex-wrap">
+        {(["failing", "pending_review", "passing", "accepted_risk"] as CheckStatus[]).map((s) => {
+          // Preserve the checklist filter when toggling status
+          const params = new URLSearchParams();
+          if (sp.status !== s) params.set("status", s);
+          if (checklistFilter) params.set("checklist", String(checklistFilter));
+          const href = params.toString() ? `/tests?${params.toString()}` : "/tests";
+          return (
+            <Link
+              key={s}
+              href={href}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+                sp.status === s
+                  ? CHECK_STATUS_TONE[s]
+                  : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {CHECK_STATUS_LABEL[s]}
+            </Link>
+          );
+        })}
+        {(sp.status || checklistFilter) && (
+          <Link href="/tests" className="text-xs text-gray-500 self-center hover:text-gray-700">
+            Clear all
           </Link>
-        ))}
-        {sp.status && <Link href="/tests" className="text-xs text-gray-500 self-center hover:text-gray-700">Clear</Link>}
+        )}
       </div>
+
+      {/* Checklist filter — GET form so the choice is just a query param */}
+      <form method="GET" action="/tests" className="flex items-center gap-2 mb-4 flex-wrap">
+        {sp.status && <input type="hidden" name="status" value={sp.status} />}
+        <label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
+          Checklist
+        </label>
+        <select
+          name="checklist"
+          defaultValue={checklistFilter ? String(checklistFilter) : ""}
+          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+        >
+          <option value="">— All checklists —</option>
+          {checklists.map((cl) => (
+            <option key={cl.id} value={cl.id}>
+              {cl.name}
+              {cl.category ? ` · ${cl.category}` : ""}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="px-3 py-1.5 text-xs font-medium text-brand-700 border border-brand-200 bg-brand-50 hover:bg-brand-100 rounded-lg"
+        >
+          Apply
+        </button>
+        {checklistFilter && (
+          <Link
+            href={sp.status ? `/tests?status=${sp.status}` : "/tests"}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            Reset checklist
+          </Link>
+        )}
+      </form>
 
       {/* List */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
@@ -54,6 +114,7 @@ export default async function TestsPage({
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
               <th className="text-left px-5 py-3 font-medium">Name</th>
+              <th className="text-left px-5 py-3 font-medium">Checklist</th>
               <th className="text-left px-5 py-3 font-medium">Control</th>
               <th className="text-left px-5 py-3 font-medium">Frequency</th>
               <th className="text-left px-5 py-3 font-medium">Status</th>
@@ -64,7 +125,7 @@ export default async function TestsPage({
           <tbody>
             {checks.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-gray-400">
+                <td colSpan={7} className="px-5 py-12 text-center text-gray-400">
                   No checks yet. {canEdit && "Use the form below to create the first one."}
                 </td>
               </tr>
@@ -78,6 +139,18 @@ export default async function TestsPage({
                       {ch.name}
                     </Link>
                     {ch.code && <div className="text-[11px] font-mono text-gray-400">{ch.code}</div>}
+                  </td>
+                  <td className="px-5 py-3 text-gray-600 text-xs">
+                    {ch.checklist_template_id ? (
+                      <Link
+                        href={`/checklists/templates/${ch.checklist_template_id}`}
+                        className="text-brand-700 hover:underline"
+                      >
+                        {ch.checklist_template_name}
+                      </Link>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-5 py-3 text-gray-600 text-xs">{ch.control_name ?? "—"}</td>
                   <td className="px-5 py-3 text-gray-600 text-xs">{FREQUENCY_LABEL[ch.frequency]}</td>
@@ -114,20 +187,46 @@ export default async function TestsPage({
               <input name="name" required placeholder="Name * (e.g. Weekly fridge temperature log)" className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             <input name="description" placeholder="Description (optional)" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            <div className="grid grid-cols-3 gap-3">
-              <select name="control_id" className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                <option value="">— No control —</option>
-                {controls.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-              </select>
-              <select name="frequency" defaultValue="monthly" required className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="annual">Annual</option>
-                <option value="on_demand">On demand</option>
-              </select>
-              <button type="submit" className="bg-brand-700 hover:bg-brand-800 text-white rounded-lg text-sm font-medium">+ Create check</button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider text-gray-500 mb-1">Control</label>
+                <select name="control_id" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  <option value="">— No control —</option>
+                  {controls.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider text-gray-500 mb-1">Checklist</label>
+                <select
+                  name="checklist_template_id"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  defaultValue={checklistFilter ? String(checklistFilter) : ""}
+                >
+                  <option value="">— No checklist —</option>
+                  {checklists.map((cl) => (
+                    <option key={cl.id} value={cl.id}>
+                      {cl.name}
+                      {cl.category ? ` · ${cl.category}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider text-gray-500 mb-1">Frequency</label>
+                <select name="frequency" defaultValue="monthly" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="annual">Annual</option>
+                  <option value="on_demand">On demand</option>
+                </select>
+              </div>
+              <button type="submit" className="bg-brand-700 hover:bg-brand-800 text-white rounded-lg text-sm font-medium px-4 py-2">
+                + Create check
+              </button>
             </div>
           </form>
         </div>
