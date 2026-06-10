@@ -6,6 +6,7 @@ import { getSopById, listSopEvents } from "@/features/sops/repository";
 import {
   SOP_STATUS_LABEL,
   SOP_STATUS_TONE,
+  SOP_SECTIONS,
   isSopLocked,
   availableTransitions,
 } from "@/features/sops/types";
@@ -422,6 +423,44 @@ export default async function SopDetailPage({
               );
             })}
           </ol>
+        </div>
+      )}
+
+      {/* ── Structured SOP sections (Universal Template) ─────────── */}
+      {SOP_SECTIONS.some((s) => {
+        const v = sop[s.key as keyof typeof sop];
+        return typeof v === "string" && v.trim().length > 0;
+      }) && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-brand-50 to-emerald-50/50">
+            <h3 className="text-sm font-semibold text-brand-800 uppercase tracking-wider">
+              📝 SOP Content
+            </h3>
+            <p className="text-[11px] text-brand-700/80 mt-0.5">
+              Structured sections from the Universal SOP Template.
+            </p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {SOP_SECTIONS.map((sec) => {
+              const value = sop[sec.key as keyof typeof sop];
+              if (typeof value !== "string" || value.trim().length === 0) return null;
+              return (
+                <div key={sec.key} className="px-6 py-5">
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <span className="w-8 h-8 rounded-lg bg-brand-700 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                      {sec.num}
+                    </span>
+                    <h4 className="text-sm font-bold text-gray-800 tracking-wide uppercase">
+                      {sec.label}
+                    </h4>
+                  </div>
+                  <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans bg-gray-50 rounded-lg p-4 border border-gray-100">
+                    {value}
+                  </pre>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

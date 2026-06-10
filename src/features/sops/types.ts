@@ -47,7 +47,37 @@ export type Sop = {
   review_date: string | null;
   created_at: string;
   updated_at: string;
+  // ─── 10 structured sections from the Universal SOP Template ──────────
+  purpose: string | null;
+  scope: string | null;
+  process_flow: string | null;
+  roles_responsibilities: string | null;
+  inputs_outputs: string | null;
+  tools_forms: string | null;
+  kpis: string | null;
+  ownership_review: string | null;
+  appendices: string | null;
+  signatures_approval: string | null;
 };
+
+/**
+ * The 10 standard SOP sections — used by both the create form and the
+ * detail page so labels, numbering, and DB column names stay in sync.
+ */
+export const SOP_SECTIONS = [
+  { key: "purpose",                num: "1",  label: "PURPOSE",                          hint: "Why this SOP exists. What it is intended to achieve." },
+  { key: "scope",                  num: "2",  label: "SCOPE",                            hint: "Who and what this SOP applies to. Inclusions, exclusions, departments involved." },
+  { key: "process_flow",           num: "3",  label: "PROCESS FLOW",                     hint: "Step-by-step process with responsibilities and SLAs." },
+  { key: "roles_responsibilities", num: "4",  label: "ROLES & RESPONSIBILITIES",         hint: "RACI matrix - Responsible / Accountable / Consulted / Informed." },
+  { key: "inputs_outputs",         num: "5",  label: "INPUTS & OUTPUTS",                 hint: "What's needed to start, and what's produced at the end." },
+  { key: "tools_forms",            num: "6",  label: "TOOLS & FORMS",                    hint: "Systems, templates, forms and references used." },
+  { key: "kpis",                   num: "7",  label: "KEY PERFORMANCE INDICATORS (KPIs)", hint: "2-3 measurable targets with thresholds." },
+  { key: "ownership_review",       num: "9",  label: "OWNERSHIP & REVIEW",               hint: "Process Owner, review cycle, and version control log." },
+  { key: "appendices",             num: "10", label: "APPENDICES - READY TO USE FORMS",  hint: "Linked forms, templates, sample data and references." },
+  { key: "signatures_approval",    num: "11", label: "SIGNATURES & APPROVAL",            hint: "Approval chain: Preparer, Heads, IBE, Compliance, Deputy CEO, CEO." },
+] as const;
+
+export type SopSectionKey = (typeof SOP_SECTIONS)[number]["key"];
 
 export const SOP_STATUS_LABEL: Record<SopStatus, string> = {
   draft: "Draft",

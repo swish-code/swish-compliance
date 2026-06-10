@@ -118,6 +118,15 @@ function planSopNotification(
   }
 }
 
+/** Trim, drop empty strings to null, and cap at 30k characters so a single
+ *  cell from an Excel paste can't blow up the form. */
+const sectionField = z
+  .string()
+  .trim()
+  .max(30000, "Section content is too long")
+  .optional()
+  .nullable();
+
 const CreateSchema = z.object({
   code: z.string().trim().optional().nullable(),
   title: z.string().trim().min(1, "Title is required"),
@@ -128,6 +137,17 @@ const CreateSchema = z.object({
   department_id: z.coerce.number().int().positive().optional().nullable(),
   effective_date: z.string().optional().nullable(),
   review_date: z.string().optional().nullable(),
+  // 10 structured sections
+  purpose:                sectionField,
+  scope:                  sectionField,
+  process_flow:           sectionField,
+  roles_responsibilities: sectionField,
+  inputs_outputs:         sectionField,
+  tools_forms:            sectionField,
+  kpis:                   sectionField,
+  ownership_review:       sectionField,
+  appendices:             sectionField,
+  signatures_approval:    sectionField,
 });
 
 // Thin wrapper around the shared @/lib/attachments helper so the existing
@@ -155,15 +175,29 @@ export async function createSopAction(formData: FormData) {
   const raw = Object.fromEntries(formData.entries());
   delete (raw as Record<string, unknown>).attachment_file;
 
+  // Normalize: turn empty strings into null so the DB stores NULL, not "".
+  const blankToNull = (v: FormDataEntryValue | undefined) =>
+    v === "" || v === undefined ? null : v;
+
   const parsed = CreateSchema.parse({
     ...raw,
-    file_url: raw.file_url === "" ? null : raw.file_url,
-    code: raw.code === "" ? null : raw.code,
-    description: raw.description === "" ? null : raw.description,
-    brand_id: raw.brand_id === "" ? null : raw.brand_id,
-    department_id: raw.department_id === "" ? null : raw.department_id,
-    effective_date: raw.effective_date === "" ? null : raw.effective_date,
-    review_date: raw.review_date === "" ? null : raw.review_date,
+    file_url: blankToNull(raw.file_url),
+    code: blankToNull(raw.code),
+    description: blankToNull(raw.description),
+    brand_id: blankToNull(raw.brand_id),
+    department_id: blankToNull(raw.department_id),
+    effective_date: blankToNull(raw.effective_date),
+    review_date: blankToNull(raw.review_date),
+    purpose:                blankToNull(raw.purpose),
+    scope:                  blankToNull(raw.scope),
+    process_flow:           blankToNull(raw.process_flow),
+    roles_responsibilities: blankToNull(raw.roles_responsibilities),
+    inputs_outputs:         blankToNull(raw.inputs_outputs),
+    tools_forms:            blankToNull(raw.tools_forms),
+    kpis:                   blankToNull(raw.kpis),
+    ownership_review:       blankToNull(raw.ownership_review),
+    appendices:             blankToNull(raw.appendices),
+    signatures_approval:    blankToNull(raw.signatures_approval),
   });
 
   const id = await createSop({

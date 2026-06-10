@@ -10,7 +10,10 @@ const SOP_SELECT = `
   s.owner_id, u_o.display_name AS owner_name,
   s.created_by, u_c.display_name AS created_by_name,
   s.approved_by, u_a.display_name AS approved_by_name,
-  s.approved_at, s.effective_date, s.review_date, s.created_at, s.updated_at
+  s.approved_at, s.effective_date, s.review_date, s.created_at, s.updated_at,
+  s.purpose, s.scope, s.process_flow, s.roles_responsibilities,
+  s.inputs_outputs, s.tools_forms, s.kpis,
+  s.ownership_review, s.appendices, s.signatures_approval
 FROM sops s
 LEFT JOIN brands       b   ON b.id   = s.brand_id
 LEFT JOIN departments  d   ON d.id   = s.department_id
@@ -89,6 +92,17 @@ export type CreateSopInput = {
   effective_date?: string | null;
   review_date?: string | null;
   created_by: number;
+  // 10 structured sections - all optional
+  purpose?: string | null;
+  scope?: string | null;
+  process_flow?: string | null;
+  roles_responsibilities?: string | null;
+  inputs_outputs?: string | null;
+  tools_forms?: string | null;
+  kpis?: string | null;
+  ownership_review?: string | null;
+  appendices?: string | null;
+  signatures_approval?: string | null;
 };
 
 export async function createSop(input: CreateSopInput): Promise<number> {
@@ -96,8 +110,12 @@ export async function createSop(input: CreateSopInput): Promise<number> {
     `INSERT INTO sops
       (code, title, description, version, status, file_url,
        attachment_data_url, attachment_name, attachment_mime,
-       brand_id, department_id, owner_id, created_by, effective_date, review_date)
-     VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       brand_id, department_id, owner_id, created_by, effective_date, review_date,
+       purpose, scope, process_flow, roles_responsibilities,
+       inputs_outputs, tools_forms, kpis,
+       ownership_review, appendices, signatures_approval)
+     VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+             $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
      RETURNING id`,
     [
       input.code ?? null,
@@ -114,6 +132,16 @@ export async function createSop(input: CreateSopInput): Promise<number> {
       input.created_by,
       input.effective_date ?? null,
       input.review_date ?? null,
+      input.purpose ?? null,
+      input.scope ?? null,
+      input.process_flow ?? null,
+      input.roles_responsibilities ?? null,
+      input.inputs_outputs ?? null,
+      input.tools_forms ?? null,
+      input.kpis ?? null,
+      input.ownership_review ?? null,
+      input.appendices ?? null,
+      input.signatures_approval ?? null,
     ]
   );
   return row!.id;
