@@ -44,9 +44,36 @@ export const viewport: Viewport = {
   ],
 };
 
+/**
+ * Inline script that runs BEFORE React hydrates. Reads the user's
+ * saved theme (or falls back to OS preference) and applies the `dark`
+ * class to <html> immediately, so the page doesn't flash light-then-
+ * dark on every navigation.
+ *
+ * Kept short and dependency-free so it's safe to inline.
+ */
+const noFlashThemeScript = `
+(function() {
+  try {
+    var saved = localStorage.getItem('swish:theme');
+    var isDark =
+      saved === 'dark' ||
+      (saved !== 'light' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (isDark) document.documentElement.classList.add('dark');
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: noFlashThemeScript }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

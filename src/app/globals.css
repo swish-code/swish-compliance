@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/**
+ * Enable class-based dark mode (Tailwind v4). When the <html> element has
+ * the `dark` class, `dark:` variants take effect. ThemeToggle handles the
+ * class; the inline <script> in layout.tsx applies it before paint so we
+ * don't get a flash of the wrong theme.
+ */
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-brand-50:  #f0f9f2;
   --color-brand-100: #d7eedb;
@@ -16,6 +24,8 @@ html, body {
   -webkit-font-smoothing: antialiased;
   /* Stop rogue elements from triggering horizontal scroll on phones */
   overflow-x: hidden;
+  /* Smooth theme switch — only animate colors, not layout */
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
 body {
@@ -66,6 +76,7 @@ main {
 @media (prefers-reduced-motion: reduce) {
   main { animation: none; }
   .skeleton-pulse { animation: none; opacity: 0.7; }
+  html, body { transition: none; }
 }
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -81,4 +92,181 @@ main {
     -webkit-overflow-scrolling: touch;
     max-width: 100%;
   }
+}
+
+/* ================================================================== */
+/*  DARK MODE                                                          */
+/*                                                                     */
+/*  We use a CSS-only override layer instead of editing every page.    */
+/*  Rationale: the app already has hundreds of `bg-white`,             */
+/*  `text-gray-900`, `border-gray-200` etc. — translating each one     */
+/*  to a `dark:` variant would touch every file. Instead we redefine   */
+/*  what those utility classes RESOLVE to when `.dark` is present.    */
+/*                                                                     */
+/*  Color philosophy: dark green-tinted neutrals so the brand identity */
+/*  stays visible (the sidebar is already this gradient, we just       */
+/*  extend it to the whole canvas).                                    */
+/* ================================================================== */
+
+.dark {
+  /* Base canvas */
+  --c-bg-page:      #0d1612;
+  --c-bg-card:      #18211d;
+  --c-bg-card-2:    #1f2a25;   /* slightly elevated cards / headers */
+  --c-bg-input:     #11181500;
+  --c-bg-hover:     #232f29;
+  --c-bg-active:    #2a3933;
+
+  /* Text */
+  --c-text-1:       #e8ebe9;    /* primary body text */
+  --c-text-2:       #c7cdc9;    /* secondary */
+  --c-text-3:       #98a09c;    /* labels */
+  --c-text-4:       #6a746f;    /* muted */
+
+  /* Lines */
+  --c-border:       #2a3530;
+  --c-border-soft:  #1f2a25;
+}
+
+html.dark,
+html.dark body {
+  background: var(--c-bg-page);
+  color: var(--c-text-1);
+}
+
+/* ── Page surfaces ────────────────────────────────────────────────── */
+html.dark .bg-white {
+  background-color: var(--c-bg-card);
+}
+html.dark .bg-gray-50 {
+  background-color: var(--c-bg-card-2);
+}
+html.dark .bg-gray-100 {
+  background-color: var(--c-bg-active);
+}
+html.dark .bg-slate-50 {
+  background-color: var(--c-bg-card-2);
+}
+
+/* Subtle tinted backgrounds — flatten to a single elevated tone */
+html.dark .bg-emerald-50\/30,
+html.dark .bg-emerald-50\/20,
+html.dark .bg-amber-50\/30,
+html.dark .bg-amber-50\/20,
+html.dark .bg-red-50\/30,
+html.dark .bg-red-50\/20,
+html.dark .bg-brand-50\/30,
+html.dark .bg-brand-50\/20 {
+  background-color: var(--c-bg-card-2);
+}
+
+/* Hover states */
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-gray-100:hover {
+  background-color: var(--c-bg-hover);
+}
+
+/* ── Text colors ──────────────────────────────────────────────────── */
+html.dark .text-gray-900 { color: var(--c-text-1); }
+html.dark .text-gray-800 { color: var(--c-text-1); }
+html.dark .text-gray-700 { color: var(--c-text-2); }
+html.dark .text-gray-600 { color: var(--c-text-2); }
+html.dark .text-gray-500 { color: var(--c-text-3); }
+html.dark .text-gray-400 { color: var(--c-text-4); }
+html.dark .text-gray-300 { color: var(--c-text-4); }
+
+html.dark .text-slate-700 { color: var(--c-text-2); }
+html.dark .text-slate-600 { color: var(--c-text-3); }
+html.dark .text-slate-500 { color: var(--c-text-3); }
+
+/* ── Borders ──────────────────────────────────────────────────────── */
+html.dark .border-gray-200,
+html.dark .border-gray-300 { border-color: var(--c-border); }
+html.dark .border-gray-100 { border-color: var(--c-border-soft); }
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--c-border-soft); }
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: var(--c-border); }
+
+/* ── Form controls ────────────────────────────────────────────────── */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]),
+html.dark select,
+html.dark textarea {
+  background-color: var(--c-bg-card-2);
+  color: var(--c-text-1);
+  border-color: var(--c-border);
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: var(--c-text-4);
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  outline-color: var(--color-brand-500);
+}
+
+/* ── Tinted "pill" backgrounds — keep the hue but dim it ──────────── */
+html.dark .bg-emerald-50  { background-color: rgba(16, 185, 129, 0.12); }
+html.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.18); }
+html.dark .bg-amber-50    { background-color: rgba(245, 158, 11, 0.12); }
+html.dark .bg-amber-100   { background-color: rgba(245, 158, 11, 0.20); }
+html.dark .bg-red-50      { background-color: rgba(239, 68, 68, 0.14); }
+html.dark .bg-red-100     { background-color: rgba(239, 68, 68, 0.22); }
+html.dark .bg-indigo-50   { background-color: rgba(99, 102, 241, 0.14); }
+html.dark .bg-indigo-100  { background-color: rgba(99, 102, 241, 0.22); }
+html.dark .bg-purple-50   { background-color: rgba(168, 85, 247, 0.14); }
+html.dark .bg-purple-100  { background-color: rgba(168, 85, 247, 0.22); }
+html.dark .bg-orange-50   { background-color: rgba(249, 115, 22, 0.14); }
+html.dark .bg-orange-100  { background-color: rgba(249, 115, 22, 0.22); }
+html.dark .bg-brand-50    { background-color: rgba(47, 122, 74, 0.20); }
+html.dark .bg-brand-100   { background-color: rgba(47, 122, 74, 0.32); }
+
+/* Brighten colored text on tinted pills for legibility */
+html.dark .text-emerald-700 { color: #6ee7b7; }
+html.dark .text-emerald-800 { color: #6ee7b7; }
+html.dark .text-amber-700   { color: #fcd34d; }
+html.dark .text-amber-800   { color: #fcd34d; }
+html.dark .text-amber-900   { color: #fde68a; }
+html.dark .text-red-700     { color: #fca5a5; }
+html.dark .text-red-800     { color: #fca5a5; }
+html.dark .text-red-900     { color: #fecaca; }
+html.dark .text-indigo-700  { color: #a5b4fc; }
+html.dark .text-indigo-800  { color: #a5b4fc; }
+html.dark .text-purple-700  { color: #d8b4fe; }
+html.dark .text-orange-700  { color: #fdba74; }
+html.dark .text-brand-700   { color: #a7d4b4; }
+html.dark .text-brand-800   { color: #a7d4b4; }
+
+/* Colored borders → match the tinted-pill convention */
+html.dark .border-emerald-200 { border-color: rgba(16, 185, 129, 0.30); }
+html.dark .border-amber-200   { border-color: rgba(245, 158, 11, 0.30); }
+html.dark .border-red-200     { border-color: rgba(239, 68, 68, 0.30); }
+html.dark .border-indigo-200  { border-color: rgba(99, 102, 241, 0.30); }
+html.dark .border-purple-200  { border-color: rgba(168, 85, 247, 0.30); }
+html.dark .border-brand-200   { border-color: rgba(47, 122, 74, 0.40); }
+
+/* ── Code / monospace pills used on lists ────────────────────────── */
+html.dark .font-mono {
+  color: var(--c-text-3);
+}
+
+/* ── Shadows — invisible on dark; replace with subtle border glow ── */
+html.dark .shadow-sm,
+html.dark .shadow,
+html.dark .shadow-md {
+  box-shadow:
+    0 1px 2px 0 rgba(0, 0, 0, 0.30),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+/* ── Scrollbar polish in dark mode ────────────────────────────────── */
+html.dark *::-webkit-scrollbar { width: 10px; height: 10px; }
+html.dark *::-webkit-scrollbar-track { background: transparent; }
+html.dark *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
+html.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import ThemeToggle from "./ThemeToggle";
 
 /* ─── Icon library (Lucide-style, inline) ──────────────────────────── */
 
@@ -486,8 +487,8 @@ export default function Sidebar({
             </span>
           </span>
         </Link>
-        {/* Reserve symmetric space on the right so the brand stays centered */}
-        <div className="w-9" aria-hidden="true" />
+        {/* Compact theme toggle on the right so it's always reachable on mobile */}
+        <ThemeToggle compact />
       </div>
 
       {/* ─── Mobile backdrop ────────────────────────────────────────── */}
@@ -593,6 +594,14 @@ export default function Sidebar({
               {roleLabel(role)}
             </div>
           </div>
+        </div>
+
+        {/* Theme toggle — segmented Light / System / Dark */}
+        <div className="mb-2">
+          <div className="text-[9px] uppercase tracking-[0.22em] text-gray-600 mb-1.5 px-1">
+            Appearance
+          </div>
+          <ThemeToggle />
         </div>
 
         <button
