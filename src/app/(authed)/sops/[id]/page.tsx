@@ -13,6 +13,12 @@ import {
   updateSopAttachmentAction,
   removeSopAttachmentAction,
 } from "@/features/sops/actions";
+import { acknowledgeSopAction } from "@/features/sops/acknowledgments/actions";
+import {
+  hasUserAcknowledged,
+  getAckStats,
+  listAcknowledgments,
+} from "@/features/sops/acknowledgments/repository";
 import FilePicker from "@/features/sops/FilePicker";
 import AttachmentDisplay from "@/features/sops/AttachmentDisplay";
 import ApprovalActions from "@/features/sops/ApprovalActions";
@@ -41,6 +47,15 @@ export default async function SopDetailPage({
   const locked = isSopLocked(sop.status);
   const transitions = availableTransitions(user.role, sop.status);
   const events = await listSopEvents(id);
+
+  // Acknowledgments — only relevant once the SOP is approved.
+  const isApproved = sop.status === "approved";
+  const userAck = isApproved ? await hasUserAcknowledged(id, user.id) : false;
+  const ackStats = isApproved
+    ? await getAckStats(id)
+    : { total_eligible: 0, acknowledged_count: 0, percent: 0 };
+  const ackList =
+    isApproved && user.role === "admin" ? await listAcknowledgments(id, 50) : [];
 
   // Editing the attachment is allowed for:
   //  - admin always (until locked)
@@ -183,6 +198,126 @@ export default async function SopDetailPage({
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 mb-4 text-sm text-emerald-800">
           🔒 This SOP has been given final approval by the CEO and is now locked.
           No further modifications are allowed by any user.
+        </div>
+      )}
+
+      {/* ─── Acknowledgment block (only on approved SOPs) ─── */}
+      {isApproved && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+          {/* Top strip — user-specific call-to-action */}
+          {userAck ? (
+            <div className="bg-gradient-to-r from-emerald-50 to-emerald-100/70 border-b border-emerald-200 px-6 py-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xl shrink-0">
+                ✓
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-emerald-900">
+                  You&rsquo;ve confirmed you read &amp; understood this SOP
+                </div>
+                <div className="text-xs text-emerald-700 mt-0.5">
+                  Recorded under your account ({user.displayName}). Your role and timestamp are stored in the audit log.
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gradient-to-r from-amber-50 to-amber-100/70 border-b border-amber-200 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center text-xl shrink-0">
+                  📖
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-amber-900">
+                    Please read this SOP and confirm
+                  </div>
+                  <div className="text-xs text-amber-800 mt-0.5">
+                    Open the attachment, read it through, then click below. Your acknowledgment is logged with your name, role, and timestamp.
+                  </div>
+                </div>
+              </div>
+              <form action={acknowledgeSopAction}>
+                <input type="hidden" name="sop_id" value={sop.id} />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm"
+                >
+                  ✓ I&rsquo;ve read &amp; understood
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Team progress bar */}
+          <div className="px-6 py-5">
+            <div className="flex items-end justify-between mb-2">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold">
+                  Team acknowledgment
+                </div>
+                <div className="text-sm font-semibold text-gray-800 mt-0.5">
+                  {ackStats.acknowledged_count} of {ackStats.total_eligible} acknowledged
+                  {ackStats.total_eligible > 0 && (
+                    <span className="text-gray-400 font-normal ml-2">
+                      ({ackStats.percent}%)
+                    </span>
+                  )}
+                </div>
+              </div>
+              {ackStats.total_eligible > 0 && (
+                <div
+                  className={`text-2xl font-bold tabular-nums ${
+                    ackStats.percent >= 80
+                      ? "text-emerald-600"
+                      : ackStats.percent >= 50
+                        ? "text-amber-600"
+                        : "text-red-600"
+                  }`}
+                >
+                  {ackStats.percent}%
+                </div>
+              )}
+            </div>
+            <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all bg-gradient-to-r ${
+                  ackStats.percent >= 80
+                    ? "from-emerald-400 to-emerald-600"
+                    : ackStats.percent >= 50
+                      ? "from-amber-400 to-amber-600"
+                      : "from-red-400 to-red-600"
+                }`}
+                style={{ width: `${ackStats.percent}%` }}
+              />
+            </div>
+            <div className="text-[11px] text-gray-500 mt-2">
+              {sop.department_name
+                ? `Eligible audience: active members of ${sop.department_name} + administrators.`
+                : `Eligible audience: all active users (this SOP has no department assigned).`}
+            </div>
+
+            {/* Admin-only list of who acknowledged */}
+            {user.role === "admin" && ackList.length > 0 && (
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-2">
+                  Who has acknowledged ({ackList.length})
+                </div>
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-1.5 text-xs">
+                  {ackList.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-gray-50"
+                    >
+                      <span className="font-medium text-gray-800 truncate">
+                        {a.user_name}
+                      </span>
+                      <span className="text-gray-500 shrink-0">
+                        {new Date(a.acknowledged_at).toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -346,5 +481,6 @@ function friendlyAction(action: string): { label: string; tone: string } {
   if (action === "sop:archived")                 return { label: "Archived", tone: "bg-gray-100 text-gray-700" };
   if (action === "sop:attachment_updated")       return { label: "Attachment updated", tone: "bg-indigo-50 text-indigo-700" };
   if (action === "sop:attachment_removed")       return { label: "Attachment removed", tone: "bg-gray-100 text-gray-600" };
+  if (action === "sop:acknowledged")             return { label: "Acknowledged ✓", tone: "bg-emerald-50 text-emerald-700" };
   return { label: action, tone: "bg-gray-100 text-gray-700" };
 }

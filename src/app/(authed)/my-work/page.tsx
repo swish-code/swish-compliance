@@ -2,134 +2,514 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { queryOne, queryAll } from "@/lib/db";
+import { listSopsAwaitingAck } from "@/features/sops/acknowledgments/repository";
 
-type Row = {
-  pending_sops: number;
-  my_capas: number;
-  overdue_capas: number;
+/* ────────────────────────────────────────────────────────────────── */
+/*  Types                                                             */
+/* ────────────────────────────────────────────────────────────────── */
+
+type CountRow = {
+  pending_sops_for_me: number;
+  my_capas_open: number;
+  my_capas_overdue: number;
   audits_in_progress: number;
+  audits_submitted: number;
+  sops_owned_draft: number;
   failed_critical_today: number;
 };
 
 type CapaItem = {
   id: number;
-  code: string;
+  code: string | null;
   title: string;
   status: string;
   due_date: string | null;
   severity: string;
 };
 
+type AuditItem = {
+  id: number;
+  template_name: string;
+  brand_name: string | null;
+  location: string | null;
+  status: string;
+  audit_date: string;
+};
+
+type SopAckPending = {
+  id: number;
+  code: string | null;
+  title: string;
+  approved_at: string | null;
+};
+
+type SopOwned = {
+  id: number;
+  code: string | null;
+  title: string;
+  status: string;
+};
+
+/* ────────────────────────────────────────────────────────────────── */
+/*  Page                                                              */
+/* ────────────────────────────────────────────────────────────────── */
+
 export default async function MyWorkPage() {
   const user = await requireUser();
 
-  // The "SOPs awaiting MY review" tile depends on the user's role.
-  const pendingStatusForRole: Record<string, string> = {
-    compliance:           "pending_compliance",
-    business_excellence:  "pending_business_excellence",
-    ceo:                  "pending_ceo",
-    department_manager:   "returned_to_dm",
-  };
-  const pendingStatus = pendingStatusForRole[user.role] ?? "pending_compliance";
+  // The user's department lives in DB, not the session, so we read it once.
+  const me = await queryOne<{ department_id: number | null; brand_id: number | null }>(
+    `SELECT department_id, brand_id FROM users WHERE id = $1`,
+    [user.id]
+  );
+  const myDeptId = me?.department_id ?? null;
 
-  const stats = await queryOne<Row>(
+  // SOP status the user can act on right now (based on their role).
+  const pendingStatusForRole: Record<string, string> = {
+    compliance: "pending_compliance",
+    business_excellence: "pending_business_excellence",
+    ceo: "pending_ceo",
+    department_manager: "returned_to_dm",
+  };
+  const pendingStatus = pendingStatusForRole[user.role] ?? null;
+
+  /* ── Single aggregated counts query ─────────────────────────── */
+  const counts = await queryOne<CountRow>(
     `SELECT
-       (SELECT COUNT(*)::int FROM sops WHERE status = $2)                                       AS pending_sops,
+       (SELECT COUNT(*)::int FROM sops
+        WHERE status = COALESCE($2, ''))                                                   AS pending_sops_for_me,
        (SELECT COUNT(*)::int FROM corrective_actions
-        WHERE assigned_to = $1 AND status IN ('open','in_progress'))                            AS my_capas,
+        WHERE assigned_to = $1 AND status IN ('open','in_progress'))                       AS my_capas_open,
        (SELECT COUNT(*)::int FROM corrective_actions
         WHERE assigned_to = $1 AND due_date < CURRENT_DATE
-          AND status IN ('open','in_progress','submitted'))                                     AS overdue_capas,
-       (SELECT COUNT(*)::int FROM audits WHERE auditor_id = $1 AND status = 'in_progress')      AS audits_in_progress,
+          AND status IN ('open','in_progress','submitted'))                                AS my_capas_overdue,
        (SELECT COUNT(*)::int FROM audits
-        WHERE submitted_at::date = CURRENT_DATE AND critical_failed > 0)                        AS failed_critical_today`,
+        WHERE auditor_id = $1 AND status = 'in_progress')                                  AS audits_in_progress,
+       (SELECT COUNT(*)::int FROM audits
+        WHERE auditor_id = $1 AND status = 'submitted')                                    AS audits_submitted,
+       (SELECT COUNT(*)::int FROM sops
+        WHERE (created_by = $1 OR owner_id = $1)
+          AND status IN ('draft','returned_to_dm','returned_to_compliance','returned_to_be')) AS sops_owned_draft,
+       (SELECT COUNT(*)::int FROM audits
+        WHERE submitted_at::date = CURRENT_DATE AND critical_failed > 0)                   AS failed_critical_today`,
     [user.id, pendingStatus]
   );
 
-  const myCapas = await queryAll<CapaItem>(
-    `SELECT id, code, title, status, due_date, severity
-     FROM corrective_actions
-     WHERE assigned_to = $1 AND status IN ('open','in_progress','submitted')
-     ORDER BY due_date NULLS LAST, id DESC LIMIT 8`,
-    [user.id]
-  );
+  /* ── Lists ──────────────────────────────────────────────────── */
+  const [myCapas, myAudits, sopsAwaitingAck, mySopsInWip] = await Promise.all([
+    queryAll<CapaItem>(
+      `SELECT id, code, title, status, due_date, severity
+       FROM corrective_actions
+       WHERE assigned_to = $1 AND status IN ('open','in_progress','submitted')
+       ORDER BY due_date NULLS LAST, id DESC LIMIT 6`,
+      [user.id]
+    ),
+    queryAll<AuditItem>(
+      `SELECT a.id, t.name AS template_name, b.name AS brand_name,
+              a.location, a.status, a.audit_date
+       FROM audits a
+       JOIN checklist_templates t ON t.id = a.template_id
+       LEFT JOIN brands b ON b.id = a.brand_id
+       WHERE a.auditor_id = $1 AND a.status IN ('in_progress','submitted')
+       ORDER BY a.audit_date DESC LIMIT 5`,
+      [user.id]
+    ),
+    listSopsAwaitingAck(user.id, user.role, myDeptId, 6),
+    queryAll<SopOwned>(
+      `SELECT id, code, title, status FROM sops
+       WHERE (created_by = $1 OR owner_id = $1)
+         AND status IN ('draft','returned_to_dm','returned_to_compliance','returned_to_be')
+       ORDER BY updated_at DESC LIMIT 5`,
+      [user.id]
+    ),
+  ]);
+
+  /* ── Greeting based on time of day ──────────────────────────── */
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  // Total open items - drives the "you have N things to do" headline
+  const totalOpen =
+    (counts?.pending_sops_for_me ?? 0) +
+    (counts?.my_capas_open ?? 0) +
+    (counts?.audits_in_progress ?? 0) +
+    sopsAwaitingAck.length +
+    mySopsInWip.length;
 
   return (
     <Workspace
       section="Workspace"
-      subtitle="Personal work queue for approvals, reviews, rollout work, and remediation"
+      subtitle="Your personal command centre"
       sessionLabel="Session"
       userLabel={user.displayName}
     >
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      {/* ── HERO ───────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-900/20 bg-gradient-to-br from-[#0e1f18] via-[#0b2419] to-[#0a2f1f] text-white p-6 md:p-8 mb-6 shadow-xl">
+        <div className="absolute -top-24 -right-16 w-72 h-72 rounded-full bg-emerald-500/20 blur-3xl pointer-events-none" />
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div className="flex-1 min-w-[260px]">
+            <div className="text-[10px] uppercase tracking-[0.3em] font-semibold text-emerald-300/80 mb-2">
+              {greeting}
+            </div>
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight bg-gradient-to-b from-white to-emerald-200/80 bg-clip-text text-transparent">
+              {user.displayName.split(" ")[0]}
+            </h2>
+            <p className="text-sm text-emerald-100/70 mt-2 max-w-xl">
+              {totalOpen === 0
+                ? "Your inbox is clear. Nothing requires your action right now — nice work."
+                : `You have ${totalOpen} open item${totalOpen === 1 ? "" : "s"} that need attention today.`}
+            </p>
+          </div>
+
+          {/* Quick stat chips */}
+          <div className="flex flex-wrap gap-2">
+            {(counts?.pending_sops_for_me ?? 0) > 0 && (
+              <HeroChip
+                href={`/sops?status=${pendingStatus}`}
+                emoji="📝"
+                label="SOPs to review"
+                value={counts?.pending_sops_for_me ?? 0}
+              />
+            )}
+            {(counts?.my_capas_overdue ?? 0) > 0 && (
+              <HeroChip
+                href="/capa"
+                emoji="🚨"
+                label="Overdue CAPAs"
+                value={counts?.my_capas_overdue ?? 0}
+                tone="danger"
+              />
+            )}
+            {(counts?.audits_in_progress ?? 0) > 0 && (
+              <HeroChip
+                href="/audits?status=in_progress"
+                emoji="🔍"
+                label="Audits in progress"
+                value={counts?.audits_in_progress ?? 0}
+              />
+            )}
+            {sopsAwaitingAck.length > 0 && (
+              <HeroChip
+                href={`/sops/${sopsAwaitingAck[0].id}`}
+                emoji="📖"
+                label="SOPs to acknowledge"
+                value={sopsAwaitingAck.length}
+                tone="warn"
+              />
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ── KPI strip ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        {pendingStatus && (
+          <StatCard
+            icon="📝"
+            label={
+              user.role === "department_manager"
+                ? "SOPs returned to me"
+                : user.role === "ceo"
+                  ? "SOPs awaiting CEO"
+                  : "SOPs awaiting review"
+            }
+            value={counts?.pending_sops_for_me ?? 0}
+            href={`/sops?status=${pendingStatus}`}
+            tone="amber"
+          />
+        )}
         <StatCard
-          label={
-            user.role === "department_manager"
-              ? "SOPs returned to me"
-              : user.role === "ceo"
-                ? "SOPs awaiting my final approval"
-                : "SOPs awaiting my review"
-          }
-          value={stats?.pending_sops ?? 0}
-          href={`/sops?status=${pendingStatus}`}
-          tone="amber"
+          icon="✏️"
+          label="My SOPs in WIP"
+          value={counts?.sops_owned_draft ?? 0}
+          href="/sops"
+          tone="indigo"
         />
-        <StatCard label="My open CAPAs" value={stats?.my_capas ?? 0} href="/capa" tone="indigo" />
-        <StatCard label="Overdue CAPAs" value={stats?.overdue_capas ?? 0} href="/capa" tone="red" emphasize />
-        <StatCard label="Audits in progress" value={stats?.audits_in_progress ?? 0} href="/audits?status=in_progress" tone="brand" />
-        <StatCard label="Critical fails today" value={stats?.failed_critical_today ?? 0} href="/audits" tone="red" />
+        <StatCard
+          icon="📖"
+          label="To acknowledge"
+          value={sopsAwaitingAck.length}
+          href="/sops"
+          tone="brand"
+        />
+        <StatCard
+          icon="🔧"
+          label="My open CAPAs"
+          value={counts?.my_capas_open ?? 0}
+          href="/capa"
+          tone="indigo"
+        />
+        <StatCard
+          icon="🚨"
+          label="My overdue CAPAs"
+          value={counts?.my_capas_overdue ?? 0}
+          href="/capa"
+          tone="red"
+          emphasize={(counts?.my_capas_overdue ?? 0) > 0}
+        />
+        <StatCard
+          icon="🔍"
+          label="Audits in progress"
+          value={counts?.audits_in_progress ?? 0}
+          href="/audits?status=in_progress"
+          tone="brand"
+        />
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">My corrective actions</h2>
-          <Link href="/capa" className="text-sm text-brand-700 hover:underline">View all →</Link>
-        </div>
-        {myCapas.length === 0 ? (
-          <div className="text-center text-gray-400 py-8 text-sm">
-            🎉 No CAPAs assigned to you. Good job!
-          </div>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {myCapas.map((c) => {
-              const today = new Date().toISOString().split("T")[0];
-              const overdue = c.due_date && c.due_date < today;
-              return (
-                <li key={c.id} className="py-3 flex items-center gap-4">
-                  <span className="font-mono text-xs text-gray-400 w-24">{c.code}</span>
-                  <Link href={`/capa/${c.id}`} className="flex-1 text-sm text-gray-900 hover:text-brand-700 hover:underline">
-                    {c.title}
-                  </Link>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    c.severity === "critical" ? "bg-red-100 text-red-700" :
-                    c.severity === "high" ? "bg-orange-100 text-orange-700" :
-                    c.severity === "medium" ? "bg-amber-100 text-amber-700" :
-                    "bg-gray-100 text-gray-600"
-                  }`}>
-                    {c.severity}
-                  </span>
-                  {c.due_date && (
-                    <span className={`text-xs ${overdue ? "text-red-700 font-medium" : "text-gray-500"}`}>
-                      {overdue ? "Overdue · " : "Due "}{new Date(c.due_date).toLocaleDateString()}
+      {/* ── Main content grid ──────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* SOPs awaiting acknowledgment */}
+        <Card
+          title="SOPs awaiting your acknowledgment"
+          eyebrow="Newly approved"
+          icon="📖"
+          actionLabel={sopsAwaitingAck.length > 0 ? "View all SOPs →" : undefined}
+          actionHref="/sops"
+        >
+          {sopsAwaitingAck.length === 0 ? (
+            <Empty icon="✓" text="You've acknowledged every active SOP." />
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {sopsAwaitingAck.map((s) => (
+                <li key={s.id}>
+                  <Link
+                    href={`/sops/${s.id}`}
+                    className="flex items-start gap-3 px-3 py-3 -mx-3 rounded-lg hover:bg-amber-50/40 transition-colors group"
+                  >
+                    <span className="shrink-0 w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-sm">
+                      📖
                     </span>
-                  )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 group-hover:text-brand-700 truncate">
+                        {s.title}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
+                        {s.code && <span className="font-mono">{s.code}</span>}
+                        {s.approved_at && (
+                          <span>
+                            approved {new Date(s.approved_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-xs text-amber-700 font-medium shrink-0 self-center">
+                      Read →
+                    </span>
+                  </Link>
                 </li>
-              );
-            })}
-          </ul>
-        )}
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/* My CAPAs */}
+        <Card
+          title="My corrective actions"
+          eyebrow="Assigned to me"
+          icon="🔧"
+          actionLabel="View all CAPAs →"
+          actionHref="/capa"
+        >
+          {myCapas.length === 0 ? (
+            <Empty icon="🎉" text="No CAPAs assigned to you." />
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {myCapas.map((c) => {
+                const today = new Date().toISOString().split("T")[0];
+                const overdue = c.due_date && c.due_date < today;
+                return (
+                  <li key={c.id}>
+                    <Link
+                      href={`/capa/${c.id}`}
+                      className="flex items-start gap-3 px-3 py-3 -mx-3 rounded-lg hover:bg-gray-50 transition-colors group"
+                    >
+                      <span
+                        className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
+                          c.severity === "critical"
+                            ? "bg-red-100"
+                            : c.severity === "high"
+                              ? "bg-orange-100"
+                              : c.severity === "medium"
+                                ? "bg-amber-100"
+                                : "bg-gray-100"
+                        }`}
+                      >
+                        ⚠️
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 group-hover:text-brand-700 truncate">
+                          {c.title}
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
+                          {c.code && <span className="font-mono">{c.code}</span>}
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-medium ${
+                              c.severity === "critical"
+                                ? "bg-red-100 text-red-700"
+                                : c.severity === "high"
+                                  ? "bg-orange-100 text-orange-700"
+                                  : c.severity === "medium"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {c.severity}
+                          </span>
+                          {c.due_date && (
+                            <span className={overdue ? "text-red-700 font-medium" : ""}>
+                              {overdue ? "Overdue · " : "Due "}
+                              {new Date(c.due_date).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+
+        {/* My audits */}
+        <Card
+          title="My audits"
+          eyebrow="In progress / submitted"
+          icon="🔍"
+          actionLabel="View all audits →"
+          actionHref="/audits"
+        >
+          {myAudits.length === 0 ? (
+            <Empty icon="📋" text="No active audits assigned to you." />
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {myAudits.map((a) => (
+                <li key={a.id}>
+                  <Link
+                    href={`/audits/${a.id}`}
+                    className="flex items-start gap-3 px-3 py-3 -mx-3 rounded-lg hover:bg-gray-50 transition-colors group"
+                  >
+                    <span className="shrink-0 w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center text-sm">
+                      🔍
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 group-hover:text-brand-700 truncate">
+                        {a.template_name}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
+                        <span>{a.brand_name ?? "—"}</span>
+                        {a.location && <span>· {a.location}</span>}
+                        <span>· {new Date(a.audit_date).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full self-center font-medium shrink-0 ${
+                        a.status === "in_progress"
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-indigo-50 text-indigo-700"
+                      }`}
+                    >
+                      {a.status.replace("_", " ")}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/* My SOPs in WIP */}
+        <Card
+          title="My SOPs in progress"
+          eyebrow="Drafts & returned to me"
+          icon="✏️"
+          actionLabel="View all SOPs →"
+          actionHref="/sops"
+        >
+          {mySopsInWip.length === 0 ? (
+            <Empty icon="✓" text="No SOPs need your action." />
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {mySopsInWip.map((s) => (
+                <li key={s.id}>
+                  <Link
+                    href={`/sops/${s.id}`}
+                    className="flex items-start gap-3 px-3 py-3 -mx-3 rounded-lg hover:bg-gray-50 transition-colors group"
+                  >
+                    <span className="shrink-0 w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">
+                      ✏️
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 group-hover:text-brand-700 truncate">
+                        {s.title}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
+                        {s.code && <span className="font-mono">{s.code}</span>}
+                        <span className="capitalize">{s.status.replace(/_/g, " ")}</span>
+                      </div>
+                    </div>
+                    <span className="text-xs text-indigo-700 font-medium shrink-0 self-center">
+                      Edit →
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
     </Workspace>
   );
 }
 
+/* ────────────────────────────────────────────────────────────────── */
+/*  Sub-components                                                    */
+/* ────────────────────────────────────────────────────────────────── */
+
+function HeroChip({
+  href,
+  emoji,
+  label,
+  value,
+  tone = "default",
+}: {
+  href: string;
+  emoji: string;
+  label: string;
+  value: number;
+  tone?: "default" | "warn" | "danger";
+}) {
+  const toneClass =
+    tone === "danger"
+      ? "bg-red-500/20 border-red-400/30 hover:bg-red-500/30"
+      : tone === "warn"
+        ? "bg-amber-500/20 border-amber-400/30 hover:bg-amber-500/30"
+        : "bg-white/10 border-white/20 hover:bg-white/15";
+  return (
+    <Link
+      href={href}
+      className={`inline-flex items-center gap-2.5 backdrop-blur-sm border rounded-xl px-3 py-2 transition-colors ${toneClass}`}
+    >
+      <span className="text-xl">{emoji}</span>
+      <div>
+        <div className="text-lg font-bold leading-none">{value}</div>
+        <div className="text-[10px] uppercase tracking-wider text-emerald-100/70 mt-0.5">
+          {label}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 function StatCard({
+  icon,
   label,
   value,
   href,
   tone,
   emphasize,
 }: {
+  icon: string;
   label: string;
   value: number;
   href: string;
@@ -137,20 +517,81 @@ function StatCard({
   emphasize?: boolean;
 }) {
   const tones: Record<typeof tone, string> = {
-    amber: "border-amber-200 text-amber-700 bg-amber-50",
-    indigo: "border-indigo-200 text-indigo-700 bg-indigo-50",
-    red: "border-red-200 text-red-700 bg-red-50",
-    brand: "border-brand-200 text-brand-700 bg-brand-50",
+    amber: "bg-amber-50 text-amber-700 border-amber-100",
+    indigo: "bg-indigo-50 text-indigo-700 border-indigo-100",
+    red: "bg-red-50 text-red-700 border-red-100",
+    brand: "bg-brand-50 text-brand-700 border-brand-100",
   };
   return (
     <Link
       href={href}
-      className={`block rounded-2xl border p-4 hover:shadow-md transition-shadow ${tones[tone]} ${
-        emphasize && value > 0 ? "ring-2 ring-red-300 ring-offset-2" : ""
+      className={`block bg-white rounded-xl border border-gray-200 shadow-sm p-3.5 hover:shadow-md transition-shadow ${
+        emphasize ? "ring-2 ring-red-300 ring-offset-2" : ""
       }`}
     >
-      <div className="text-[10px] uppercase tracking-widest opacity-70 mb-1.5">{label}</div>
-      <div className="text-3xl font-bold">{value}</div>
+      <div className="flex items-start justify-between mb-2">
+        <div
+          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm border ${tones[tone]}`}
+        >
+          <span>{icon}</span>
+        </div>
+      </div>
+      <div className="text-2xl font-bold text-gray-900 leading-tight tabular-nums">{value}</div>
+      <div className="text-[10px] uppercase tracking-widest text-gray-400 font-medium mt-1 truncate">
+        {label}
+      </div>
     </Link>
+  );
+}
+
+function Card({
+  title,
+  eyebrow,
+  icon,
+  actionLabel,
+  actionHref,
+  children,
+}: {
+  title: string;
+  eyebrow?: string;
+  icon?: string;
+  actionLabel?: string;
+  actionHref?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <div className="flex items-end justify-between mb-3 gap-3">
+        <div>
+          {eyebrow && (
+            <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-0.5">
+              {eyebrow}
+            </div>
+          )}
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            {icon && <span>{icon}</span>}
+            {title}
+          </h3>
+        </div>
+        {actionLabel && actionHref && (
+          <Link
+            href={actionHref}
+            className="text-xs text-brand-700 hover:underline shrink-0"
+          >
+            {actionLabel}
+          </Link>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Empty({ icon, text }: { icon: string; text: string }) {
+  return (
+    <div className="py-8 text-center text-sm text-gray-400">
+      <div className="text-2xl mb-1">{icon}</div>
+      {text}
+    </div>
   );
 }

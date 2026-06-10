@@ -24,6 +24,7 @@ import { notify } from "@/features/notifications/service";
 import {
   extractAttachment as extractAttachmentShared,
 } from "@/lib/attachments";
+import { eligibleUserIds } from "./acknowledgments/repository";
 
 /** Build the notification audience + copy for a given SOP transition. */
 type SopNotifPlan = {
@@ -368,6 +369,29 @@ export async function transitionSopAction(formData: FormData) {
     });
   }
 
+  // On final approval, fire a SECOND notification to everyone who is
+  // expected to read the new SOP and click "I've read and understood".
+  // This is the acknowledgment audience: active users in the same
+  // department (or all users if the SOP has no department), plus admins.
+  if (next === "approved") {
+    const ackTargets = await eligibleUserIds(id);
+    if (ackTargets.length > 0) {
+      await notify({
+        audience: {
+          userIds: ackTargets,
+          excludeActorId: user.id,
+        },
+        actor: { id: user.id, name: user.displayName, role: user.role },
+        kind: "sop:please_acknowledge",
+        title: `📖 Please read & acknowledge: "${current.title}"`,
+        body: "A new SOP is now active. Open it and confirm you've read & understood.",
+        severity: "info",
+        entity: { type: "sop", id, href: `/sops/${id}` },
+      });
+    }
+  }
+
   revalidatePath("/sops");
   revalidatePath(`/sops/${id}`);
+  revalidatePath("/my-work");
 }
