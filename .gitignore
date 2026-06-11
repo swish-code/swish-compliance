@@ -15,3 +15,8 @@ dist/
 next-env.d.ts
 .vscode/
 .idea/
+
+# Local-only Claude preview helpers (NOT shipped to Railway)
+.claude/
+start-dev.cjs
+package-lock.json
