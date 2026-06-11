@@ -90,7 +90,7 @@ export default function ThemeToggle({ compact = false }: { compact?: boolean }) 
         onClick={() => pick(next)}
         title={`${label} — click for ${next}`}
         aria-label={label}
-        className="w-9 h-9 flex items-center justify-center rounded-lg text-base bg-white/[0.04] hover:bg-white/[0.10] active:bg-white/[0.15] border border-white/[0.06] hover:border-white/[0.12] text-gray-300 hover:text-white transition-all duration-150"
+        className="w-9 h-9 flex items-center justify-center rounded-lg text-base bg-white/[0.08] hover:bg-white/[0.14] active:bg-white/[0.18] border border-white/[0.10] hover:border-white/[0.18] text-white hover:text-white transition-all duration-150"
       >
         <span>{icon}</span>
       </button>
@@ -123,7 +123,7 @@ export default function ThemeToggle({ compact = false }: { compact?: boolean }) 
             className={`flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
               active
                 ? "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/30"
-                : "text-gray-400 hover:text-white hover:bg-white/[0.06]"
+                : "text-white/85 hover:text-white hover:bg-white/[0.10]"
             }`}
           >
             <span className="text-xs">{s.icon}</span>

@@ -271,7 +271,7 @@ function CollapsibleSection({
         type="button"
         onClick={onToggle}
         aria-expanded={isOpen}
-        className="w-full group flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] uppercase tracking-[0.18em] text-gray-500 hover:text-gray-300 font-semibold transition-colors"
+        className="w-full group flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] uppercase tracking-[0.18em] text-white/70 hover:text-white font-semibold transition-colors"
       >
         <span className="flex items-center gap-2">
           {section.label}
@@ -283,7 +283,7 @@ function CollapsibleSection({
           name="chevron-right"
           size={12}
           className={`transition-transform duration-200 ${
-            isOpen ? "rotate-90 text-gray-400" : "text-gray-600 group-hover:text-gray-500"
+            isOpen ? "rotate-90 text-white/80" : "text-white/50 group-hover:text-white/80"
           }`}
         />
       </button>
@@ -305,7 +305,7 @@ function CollapsibleSection({
                     className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 ${
                       active
                         ? "bg-emerald-500/10 text-white font-medium"
-                        : "text-gray-400 hover:bg-white/[0.04] hover:text-gray-100"
+                        : "text-white/85 hover:bg-white/[0.08] hover:text-white"
                     }`}
                   >
                     {active && (
@@ -319,7 +319,7 @@ function CollapsibleSection({
                       className={`shrink-0 transition-colors ${
                         active
                           ? "text-emerald-400"
-                          : "text-gray-500 group-hover:text-gray-300"
+                          : "text-white/65 group-hover:text-white"
                       }`}
                     />
                     <span className="flex-1 truncate">{item.label}</span>
@@ -517,7 +517,7 @@ export default function Sidebar({
           type="button"
           onClick={() => setMobileOpen(false)}
           aria-label="Close navigation"
-          className="md:hidden absolute top-3 right-3 p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/[0.08]"
+          className="md:hidden absolute top-3 right-3 p-1.5 rounded-md text-white/80 hover:text-white hover:bg-white/[0.10]"
         >
           <Icon name="close" size={18} />
         </button>
@@ -531,7 +531,7 @@ export default function Sidebar({
             <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0d4530]" />
           </div>
           <div>
-            <div className="text-[9px] uppercase tracking-[0.22em] font-semibold text-emerald-300/70">
+            <div className="text-[9px] uppercase tracking-[0.22em] font-semibold text-emerald-100">
               Swish
             </div>
             <div className="text-[13px] font-bold text-white leading-tight tracking-tight">
@@ -548,13 +548,13 @@ export default function Sidebar({
       <div className="px-4">
         <div className="h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
         <div className="flex items-center justify-between mt-2">
-          <span className="text-[9px] uppercase tracking-[0.22em] text-gray-600">
+          <span className="text-[9px] uppercase tracking-[0.22em] text-white/55">
             Navigation
           </span>
           <button
             type="button"
             onClick={anyOpen ? collapseAll : expandAll}
-            className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wider"
+            className="text-[10px] text-white/70 hover:text-white transition-colors uppercase tracking-wider"
             aria-label={anyOpen ? "Collapse all sections" : "Expand all sections"}
           >
             {anyOpen ? "Collapse all" : "Expand all"}
@@ -590,7 +590,7 @@ export default function Sidebar({
             <div className="text-[13px] font-medium text-white truncate">
               {displayName}
             </div>
-            <div className="text-[10px] uppercase tracking-wider text-emerald-300/60 font-medium">
+            <div className="text-[10px] uppercase tracking-wider text-emerald-100 font-medium">
               {roleLabel(role)}
             </div>
           </div>
@@ -598,7 +598,7 @@ export default function Sidebar({
 
         {/* Theme toggle — segmented Light / System / Dark */}
         <div className="mb-2">
-          <div className="text-[9px] uppercase tracking-[0.22em] text-gray-600 mb-1.5 px-1">
+          <div className="text-[9px] uppercase tracking-[0.22em] text-white/55 mb-1.5 px-1">
             Appearance
           </div>
           <ThemeToggle />
@@ -607,7 +607,7 @@ export default function Sidebar({
         <button
           onClick={signOut}
           disabled={signingOut}
-          className="w-full flex items-center justify-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] border border-white/[0.06] hover:border-white/[0.12] text-gray-300 hover:text-white py-2 rounded-lg text-[12px] font-medium transition-all duration-150 disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 bg-white/[0.08] hover:bg-white/[0.14] active:bg-white/[0.18] border border-white/[0.10] hover:border-white/[0.18] text-white hover:text-white py-2 rounded-lg text-[12px] font-medium transition-all duration-150 disabled:opacity-50"
         >
           <Icon name="logout" size={16} />
           {signingOut ? "Signing out…" : "Sign Out"}
