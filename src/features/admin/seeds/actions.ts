@@ -55,116 +55,112 @@ function mapFrequency(raw: string | null): string {
 export async function importEcsGrcBundleAction(): Promise<void> {
   const admin = await requireAdmin();
 
-  // 1) Load the pre-extracted JSON shipped under public/seeds/.
+  // 1) Load the pre-extracted JSON shipped under public/seeds/. The file is
+  //    written by PowerShell with a UTF-8 BOM, which JSON.parse rejects -
+  //    strip it before parsing.
   const jsonPath = path.join(process.cwd(), "public", "seeds", "ecs_grc.json");
-  const raw = await fs.readFile(jsonPath, "utf-8");
-  const bundle: EcsBundle = JSON.parse(raw);
+  let raw: string;
+  try {
+    raw = await fs.readFile(jsonPath, "utf-8");
+  } catch (e) {
+    throw new Error(
+      `Could not read seed file ${jsonPath}: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+  if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
 
-  // 2) Insert frameworks. Build code -> id map for the control join.
+  let bundle: EcsBundle;
+  try {
+    bundle = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(
+      `Seed JSON is malformed: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+
+  // 2) Insert frameworks. Use a single UPSERT that returns (id, inserted)
+  //    using the (xmax = 0) trick: xmax is 0 only when this was a fresh
+  //    INSERT, not a conflict-update. The DO UPDATE SET code = EXCLUDED.code
+  //    is a no-op that still allows RETURNING to fire on conflict.
   let fwInserted = 0;
-  let fwSkipped = 0;
+  let fwExisting = 0;
   const fwIdByCode = new Map<string, number>();
 
   for (const f of bundle.frameworks) {
     const code = pick(f, "Framework ID");
     const name = pick(f, "Framework / Standard", "Framework/Standard");
-    if (!code || !name) {
-      fwSkipped++;
-      continue;
-    }
+    if (!code || !name) continue;
+
     const description = pick(f, "Framework Definition");
     const category = pick(f, "Pillar / Area", "Pillar/Area");
     const isActive = (pick(f, "Status") ?? "").toLowerCase() !== "inactive";
 
     const row = await queryOne<{ id: number; inserted: boolean }>(
-      `WITH ins AS (
-         INSERT INTO frameworks (code, name, description, category, is_active)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (code) DO NOTHING
-         RETURNING id
-       )
-       SELECT id, TRUE AS inserted FROM ins
-       UNION ALL
-       SELECT id, FALSE AS inserted FROM frameworks WHERE code = $1
-       LIMIT 1`,
+      `INSERT INTO frameworks (code, name, description, category, is_active)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+       RETURNING id, (xmax = 0) AS inserted`,
       [code, name, description, category, isActive]
     );
     if (!row) continue;
     fwIdByCode.set(code, row.id);
     if (row.inserted) fwInserted++;
-    else fwSkipped++;
+    else fwExisting++;
   }
 
   // 3) Insert controls.
   let ctrlInserted = 0;
-  let ctrlSkipped = 0;
+  let ctrlExisting = 0;
   const ctrlIdByCode = new Map<string, number>();
 
   for (const c of bundle.controls) {
     const code = pick(c, "Control ID");
     const name = pick(c, "Control Name");
-    if (!code || !name) {
-      ctrlSkipped++;
-      continue;
-    }
-    const description = pick(c, "Control Definition") ?? pick(c, "Requirement / Checkpoint");
+    if (!code || !name) continue;
+
+    const description =
+      pick(c, "Control Definition") ?? pick(c, "Requirement / Checkpoint");
     const category = pick(c, "Pillar / Area", "Pillar/Area");
     const fwCode = pick(c, "Framework ID");
     const frameworkId = fwCode ? fwIdByCode.get(fwCode) ?? null : null;
 
     const row = await queryOne<{ id: number; inserted: boolean }>(
-      `WITH ins AS (
-         INSERT INTO controls (code, name, description, framework_id, category, health_status)
-         VALUES ($1, $2, $3, $4, $5, 'unknown')
-         ON CONFLICT (code) DO NOTHING
-         RETURNING id
-       )
-       SELECT id, TRUE AS inserted FROM ins
-       UNION ALL
-       SELECT id, FALSE AS inserted FROM controls WHERE code = $1
-       LIMIT 1`,
+      `INSERT INTO controls (code, name, description, framework_id, category, health_status)
+       VALUES ($1, $2, $3, $4, $5, 'unknown')
+       ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+       RETURNING id, (xmax = 0) AS inserted`,
       [code, name, description, frameworkId, category]
     );
     if (!row) continue;
     ctrlIdByCode.set(code, row.id);
     if (row.inserted) ctrlInserted++;
-    else ctrlSkipped++;
+    else ctrlExisting++;
   }
 
   // 4) Insert tests (our "checks" table).
   let testInserted = 0;
-  let testSkipped = 0;
+  let testExisting = 0;
   for (const t of bundle.tests) {
     const code = pick(t, "Test ID");
     const name = pick(t, "Test Name");
-    if (!code || !name) {
-      testSkipped++;
-      continue;
-    }
-    const description = pick(t, "Test Definition") ?? pick(t, "Mandatory Action / How to Perform");
+    if (!code || !name) continue;
+
+    const description =
+      pick(t, "Test Definition") ?? pick(t, "Mandatory Action / How to Perform");
     const ctrlCode = pick(t, "Control ID");
     const controlId = ctrlCode ? ctrlIdByCode.get(ctrlCode) ?? null : null;
     const frequency = mapFrequency(pick(t, "Frequency"));
 
     const row = await queryOne<{ inserted: boolean }>(
-      `WITH ins AS (
-         INSERT INTO checks (code, name, description, control_id, frequency)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (code) DO NOTHING
-         RETURNING id
-       )
-       SELECT TRUE AS inserted FROM ins
-       UNION ALL
-       SELECT FALSE AS inserted FROM checks WHERE code = $1
-       LIMIT 1`,
+      `INSERT INTO checks (code, name, description, control_id, frequency)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+       RETURNING (xmax = 0) AS inserted`,
       [code, name, description, controlId, frequency]
     );
-    if (!row) {
-      testSkipped++;
-      continue;
-    }
+    if (!row) continue;
     if (row.inserted) testInserted++;
-    else testSkipped++;
+    else testExisting++;
   }
 
   // 5) Audit trail entry summarizing the import.
@@ -178,11 +174,11 @@ export async function importEcsGrcBundleAction(): Promise<void> {
         source: bundle.meta.source,
         extracted_at: bundle.meta.extracted_at,
         frameworks_inserted: fwInserted,
-        frameworks_skipped: fwSkipped,
+        frameworks_already_existed: fwExisting,
         controls_inserted: ctrlInserted,
-        controls_skipped: ctrlSkipped,
+        controls_already_existed: ctrlExisting,
         tests_inserted: testInserted,
-        tests_skipped: testSkipped,
+        tests_already_existed: testExisting,
       }),
     ]
   );
