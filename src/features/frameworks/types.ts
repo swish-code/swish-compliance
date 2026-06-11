@@ -14,4 +14,8 @@ export type Framework = {
   updated_at: string;
   control_count: number;
   active_control_count: number;
+  // GRC extended fields (migration 018)
+  reference_source: string | null;
+  scope: string | null;
+  review_frequency: string | null;
 };

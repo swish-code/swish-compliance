@@ -7,6 +7,7 @@ const FW_SELECT = `
   f.activated_by, u_a.display_name AS activated_by_name, f.activated_at,
   f.owner_user_id, u_o.display_name AS owner_name,
   f.created_at, f.updated_at,
+  f.reference_source, f.scope, f.review_frequency,
   (SELECT COUNT(*)::int FROM controls c WHERE c.framework_id = f.id)                          AS control_count,
   (SELECT COUNT(*)::int FROM controls c WHERE c.framework_id = f.id AND c.is_active)          AS active_control_count
 FROM frameworks f

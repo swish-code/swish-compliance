@@ -6,6 +6,8 @@ const CTRL_SELECT = `
   c.id, c.code, c.name, c.description, c.framework_id, f.name AS framework_name, f.code AS framework_code,
   c.category, c.owner_user_id, u.display_name AS owner_name,
   c.is_active, c.health_status, c.health_updated_at, c.created_at, c.updated_at,
+  c.requirement, c.clause_reference, c.evidence_required,
+  c.risk_weight, c.control_type, c.frequency,
   (SELECT COUNT(*)::int FROM control_links cl WHERE cl.control_id = c.id AND cl.entity_type = 'sop')   AS linked_sops,
   (SELECT COUNT(*)::int FROM checks ch WHERE ch.control_id = c.id)                                     AS linked_checks,
   (SELECT COUNT(*)::int FROM corrective_actions ca

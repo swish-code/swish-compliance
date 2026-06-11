@@ -78,10 +78,11 @@ export async function importEcsGrcBundleAction(): Promise<void> {
     );
   }
 
-  // 2) Insert frameworks. Use a single UPSERT that returns (id, inserted)
-  //    using the (xmax = 0) trick: xmax is 0 only when this was a fresh
-  //    INSERT, not a conflict-update. The DO UPDATE SET code = EXCLUDED.code
-  //    is a no-op that still allows RETURNING to fire on conflict.
+  // 2) Insert frameworks. UPSERT pattern:
+  //    - First import: row is inserted with all fields populated.
+  //    - Re-import: only fields that are currently NULL get backfilled
+  //      (COALESCE). Anything the user has edited in the UI is preserved.
+  //    The (xmax = 0) trick tells us if this was a fresh insert.
   let fwInserted = 0;
   let fwExisting = 0;
   const fwIdByCode = new Map<string, number>();
@@ -94,13 +95,21 @@ export async function importEcsGrcBundleAction(): Promise<void> {
     const description = pick(f, "Framework Definition");
     const category = pick(f, "Pillar / Area", "Pillar/Area");
     const isActive = (pick(f, "Status") ?? "").toLowerCase() !== "inactive";
+    const referenceSource = pick(f, "Reference Source / Standard");
+    const scope = pick(f, "Scope / Main Controls");
+    const reviewFrequency = pick(f, "Review Frequency");
 
     const row = await queryOne<{ id: number; inserted: boolean }>(
-      `INSERT INTO frameworks (code, name, description, category, is_active)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+      `INSERT INTO frameworks
+         (code, name, description, category, is_active,
+          reference_source, scope, review_frequency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (code) DO UPDATE SET
+         reference_source = COALESCE(frameworks.reference_source, EXCLUDED.reference_source),
+         scope            = COALESCE(frameworks.scope,            EXCLUDED.scope),
+         review_frequency = COALESCE(frameworks.review_frequency, EXCLUDED.review_frequency)
        RETURNING id, (xmax = 0) AS inserted`,
-      [code, name, description, category, isActive]
+      [code, name, description, category, isActive, referenceSource, scope, reviewFrequency]
     );
     if (!row) continue;
     fwIdByCode.set(code, row.id);
@@ -124,12 +133,41 @@ export async function importEcsGrcBundleAction(): Promise<void> {
     const fwCode = pick(c, "Framework ID");
     const frameworkId = fwCode ? fwIdByCode.get(fwCode) ?? null : null;
 
+    const requirement = pick(c, "Requirement / Checkpoint");
+    const clauseRef = pick(c, "Clause / Reference Area");
+    const evidenceReq = pick(c, "Evidence Required");
+    const riskWeightRaw = pick(c, "Risk Weight");
+    const riskWeight = riskWeightRaw ? parseInt(riskWeightRaw, 10) : null;
+    const controlType = pick(c, "Control Type");
+    const frequency = pick(c, "Frequency");
+
     const row = await queryOne<{ id: number; inserted: boolean }>(
-      `INSERT INTO controls (code, name, description, framework_id, category, health_status)
-       VALUES ($1, $2, $3, $4, $5, 'unknown')
-       ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+      `INSERT INTO controls
+         (code, name, description, framework_id, category, health_status,
+          requirement, clause_reference, evidence_required,
+          risk_weight, control_type, frequency)
+       VALUES ($1, $2, $3, $4, $5, 'unknown', $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (code) DO UPDATE SET
+         requirement       = COALESCE(controls.requirement,       EXCLUDED.requirement),
+         clause_reference  = COALESCE(controls.clause_reference,  EXCLUDED.clause_reference),
+         evidence_required = COALESCE(controls.evidence_required, EXCLUDED.evidence_required),
+         risk_weight       = COALESCE(controls.risk_weight,       EXCLUDED.risk_weight),
+         control_type      = COALESCE(controls.control_type,      EXCLUDED.control_type),
+         frequency         = COALESCE(controls.frequency,         EXCLUDED.frequency)
        RETURNING id, (xmax = 0) AS inserted`,
-      [code, name, description, frameworkId, category]
+      [
+        code,
+        name,
+        description,
+        frameworkId,
+        category,
+        requirement,
+        clauseRef,
+        evidenceReq,
+        Number.isFinite(riskWeight as number) ? riskWeight : null,
+        controlType,
+        frequency,
+      ]
     );
     if (!row) continue;
     ctrlIdByCode.set(code, row.id);
@@ -151,12 +189,37 @@ export async function importEcsGrcBundleAction(): Promise<void> {
     const controlId = ctrlCode ? ctrlIdByCode.get(ctrlCode) ?? null : null;
     const frequency = mapFrequency(pick(t, "Frequency"));
 
+    const procedureSteps = pick(t, "Mandatory Action / How to Perform");
+    const evidenceNeeded = pick(t, "Evidence Needed");
+    const method = pick(t, "Method");
+    const performerRole = pick(t, "Performer");
+    const reviewerRole = pick(t, "Reviewer");
+
     const row = await queryOne<{ inserted: boolean }>(
-      `INSERT INTO checks (code, name, description, control_id, frequency)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+      `INSERT INTO checks
+         (code, name, description, control_id, frequency,
+          procedure_steps, evidence_needed, method,
+          performer_role, reviewer_role)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (code) DO UPDATE SET
+         procedure_steps = COALESCE(checks.procedure_steps, EXCLUDED.procedure_steps),
+         evidence_needed = COALESCE(checks.evidence_needed, EXCLUDED.evidence_needed),
+         method          = COALESCE(checks.method,          EXCLUDED.method),
+         performer_role  = COALESCE(checks.performer_role,  EXCLUDED.performer_role),
+         reviewer_role   = COALESCE(checks.reviewer_role,   EXCLUDED.reviewer_role)
        RETURNING (xmax = 0) AS inserted`,
-      [code, name, description, controlId, frequency]
+      [
+        code,
+        name,
+        description,
+        controlId,
+        frequency,
+        procedureSteps,
+        evidenceNeeded,
+        method,
+        performerRole,
+        reviewerRole,
+      ]
     );
     if (!row) continue;
     if (row.inserted) testInserted++;

@@ -12,14 +12,29 @@ export default async function FrameworksPage() {
   const available = frameworks.filter((f) => !f.is_active);
 
   // Admin-only: show the ECS GRC Framework bundle importer banner while
-  // any of the 24 known framework codes are still missing.
+  // either (a) any of the 24 known framework codes are still missing, OR
+  // (b) the extended GRC fields (reference_source / scope) are still
+  //     unfilled on any of the imported rows. Re-running the import is
+  //     idempotent — the action backfills NULL columns via COALESCE.
   const isAdmin = user.role === "admin";
-  const ecsCount = isAdmin
-    ? await queryOne<{ n: number }>(
-        `SELECT COUNT(*)::int AS n FROM frameworks WHERE code LIKE 'FW-0%'`
+  const ecsState = isAdmin
+    ? await queryOne<{ imported: number; missing_ext: number }>(
+        `SELECT
+           COUNT(*)::int FILTER (WHERE code LIKE 'FW-0%') AS imported,
+           COUNT(*)::int FILTER (
+             WHERE code LIKE 'FW-0%'
+               AND (reference_source IS NULL OR scope IS NULL)
+           ) AS missing_ext
+         FROM frameworks`
       )
     : null;
-  const ecsBundleNeedsImport = isAdmin && (ecsCount?.n ?? 0) < 24;
+  const ecsBundleNeedsImport =
+    isAdmin &&
+    ((ecsState?.imported ?? 0) < 24 || (ecsState?.missing_ext ?? 0) > 0);
+  const ecsBackfillOnly =
+    isAdmin &&
+    (ecsState?.imported ?? 0) >= 24 &&
+    (ecsState?.missing_ext ?? 0) > 0;
 
   return (
     <Workspace
@@ -38,16 +53,39 @@ export default async function FrameworksPage() {
             </div>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-brand-900">
-                Import the ECS GRC Framework bundle
+                {ecsBackfillOnly
+                  ? "Backfill ECS GRC extended fields"
+                  : "Import the ECS GRC Framework bundle"}
               </div>
               <div className="text-xs text-brand-800 mt-0.5">
-                One click loads 24 frameworks, 49 controls, and 147 tests from{" "}
-                <span className="font-mono">ECS_GRC_Framework_Controls_Tests.xlsx</span>{" "}
-                into the system. Safe to re-run — only new records are inserted.
+                {ecsBackfillOnly ? (
+                  <>
+                    The 24 frameworks are already in the system, but their{" "}
+                    extended fields (reference source, scope, requirements,
+                    evidence required, risk weight, etc.) are still empty.{" "}
+                    Re-run the import to backfill them — your existing edits
+                    are preserved (only NULL fields get filled).
+                  </>
+                ) : (
+                  <>
+                    One click loads 24 frameworks, 49 controls, and 147 tests{" "}
+                    from{" "}
+                    <span className="font-mono">
+                      ECS_GRC_Framework_Controls_Tests.xlsx
+                    </span>{" "}
+                    into the system. Safe to re-run — existing records are
+                    backfilled, not overwritten.
+                  </>
+                )}
               </div>
-              {ecsCount && ecsCount.n > 0 && (
+              {ecsState && ecsState.imported > 0 && ecsState.imported < 24 && (
                 <div className="text-[11px] text-brand-700 mt-1">
-                  {ecsCount.n} of 24 already imported.
+                  {ecsState.imported} of 24 already imported.
+                </div>
+              )}
+              {ecsBackfillOnly && (
+                <div className="text-[11px] text-brand-700 mt-1">
+                  {ecsState!.missing_ext} of 24 frameworks missing extended fields.
                 </div>
               )}
             </div>
@@ -57,7 +95,7 @@ export default async function FrameworksPage() {
               type="submit"
               className="inline-flex items-center gap-2 bg-brand-700 hover:bg-brand-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm"
             >
-              ⬆️ Import ECS bundle
+              {ecsBackfillOnly ? "🔄 Backfill now" : "⬆️ Import ECS bundle"}
             </button>
           </form>
         </div>

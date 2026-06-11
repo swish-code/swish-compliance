@@ -30,6 +30,18 @@ export default async function ControlDetailPage({
   const links = await listControlLinks(id);
   const canEdit = canEditSops(user.role);
 
+  // Option C fix: also fetch checks that are linked via the DIRECT
+  // foreign key checks.control_id (this is how the ECS GRC import wires
+  // them up), not just the control_links junction table.
+  const directChecks = await queryAll<{ id: number; code: string | null; name: string; frequency: string; last_status: string | null }>(
+    `SELECT id, code, name, frequency, last_status
+     FROM checks
+     WHERE control_id = $1
+     ORDER BY code NULLS LAST, name
+     LIMIT 100`,
+    [id]
+  );
+
   const sops = canEdit
     ? await queryAll<{ id: number; title: string }>(
         `SELECT id, title FROM sops WHERE id NOT IN (
@@ -84,12 +96,97 @@ export default async function ControlDetailPage({
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
           <Field label="Owner">{ctrl.owner_name ?? "—"}</Field>
           <Field label="Category">{ctrl.category ?? "—"}</Field>
+          <Field label="Control type">{ctrl.control_type ?? "—"}</Field>
+          <Field label="Frequency">{ctrl.frequency ?? "—"}</Field>
+          <Field label="Risk weight">
+            {ctrl.risk_weight ? (
+              <span className={`inline-flex items-center gap-1.5`}>
+                <span className="font-bold tabular-nums">{ctrl.risk_weight}</span>
+                <span className="text-gray-400 text-xs">/ 5</span>
+              </span>
+            ) : "—"}
+          </Field>
           <Field label="Linked SOPs">{ctrl.linked_sops}</Field>
           <Field label="Linked checks">{ctrl.linked_checks}</Field>
           <Field label="Open CAPAs">{ctrl.open_capas}</Field>
-          <Field label="Health updated">{ctrl.health_updated_at ? new Date(ctrl.health_updated_at).toLocaleString() : "Never"}</Field>
         </dl>
       </div>
+
+      {/* GRC details panel — requirement, clause, evidence */}
+      {(ctrl.requirement || ctrl.clause_reference || ctrl.evidence_required) && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4 space-y-4">
+          {ctrl.requirement && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                Requirement / Checkpoint
+              </div>
+              <div className="text-sm text-gray-800 whitespace-pre-wrap">{ctrl.requirement}</div>
+            </div>
+          )}
+          {ctrl.clause_reference && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                Clause / Reference
+              </div>
+              <div className="text-sm font-mono text-gray-700">{ctrl.clause_reference}</div>
+            </div>
+          )}
+          {ctrl.evidence_required && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                Evidence required
+              </div>
+              <div className="text-sm text-gray-800 whitespace-pre-wrap">{ctrl.evidence_required}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Direct-FK tests block — shows checks linked via checks.control_id
+          (which is how the ECS GRC import wires them). Distinct from the
+          control_links junction panel further down. */}
+      {directChecks.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Tests under this control ({directChecks.length})
+            </h3>
+            <Link href={`/tests?control=${ctrl.id}`} className="text-xs text-brand-700 hover:underline">
+              View all →
+            </Link>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+              <tr>
+                <th className="text-left px-5 py-3 font-medium">Code</th>
+                <th className="text-left px-5 py-3 font-medium">Test</th>
+                <th className="text-left px-5 py-3 font-medium">Frequency</th>
+                <th className="text-left px-5 py-3 font-medium">Last status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {directChecks.map((t) => (
+                <tr key={t.id} className="border-t border-gray-100 hover:bg-gray-50">
+                  <td className="px-5 py-3 font-mono text-xs text-gray-500">{t.code ?? "—"}</td>
+                  <td className="px-5 py-3">
+                    <Link href={`/tests/${t.id}`} className="font-medium text-brand-700 hover:underline">
+                      {t.name}
+                    </Link>
+                  </td>
+                  <td className="px-5 py-3 text-gray-600 text-xs capitalize">{t.frequency.replace("_", " ")}</td>
+                  <td className="px-5 py-3 text-xs">
+                    {t.last_status ? (
+                      <span className="capitalize">{t.last_status.replace("_", " ")}</span>
+                    ) : (
+                      <span className="text-gray-400">Never run</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Linked things */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">

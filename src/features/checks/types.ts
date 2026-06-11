@@ -32,6 +32,12 @@ export type Check = {
   created_at: string;
   updated_at: string;
   result_count: number;
+  // GRC extended fields (migration 018)
+  procedure_steps: string | null;
+  evidence_needed: string | null;
+  method: string | null;
+  performer_role: string | null;
+  reviewer_role: string | null;
 };
 
 export type CheckResult = {

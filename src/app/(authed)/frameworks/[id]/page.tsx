@@ -98,13 +98,35 @@ export default async function FrameworkDetailPage({
               fw.owner_name ?? "—"
             )}
           </Field>
+          <Field label="Review frequency">{fw.review_frequency ?? "—"}</Field>
           <Field label="Activated">
             {fw.activated_at ? new Date(fw.activated_at).toLocaleDateString() : "—"}
             {fw.activated_by_name && <div className="text-xs text-gray-500">by {fw.activated_by_name}</div>}
           </Field>
-          <Field label="Updated">{new Date(fw.updated_at).toLocaleDateString()}</Field>
         </dl>
       </div>
+
+      {/* Reference / scope panel — shown only when populated */}
+      {(fw.reference_source || fw.scope) && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4 space-y-4">
+          {fw.reference_source && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                Reference source / standard
+              </div>
+              <div className="text-sm text-gray-800">{fw.reference_source}</div>
+            </div>
+          )}
+          {fw.scope && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                Scope / main controls
+              </div>
+              <div className="text-sm text-gray-800 whitespace-pre-wrap">{fw.scope}</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Linked controls */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">

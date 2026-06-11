@@ -9,6 +9,8 @@ const CHECK_SELECT = `
   ch.frequency, ch.is_active, ch.last_status, ch.last_result_at, ch.next_due_date,
   ch.checklist_template_id, t.name AS checklist_template_name,
   ch.created_at, ch.updated_at,
+  ch.procedure_steps, ch.evidence_needed, ch.method,
+  ch.performer_role, ch.reviewer_role,
   (SELECT COUNT(*)::int FROM check_results r WHERE r.check_id = ch.id) AS result_count
 FROM checks ch
 LEFT JOIN controls            c ON c.id = ch.control_id

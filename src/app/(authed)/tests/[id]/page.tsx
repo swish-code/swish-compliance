@@ -76,6 +76,59 @@ export default async function CheckDetailPage({
         </dl>
       </div>
 
+      {/* GRC details — procedure, evidence needed, method, performer/reviewer.
+          Shown only when at least one field is filled (i.e. tests imported
+          from the ECS GRC bundle). */}
+      {(check.procedure_steps || check.evidence_needed || check.method || check.performer_role || check.reviewer_role) && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-1">
+            How to perform this test
+          </h3>
+          {check.procedure_steps && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                Mandatory action / steps
+              </div>
+              <div className="text-sm text-gray-800 whitespace-pre-wrap">{check.procedure_steps}</div>
+            </div>
+          )}
+          {check.evidence_needed && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                Evidence needed
+              </div>
+              <div className="text-sm text-gray-800 whitespace-pre-wrap">{check.evidence_needed}</div>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-gray-100">
+            {check.method && (
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                  Method
+                </div>
+                <div className="text-sm text-gray-800">{check.method}</div>
+              </div>
+            )}
+            {check.performer_role && (
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                  Performed by
+                </div>
+                <div className="text-sm text-gray-800">{check.performer_role}</div>
+              </div>
+            )}
+            {check.reviewer_role && (
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                  Reviewed by
+                </div>
+                <div className="text-sm text-gray-800">{check.reviewer_role}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Record new result */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">Record a new result</h3>

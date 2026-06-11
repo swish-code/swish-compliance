@@ -19,6 +19,13 @@ export type Control = {
   linked_sops: number;
   linked_checks: number;
   open_capas: number;
+  // GRC extended fields (migration 018)
+  requirement: string | null;
+  clause_reference: string | null;
+  evidence_required: string | null;
+  risk_weight: number | null;
+  control_type: string | null;
+  frequency: string | null;
 };
 
 export const HEALTH_LABEL: Record<ControlHealth, string> = {
