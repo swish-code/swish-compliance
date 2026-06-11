@@ -16,6 +16,7 @@ import {
   HEALTH_DOT,
 } from "@/features/controls/types";
 import { queryAll } from "@/lib/db";
+import AssignTestModal from "@/features/checks/AssignTestModal";
 
 export default async function ControlDetailPage({
   params,
@@ -41,6 +42,22 @@ export default async function ControlDetailPage({
      LIMIT 100`,
     [id]
   );
+
+  // Audiences for the per-row "Assign" modal on each Test in the table
+  // below — Auditors and Department Managers, resolved once and passed
+  // to every modal so opening one doesn't trigger a network round-trip.
+  const [auditors, departmentManagers] = await Promise.all([
+    queryAll<{ id: number; display_name: string }>(
+      `SELECT id, display_name FROM users
+       WHERE is_active AND role = 'auditor'
+       ORDER BY display_name`
+    ),
+    queryAll<{ id: number; display_name: string }>(
+      `SELECT id, display_name FROM users
+       WHERE is_active AND role = 'department_manager'
+       ORDER BY display_name`
+    ),
+  ]);
 
   const sops = canEdit
     ? await queryAll<{ id: number; title: string }>(
@@ -162,6 +179,7 @@ export default async function ControlDetailPage({
                 <th className="text-left px-5 py-3 font-medium">Test</th>
                 <th className="text-left px-5 py-3 font-medium">Frequency</th>
                 <th className="text-left px-5 py-3 font-medium">Last status</th>
+                <th className="text-right px-5 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -180,6 +198,14 @@ export default async function ControlDetailPage({
                     ) : (
                       <span className="text-gray-400">Never run</span>
                     )}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <AssignTestModal
+                      checkId={t.id}
+                      checkName={t.name}
+                      auditors={auditors}
+                      departmentManagers={departmentManagers}
+                    />
                   </td>
                 </tr>
               ))}
