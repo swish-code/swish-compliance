@@ -61,7 +61,7 @@ export default async function AuditDetailPage({
                 <span className="text-xs text-brand-700">{audit.template_category}</span>
               )}
             </div>
-            <div className="flex gap-6 text-sm text-gray-600">
+            <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-gray-600">
               <div>
                 <span className="text-xs uppercase tracking-wider text-gray-400">Brand</span>
                 <div>{audit.brand_name ?? "—"}</div>
@@ -77,6 +77,37 @@ export default async function AuditDetailPage({
               <div>
                 <span className="text-xs uppercase tracking-wider text-gray-400">Auditor</span>
                 <div>{audit.auditor_name ?? "—"}</div>
+              </div>
+              <div>
+                <span className="text-xs uppercase tracking-wider text-gray-400">Policy</span>
+                <div>
+                  {audit.policy_id ? (
+                    <Link
+                      href={`/sops/${audit.policy_id}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {audit.policy_code ? `${audit.policy_code} · ` : ""}
+                      {audit.policy_title}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+              </div>
+              <div>
+                <span className="text-xs uppercase tracking-wider text-gray-400">Framework</span>
+                <div>
+                  {audit.framework_id ? (
+                    <Link
+                      href={`/frameworks/${audit.framework_id}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {audit.framework_code} · {audit.framework_name}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </div>
               </div>
             </div>
           </div>

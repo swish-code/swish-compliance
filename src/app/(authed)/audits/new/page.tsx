@@ -23,6 +23,36 @@ export default async function NewAuditPage({
     `SELECT id, name FROM departments WHERE is_active ORDER BY name`
   );
 
+  // Policies = approved SOPs in this system (the Policies page is just a
+  // filtered view over `sops`). We only show approved ones because an audit
+  // should be performed against an active, published policy.
+  const policies = await queryAll<{
+    id: number;
+    code: string | null;
+    title: string;
+    department_name: string | null;
+  }>(
+    `SELECT s.id, s.code, s.title, d.name AS department_name
+     FROM sops s
+     LEFT JOIN departments d ON d.id = s.department_id
+     WHERE s.status = 'approved'
+     ORDER BY s.title
+     LIMIT 500`
+  );
+
+  const frameworks = await queryAll<{
+    id: number;
+    code: string;
+    name: string;
+    category: string | null;
+  }>(
+    `SELECT id, code, name, category
+     FROM frameworks
+     WHERE is_active
+     ORDER BY category NULLS LAST, name
+     LIMIT 500`
+  );
+
   if (templates.length === 0) {
     return (
       <Workspace
@@ -116,6 +146,56 @@ export default async function NewAuditPage({
                 defaultValue={new Date().toISOString().split("T")[0]}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
+            </div>
+          </div>
+
+          {/* ── Policy & Framework — what's being audited against ──── */}
+          <div className="border-t border-gray-100 pt-5">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              What is this audit checking against?
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Policy / SOP
+                </label>
+                <select
+                  name="policy_id"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">— None —</option>
+                  {policies.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code ? `${p.code} · ` : ""}
+                      {p.title}
+                      {p.department_name ? ` · ${p.department_name}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Approved SOPs only. Pick the policy this audit verifies compliance with.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Framework / Standard
+                </label>
+                <select
+                  name="framework_id"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">— None —</option>
+                  {frameworks.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.code} · {f.name}
+                      {f.category ? ` · ${f.category}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Active frameworks only (HACCP, ISO 22000, Fire Safety, …).
+                </p>
+              </div>
             </div>
           </div>
 

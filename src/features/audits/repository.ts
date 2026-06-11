@@ -9,12 +9,16 @@ const AUDIT_SELECT = `
   a.department_id, d.name AS department_name,
   a.location, a.auditor_id, u.display_name AS auditor_name,
   a.audit_date, a.status, a.score, a.max_score, a.critical_failed, a.summary,
-  a.submitted_at, a.closed_at, a.created_at, a.updated_at
+  a.submitted_at, a.closed_at, a.created_at, a.updated_at,
+  a.policy_id, p.title AS policy_title, p.code AS policy_code,
+  a.framework_id, f.name AS framework_name, f.code AS framework_code
 FROM audits a
 JOIN checklist_templates t ON t.id = a.template_id
 LEFT JOIN brands       b ON b.id = a.brand_id
 LEFT JOIN departments  d ON d.id = a.department_id
 LEFT JOIN users        u ON u.id = a.auditor_id
+LEFT JOIN sops         p ON p.id = a.policy_id
+LEFT JOIN frameworks   f ON f.id = a.framework_id
 `;
 
 export async function listAudits(filters: {
@@ -72,10 +76,15 @@ export async function createAudit(input: {
   location?: string | null;
   auditor_id: number;
   audit_date?: string | null;
+  policy_id?: number | null;
+  framework_id?: number | null;
 }): Promise<number> {
   const row = await queryOne<{ id: number }>(
-    `INSERT INTO audits (template_id, brand_id, department_id, location, auditor_id, audit_date)
-     VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE)) RETURNING id`,
+    `INSERT INTO audits
+       (template_id, brand_id, department_id, location, auditor_id, audit_date,
+        policy_id, framework_id)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7, $8)
+     RETURNING id`,
     [
       input.template_id,
       input.brand_id ?? null,
@@ -83,6 +92,8 @@ export async function createAudit(input: {
       input.location ?? null,
       input.auditor_id,
       input.audit_date ?? null,
+      input.policy_id ?? null,
+      input.framework_id ?? null,
     ]
   );
   return row!.id;

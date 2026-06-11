@@ -22,6 +22,13 @@ export type Audit = {
   closed_at: string | null;
   created_at: string;
   updated_at: string;
+  // Policy & Framework the audit is performed against (migration 019)
+  policy_id: number | null;
+  policy_title: string | null;
+  policy_code: string | null;
+  framework_id: number | null;
+  framework_name: string | null;
+  framework_code: string | null;
 };
 
 export type AuditResponse = {

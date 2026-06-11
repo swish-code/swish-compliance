@@ -23,6 +23,8 @@ const CreateSchema = z.object({
   department_id: z.coerce.number().int().positive().optional().nullable(),
   location: z.string().trim().optional().nullable(),
   audit_date: z.string().optional().nullable(),
+  policy_id: z.coerce.number().int().positive().optional().nullable(),
+  framework_id: z.coerce.number().int().positive().optional().nullable(),
 });
 
 const ResponseSchema = z.object({
@@ -63,18 +65,30 @@ function assertCanEditAudit(audit: AuditGuardSubject, actor: AuditGuardActor): v
 export async function createAuditAction(formData: FormData) {
   const user = await requireUser();
   const raw = Object.fromEntries(formData.entries());
+  const blank = (v: FormDataEntryValue | undefined) => (v === "" || v === undefined ? null : v);
   const parsed = CreateSchema.parse({
     ...raw,
-    brand_id: raw.brand_id === "" ? null : raw.brand_id,
-    department_id: raw.department_id === "" ? null : raw.department_id,
-    location: raw.location === "" ? null : raw.location,
-    audit_date: raw.audit_date === "" ? null : raw.audit_date,
+    brand_id: blank(raw.brand_id),
+    department_id: blank(raw.department_id),
+    location: blank(raw.location),
+    audit_date: blank(raw.audit_date),
+    policy_id: blank(raw.policy_id),
+    framework_id: blank(raw.framework_id),
   });
   const id = await createAudit({ ...parsed, auditor_id: user.id });
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
      VALUES ($1, $2, 'create', 'audit', $3, $4)`,
-    [user.id, user.email, id, JSON.stringify({ template_id: parsed.template_id })]
+    [
+      user.id,
+      user.email,
+      id,
+      JSON.stringify({
+        template_id: parsed.template_id,
+        policy_id: parsed.policy_id ?? null,
+        framework_id: parsed.framework_id ?? null,
+      }),
+    ]
   );
   revalidatePath("/audits");
   redirect(`/audits/${id}`);
