@@ -19,12 +19,14 @@ export default async function FrameworksPage() {
   const isAdmin = user.role === "admin";
   const ecsState = isAdmin
     ? await queryOne<{ imported: number; missing_ext: number }>(
+        // FILTER must come BEFORE any cast on the aggregate result -
+        // (COUNT(*) FILTER (...))::int, not COUNT(*)::int FILTER (...).
         `SELECT
-           COUNT(*)::int FILTER (WHERE code LIKE 'FW-0%') AS imported,
-           COUNT(*)::int FILTER (
+           (COUNT(*) FILTER (WHERE code LIKE 'FW-0%'))::int AS imported,
+           (COUNT(*) FILTER (
              WHERE code LIKE 'FW-0%'
                AND (reference_source IS NULL OR scope IS NULL)
-           ) AS missing_ext
+           ))::int AS missing_ext
          FROM frameworks`
       )
     : null;
