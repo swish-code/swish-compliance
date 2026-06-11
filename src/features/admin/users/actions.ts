@@ -22,6 +22,7 @@ const VALID_ROLES = [
   "ceo",
   "business_excellence",
   "compliance",
+  "opex",
   "department_manager",
   "auditor",
   "viewer",

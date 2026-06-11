@@ -57,7 +57,7 @@ export function canApproveSops(role: string): boolean {
 
 /** Whether the role can create / edit checklists, controls, checks, etc. */
 export function canEditSops(role: string): boolean {
-  return ["admin", "business_excellence", "compliance"].includes(role);
+  return ["admin", "business_excellence", "compliance", "opex"].includes(role);
 }
 
 /** Whether the given role can access /admin/*. */
@@ -71,6 +71,7 @@ export const USER_ROLES = [
   { value: "ceo",                  label: "CEO",                   desc: "Final approval authority on SOPs after Business Excellence" },
   { value: "business_excellence",  label: "Business Excellence (IBE)", desc: "Second-stage SOP review and CAPA verification" },
   { value: "compliance",           label: "Compliance team",       desc: "First-stage SOP review; authors checklists, controls and checks" },
+  { value: "opex",                 label: "Operational Excellence (OPEX)", desc: "SOP creation/update/control governance, internal process audits and improvement project lifecycle" },
   { value: "department_manager",   label: "Department Manager",    desc: "Authors SOPs for their department and handles assigned CAPAs" },
   { value: "auditor",              label: "Auditor",               desc: "Conducts on-site audits and records test results" },
   { value: "viewer",               label: "Viewer",                desc: "Read-only access to reports and current data" },

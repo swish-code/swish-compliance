@@ -29,6 +29,7 @@ const ROLE_LABEL: Record<string, string> = {
   ceo: "CEO",
   business_excellence: "Business Excellence",
   compliance: "Compliance",
+  opex: "Operational Excellence",
   department_manager: "Department Manager",
   auditor: "Auditor",
   viewer: "Viewer",
