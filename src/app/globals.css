@@ -9,13 +9,15 @@
 @variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-brand-50:  #f0f9f2;
-  --color-brand-100: #d7eedb;
-  --color-brand-500: #2f7a4a;
-  --color-brand-600: #1f5c36;
-  --color-brand-700: #154027;
-  --color-brand-800: #0f2e1c;
-  --color-brand-900: #0a2114;
+  /* Fresh emerald palette — lighter & more vibrant than the previous
+     forest-green scale. Used everywhere via `brand-50` … `brand-900`. */
+  --color-brand-50:  #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-500: #10b981;   /* vivid emerald — chips, indicators */
+  --color-brand-600: #059669;   /* primary button default */
+  --color-brand-700: #047857;   /* primary UI accent (links, badges) */
+  --color-brand-800: #065f46;   /* hover state */
+  --color-brand-900: #064e3b;   /* deepest accent text */
 }
 
 html, body {
@@ -110,12 +112,13 @@ main {
 
 .dark {
   /* Base canvas */
-  --c-bg-page:      #0d1612;
-  --c-bg-card:      #18211d;
-  --c-bg-card-2:    #1f2a25;   /* slightly elevated cards / headers */
+  /* Brighter dark-green canvas to match the new emerald brand palette. */
+  --c-bg-page:      #0f2e25;
+  --c-bg-card:      #143a30;
+  --c-bg-card-2:    #1a463b;   /* slightly elevated cards / headers */
   --c-bg-input:     #11181500;
-  --c-bg-hover:     #232f29;
-  --c-bg-active:    #2a3933;
+  --c-bg-hover:     #1f5246;
+  --c-bg-active:    #275f51;
 
   /* Text */
   --c-text-1:       #e8ebe9;    /* primary body text */

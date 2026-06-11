@@ -465,7 +465,7 @@ export default function Sidebar({
     <>
       {/* ─── Mobile top bar (hamburger + brand) ─────────────────────── */}
       <div
-        className="md:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 h-14 bg-[#0b1813] border-b border-white/[0.06] text-white"
+        className="md:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 h-14 bg-[#0d3a2a] border-b border-white/[0.06] text-white"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <button
@@ -503,7 +503,7 @@ export default function Sidebar({
 
       {/* ─── Sidebar / drawer ───────────────────────────────────────── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 md:w-64 flex flex-col bg-gradient-to-b from-[#0e1f18] via-[#0b1813] to-[#091410] border-r border-white/[0.06] transform transition-transform duration-200 ease-out ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 md:w-64 flex flex-col bg-gradient-to-b from-[#10523a] via-[#0d4530] to-[#0a3826] border-r border-white/[0.06] transform transition-transform duration-200 ease-out ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
         style={{
@@ -528,7 +528,7 @@ export default function Sidebar({
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center font-black text-white text-base shadow-lg shadow-emerald-900/40 ring-1 ring-white/10">
               S
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0b1813]" />
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0d4530]" />
           </div>
           <div>
             <div className="text-[9px] uppercase tracking-[0.22em] font-semibold text-emerald-300/70">
@@ -584,7 +584,7 @@ export default function Sidebar({
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-700 flex items-center justify-center text-white text-xs font-bold ring-1 ring-white/10 shadow">
               {initialsFrom(displayName)}
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#0b1813]" />
+            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#0d4530]" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[13px] font-medium text-white truncate">
