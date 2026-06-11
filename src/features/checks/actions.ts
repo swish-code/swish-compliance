@@ -29,6 +29,18 @@ const ResultSchema = z.object({
   checklist_template_id: z.coerce.number().int().positive().optional().nullable(),
 });
 
+const AssignSchema = z
+  .object({
+    check_id: z.coerce.number().int().positive(),
+    auditor_user_id: z.coerce.number().int().positive().optional().nullable(),
+    dm_user_id: z.coerce.number().int().positive().optional().nullable(),
+    comment: z.string().trim().min(1, "Comment is required.").max(2000),
+  })
+  .refine(
+    (v) => !!(v.auditor_user_id || v.dm_user_id),
+    "Pick at least one assignee (Auditor or Department Manager)."
+  );
+
 function nullEmpty<T extends Record<string, FormDataEntryValue>>(o: T) {
   const out: Record<string, unknown> = { ...o };
   for (const k of Object.keys(out)) if (out[k] === "") out[k] = null;
@@ -135,4 +147,71 @@ export async function recordResultAction(formData: FormData) {
   revalidatePath("/tests");
   revalidatePath(`/tests/${parsed.check_id}`);
   revalidatePath("/controls");
+}
+
+/**
+ * Assign a test to an Auditor and/or a Department Manager with an
+ * accompanying comment. Each selected user gets an in-app notification
+ * carrying the test name, comment, sender, and timestamp - exactly the
+ * fields the spec calls for. The assignment itself is also written to
+ * audit_logs so it shows up in the activity feed and we have a
+ * tamper-evident record of who asked whom to look at what, and when.
+ */
+export async function assignTestAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const raw = Object.fromEntries(formData.entries());
+  const blank = (v: FormDataEntryValue | undefined) =>
+    v === "" || v === undefined ? null : v;
+
+  const parsed = AssignSchema.parse({
+    check_id: raw.check_id,
+    auditor_user_id: blank(raw.auditor_user_id),
+    dm_user_id: blank(raw.dm_user_id),
+    comment: raw.comment,
+  });
+
+  const check = await getCheck(parsed.check_id);
+  if (!check) throw new Error("Test not found.");
+
+  const userIds = [parsed.auditor_user_id, parsed.dm_user_id].filter(
+    (n): n is number => typeof n === "number"
+  );
+
+  await notify({
+    audience: { userIds, excludeActorId: user.id },
+    actor: { id: user.id, name: user.displayName, role: user.role },
+    kind: "check:assigned",
+    title: `📋 You've been assigned to test: "${check.name}"`,
+    body:
+      `Assigned by ${user.displayName}. ` +
+      `Comment: "${parsed.comment}". ` +
+      `Sent ${new Date().toLocaleString()}.`,
+    severity: "info",
+    entity: {
+      type: "check",
+      id: parsed.check_id,
+      href: `/tests/${parsed.check_id}`,
+    },
+  });
+
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'check:assigned', 'check', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      parsed.check_id,
+      JSON.stringify({
+        check_name: check.name,
+        comment: parsed.comment,
+        auditor_user_id: parsed.auditor_user_id ?? null,
+        dm_user_id: parsed.dm_user_id ?? null,
+        assigned_by: user.displayName,
+        assigned_by_role: user.role,
+      }),
+    ]
+  );
+
+  revalidatePath("/tests");
+  revalidatePath(`/tests/${parsed.check_id}`);
 }
