@@ -112,23 +112,23 @@ main {
 
 .dark {
   /* Base canvas */
-  /* Brighter dark-green canvas to match the new emerald brand palette. */
-  --c-bg-page:      #0f2e25;
-  --c-bg-card:      #143a30;
-  --c-bg-card-2:    #1a463b;   /* slightly elevated cards / headers */
-  --c-bg-input:     #11181500;
-  --c-bg-hover:     #1f5246;
-  --c-bg-active:    #275f51;
+  /* Neutral dark canvas - true black-leaning grays, no green tint. */
+  --c-bg-page:      #0a0a0a;
+  --c-bg-card:      #161616;
+  --c-bg-card-2:    #1c1c1c;   /* slightly elevated cards / headers */
+  --c-bg-input:     #1010100a;
+  --c-bg-hover:     #232323;
+  --c-bg-active:    #2c2c2c;
 
-  /* Text */
-  --c-text-1:       #e8ebe9;    /* primary body text */
-  --c-text-2:       #c7cdc9;    /* secondary */
-  --c-text-3:       #98a09c;    /* labels */
-  --c-text-4:       #6a746f;    /* muted */
+  /* Text - neutral whites/grays. */
+  --c-text-1:       #ededed;    /* primary body text */
+  --c-text-2:       #c9c9c9;    /* secondary */
+  --c-text-3:       #989898;    /* labels */
+  --c-text-4:       #6b6b6b;    /* muted */
 
   /* Lines */
-  --c-border:       #2a3530;
-  --c-border-soft:  #1f2a25;
+  --c-border:       #2e2e2e;
+  --c-border-soft:  #232323;
 }
 
 html.dark,

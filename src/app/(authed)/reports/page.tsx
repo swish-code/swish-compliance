@@ -260,7 +260,7 @@ export default async function ReportsPage() {
       {/* ──────────────────────────────────────────────────────────── */}
       {/*  HERO — Compliance Health                                    */}
       {/* ──────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden rounded-3xl border border-emerald-700/30 bg-gradient-to-br from-[#10523a] via-[#0d4730] to-[#0a3a28] text-white p-6 md:p-8 mb-6 shadow-xl">
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-700/30 dark:border-white/10 bg-gradient-to-br from-[#10523a] via-[#0d4730] to-[#0a3a28] dark:from-[#1a1a1a] dark:via-[#141414] dark:to-[#0d0d0d] text-white p-6 md:p-8 mb-6 shadow-xl">
         {/* Decorative orbs */}
         <div className="absolute -top-32 -right-32 w-80 h-80 rounded-full bg-emerald-500/20 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-brand-500/10 blur-3xl pointer-events-none" />

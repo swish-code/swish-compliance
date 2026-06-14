@@ -144,7 +144,7 @@ export default async function MyWorkPage() {
       userLabel={user.displayName}
     >
       {/* ── HERO ───────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden rounded-3xl border border-emerald-700/30 bg-gradient-to-br from-[#10523a] via-[#0d4730] to-[#0a3a28] text-white p-6 md:p-8 mb-6 shadow-xl">
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-700/30 dark:border-white/10 bg-gradient-to-br from-[#10523a] via-[#0d4730] to-[#0a3a28] dark:from-[#1a1a1a] dark:via-[#141414] dark:to-[#0d0d0d] text-white p-6 md:p-8 mb-6 shadow-xl">
         <div className="absolute -top-24 -right-16 w-72 h-72 rounded-full bg-emerald-500/20 blur-3xl pointer-events-none" />
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div className="flex-1 min-w-[260px]">
