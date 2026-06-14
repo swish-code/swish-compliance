@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { transitionSopAction } from "./actions";
 
 type TransitionView = {
@@ -18,6 +19,7 @@ export default function ApprovalActions({
   sopId: number;
   transitions: TransitionView[];
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState<TransitionView | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -55,6 +57,14 @@ export default function ApprovalActions({
           onClose={() => !submitting && setOpen(null)}
           submitting={submitting}
           setSubmitting={setSubmitting}
+          onSuccess={() => {
+            // Close the modal then force the parent server component to
+            // refetch so the new SOP status (badge, available transitions,
+            // approval history entry) shows up without a manual refresh.
+            setOpen(null);
+            setSubmitting(false);
+            router.refresh();
+          }}
         />
       )}
     </>
@@ -67,12 +77,14 @@ function CommentModal({
   onClose,
   submitting,
   setSubmitting,
+  onSuccess,
 }: {
   sopId: number;
   transition: TransitionView;
   onClose: () => void;
   submitting: boolean;
   setSubmitting: (v: boolean) => void;
+  onSuccess: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -86,9 +98,11 @@ function CommentModal({
     setSubmitting(true);
     try {
       await transitionSopAction(formData);
-      // The server action revalidates; the page will re-render with the
-      // new state. We don't need to call onClose() — the modal unmounts
-      // when the parent re-renders.
+      // revalidatePath() on the server only flushes the route cache;
+      // client components don't lose state from it. We have to explicitly
+      // close the modal AND ask Next to refetch the parent server
+      // component so the new badge / history / available actions render.
+      onSuccess();
     } catch (err) {
       // The action threw — surface the message and let the user retry.
       setSubmitting(false);
