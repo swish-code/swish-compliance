@@ -179,6 +179,15 @@ export async function createSopAction(formData: FormData) {
   const blankToNull = (v: FormDataEntryValue | undefined) =>
     v === "" || v === undefined ? null : v;
 
+  // The Brand select uses the sentinel "__function__" to mean "Brand /
+  // Function" (the SOP spans every brand). The Department select uses
+  // "__all__" for "All departments". Lift those into boolean flags BEFORE
+  // Zod parsing so the *_id Zod number coercion never sees them.
+  const brandIsFunction = raw.brand_id === "__function__";
+  const isAllDepartments = raw.department_id === "__all__";
+  if (brandIsFunction) (raw as Record<string, unknown>).brand_id = "";
+  if (isAllDepartments) (raw as Record<string, unknown>).department_id = "";
+
   const parsed = CreateSchema.parse({
     ...raw,
     file_url: blankToNull(raw.file_url),
@@ -206,6 +215,8 @@ export async function createSopAction(formData: FormData) {
     attachment_data_url: file?.dataUrl ?? null,
     attachment_name: file?.name ?? null,
     attachment_mime: file?.mime ?? null,
+    brand_is_function: brandIsFunction,
+    is_all_departments: isAllDepartments,
     created_by: user.id,
   });
 

@@ -47,6 +47,9 @@ export type Sop = {
   review_date: string | null;
   created_at: string;
   updated_at: string;
+  // Scope flags (migration 020)
+  brand_is_function: boolean;
+  is_all_departments: boolean;
   // ─── 10 structured sections from the Universal SOP Template ──────────
   purpose: string | null;
   scope: string | null;

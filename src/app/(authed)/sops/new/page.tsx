@@ -81,6 +81,7 @@ export default async function NewSopPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="">—</option>
+                <option value="__function__">✦ Brand / Function (cross-brand)</option>
                 {brands.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
@@ -97,6 +98,7 @@ export default async function NewSopPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="">—</option>
+                <option value="__all__">✦ All departments</option>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}

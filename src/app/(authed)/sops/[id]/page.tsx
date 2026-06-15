@@ -471,8 +471,24 @@ export default async function SopDetailPage({
           Details
         </h3>
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-          <Field label="Brand">{sop.brand_name ?? "—"}</Field>
-          <Field label="Department">{sop.department_name ?? "—"}</Field>
+          <Field label="Brand">
+            {sop.brand_is_function ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200">
+                ✦ Brand / Function
+              </span>
+            ) : (
+              sop.brand_name ?? "—"
+            )}
+          </Field>
+          <Field label="Department">
+            {sop.is_all_departments ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200">
+                ✦ All departments
+              </span>
+            ) : (
+              sop.department_name ?? "—"
+            )}
+          </Field>
           <Field label="Owner">{sop.owner_name ?? "—"}</Field>
           <Field label="Created by">{sop.created_by_name ?? "—"}</Field>
           <Field label="Effective date">{formatDate(sop.effective_date)}</Field>

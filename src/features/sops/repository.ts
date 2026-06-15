@@ -11,6 +11,7 @@ const SOP_SELECT = `
   s.created_by, u_c.display_name AS created_by_name,
   s.approved_by, u_a.display_name AS approved_by_name,
   s.approved_at, s.effective_date, s.review_date, s.created_at, s.updated_at,
+  s.brand_is_function, s.is_all_departments,
   s.purpose, s.scope, s.process_flow, s.roles_responsibilities,
   s.inputs_outputs, s.tools_forms, s.kpis,
   s.ownership_review, s.appendices, s.signatures_approval
@@ -92,6 +93,9 @@ export type CreateSopInput = {
   effective_date?: string | null;
   review_date?: string | null;
   created_by: number;
+  // Scope flags (migration 020) — TRUE overrides the corresponding _id.
+  brand_is_function?: boolean;
+  is_all_departments?: boolean;
   // 10 structured sections - all optional
   purpose?: string | null;
   scope?: string | null;
@@ -106,16 +110,25 @@ export type CreateSopInput = {
 };
 
 export async function createSop(input: CreateSopInput): Promise<number> {
+  // brand_id is meaningless when brand_is_function is true (the SOP spans
+  // every brand); same logic for is_all_departments. Force the *_id columns
+  // to NULL in those cases so the data on disk doesn't disagree with the
+  // semantic flag.
+  const brandId = input.brand_is_function ? null : input.brand_id ?? null;
+  const departmentId = input.is_all_departments ? null : input.department_id ?? null;
+
   const row = await queryOne<{ id: number }>(
     `INSERT INTO sops
       (code, title, description, version, status, file_url,
        attachment_data_url, attachment_name, attachment_mime,
        brand_id, department_id, owner_id, created_by, effective_date, review_date,
+       brand_is_function, is_all_departments,
        purpose, scope, process_flow, roles_responsibilities,
        inputs_outputs, tools_forms, kpis,
        ownership_review, appendices, signatures_approval)
      VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-             $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+             $15, $16,
+             $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
      RETURNING id`,
     [
       input.code ?? null,
@@ -126,12 +139,14 @@ export async function createSop(input: CreateSopInput): Promise<number> {
       input.attachment_data_url ?? null,
       input.attachment_name ?? null,
       input.attachment_mime ?? null,
-      input.brand_id ?? null,
-      input.department_id ?? null,
+      brandId,
+      departmentId,
       input.owner_id ?? input.created_by,
       input.created_by,
       input.effective_date ?? null,
       input.review_date ?? null,
+      input.brand_is_function ?? false,
+      input.is_all_departments ?? false,
       input.purpose ?? null,
       input.scope ?? null,
       input.process_flow ?? null,
