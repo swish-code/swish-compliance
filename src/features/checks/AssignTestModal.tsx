@@ -4,26 +4,33 @@ import { useEffect, useState, useTransition } from "react";
 import { assignTestAction } from "./actions";
 
 type UserOpt = { id: number; display_name: string };
+type Lookup = { id: number; name: string };
 
 export default function AssignTestModal({
   checkId,
   checkName,
   auditors,
   departmentManagers,
+  brands,
+  departments,
 }: {
   checkId: number;
   checkName: string;
   auditors: UserOpt[];
   departmentManagers: UserOpt[];
+  brands: Lookup[];
+  departments: Lookup[];
 }) {
   const [open, setOpen] = useState(false);
-  const [auditorId, setAuditorId] = useState("");
-  const [dmId, setDmId] = useState("");
+  const [brandId, setBrandId] = useState("");
+  const [deptId, setDeptId] = useState("");
+  // Combined value: "auditor:<id>" or "dm:<id>" so a single <select>
+  // can offer both pools while keeping the role context attached.
+  const [assignedValue, setAssignedValue] = useState("");
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Lock body scroll while modal is open
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -33,7 +40,6 @@ export default function AssignTestModal({
     };
   }, [open]);
 
-  // ESC closes
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -41,6 +47,7 @@ export default function AssignTestModal({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   function close() {
@@ -50,16 +57,17 @@ export default function AssignTestModal({
   }
 
   function reset() {
-    setAuditorId("");
-    setDmId("");
+    setBrandId("");
+    setDeptId("");
+    setAssignedValue("");
     setComment("");
     setError(null);
   }
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!auditorId && !dmId) {
-      setError("Pick at least one assignee (Auditor or Department Manager).");
+    if (!assignedValue) {
+      setError("Pick an Auditor or Department Manager to assign to.");
       return;
     }
     if (!comment.trim()) {
@@ -68,10 +76,14 @@ export default function AssignTestModal({
     }
     setError(null);
 
+    const [assignedRole, assignedId] = assignedValue.split(":");
+
     const fd = new FormData();
     fd.append("check_id", String(checkId));
-    if (auditorId) fd.append("auditor_user_id", auditorId);
-    if (dmId) fd.append("dm_user_id", dmId);
+    fd.append("assigned_user_id", assignedId);
+    fd.append("assigned_role", assignedRole);
+    if (brandId) fd.append("brand_id", brandId);
+    if (deptId) fd.append("department_id", deptId);
     fd.append("comment", comment.trim());
 
     startTransition(async () => {
@@ -102,115 +114,167 @@ export default function AssignTestModal({
           onClick={close}
         >
           <div
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-[slideUp_160ms_ease-out]"
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-8 max-h-[90vh] overflow-y-auto animate-[slideUp_160ms_ease-out]"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="assign-test-title"
           >
-            <button
-              type="button"
-              onClick={close}
-              disabled={pending}
-              className="absolute top-3 right-3 w-8 h-8 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center disabled:opacity-50"
-              aria-label="Close"
-            >
-              ✕
-            </button>
+            {/* Header bar with close */}
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-8 py-5 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2
+                  id="assign-test-title"
+                  className="text-xl font-bold text-gray-900"
+                >
+                  Assign test
+                </h2>
+                <p
+                  className="text-sm text-gray-500 mt-0.5 truncate"
+                  title={checkName}
+                >
+                  {checkName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={close}
+                disabled={pending}
+                className="shrink-0 w-9 h-9 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center disabled:opacity-50 text-lg"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
 
-            <h2
-              id="assign-test-title"
-              className="text-base font-semibold text-gray-900 mb-1 pr-8"
-            >
-              Assign test
-            </h2>
-            <p className="text-xs text-gray-500 mb-5 truncate" title={checkName}>
-              {checkName}
-            </p>
+            <form onSubmit={submit} className="px-8 py-7 space-y-6">
+              {/* Brand + Department side by side on md+ */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-2">
+                    Brand
+                  </label>
+                  <select
+                    value={brandId}
+                    onChange={(e) => setBrandId(e.target.value)}
+                    disabled={pending}
+                    className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  >
+                    <option value="">— None —</option>
+                    {brands.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  {brands.length === 0 && (
+                    <p className="text-[11px] text-amber-700 mt-1.5">
+                      No active brands yet.
+                    </p>
+                  )}
+                </div>
 
-            <form onSubmit={submit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-2">
+                    Departments
+                  </label>
+                  <select
+                    value={deptId}
+                    onChange={(e) => setDeptId(e.target.value)}
+                    disabled={pending}
+                    className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  >
+                    <option value="">— None —</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                  {departments.length === 0 && (
+                    <p className="text-[11px] text-amber-700 mt-1.5">
+                      No active departments yet.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Assign To — grouped (Auditor / Department Manager) */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                  Auditor
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                  Assign To <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={auditorId}
-                  onChange={(e) => setAuditorId(e.target.value)}
+                  value={assignedValue}
+                  onChange={(e) => setAssignedValue(e.target.value)}
                   disabled={pending}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  required
+                  className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                 >
-                  <option value="">— None —</option>
-                  {auditors.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.display_name}
-                    </option>
-                  ))}
+                  <option value="">— Choose someone —</option>
+                  {auditors.length > 0 && (
+                    <optgroup label="Auditor">
+                      {auditors.map((u) => (
+                        <option key={`auditor:${u.id}`} value={`auditor:${u.id}`}>
+                          {u.display_name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {departmentManagers.length > 0 && (
+                    <optgroup label="Department Manager">
+                      {departmentManagers.map((u) => (
+                        <option key={`dm:${u.id}`} value={`dm:${u.id}`}>
+                          {u.display_name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
-                {auditors.length === 0 && (
+                <p className="text-[11px] text-gray-500 mt-1.5">
+                  The list is grouped by role. Pick one user.
+                </p>
+                {auditors.length === 0 && departmentManagers.length === 0 && (
                   <p className="text-[11px] text-amber-700 mt-1">
-                    No users with the Auditor role yet.
+                    No active users with the Auditor or Department Manager roles yet.
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                  Department Manager
-                </label>
-                <select
-                  value={dmId}
-                  onChange={(e) => setDmId(e.target.value)}
-                  disabled={pending}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="">— None —</option>
-                  {departmentManagers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.display_name}
-                    </option>
-                  ))}
-                </select>
-                {departmentManagers.length === 0 && (
-                  <p className="text-[11px] text-amber-700 mt-1">
-                    No users with the Department Manager role yet.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
                   Comment <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  rows={4}
+                  rows={5}
                   required
                   disabled={pending}
                   placeholder="Instructions, what you need them to check, deadline expectations…"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+                  className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
                 />
               </div>
 
               {error && (
-                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
                   {error}
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex items-center justify-end gap-4 pt-4 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={close}
                   disabled={pending}
-                  className="text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={pending}
-                  className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60 inline-flex items-center gap-2"
+                  className="bg-brand-700 hover:bg-brand-800 text-white px-6 py-3 rounded-xl text-sm font-semibold disabled:opacity-60 inline-flex items-center gap-2 shadow-sm"
                 >
                   {pending ? (
                     <>

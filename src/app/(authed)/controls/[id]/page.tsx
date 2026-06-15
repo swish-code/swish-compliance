@@ -46,18 +46,25 @@ export default async function ControlDetailPage({
   // Audiences for the per-row "Assign" modal on each Test in the table
   // below — Auditors and Department Managers, resolved once and passed
   // to every modal so opening one doesn't trigger a network round-trip.
-  const [auditors, departmentManagers] = await Promise.all([
-    queryAll<{ id: number; display_name: string }>(
-      `SELECT id, display_name FROM users
-       WHERE is_active AND role = 'auditor'
-       ORDER BY display_name`
-    ),
-    queryAll<{ id: number; display_name: string }>(
-      `SELECT id, display_name FROM users
-       WHERE is_active AND role = 'department_manager'
-       ORDER BY display_name`
-    ),
-  ]);
+  const [auditors, departmentManagers, modalBrands, modalDepartments] =
+    await Promise.all([
+      queryAll<{ id: number; display_name: string }>(
+        `SELECT id, display_name FROM users
+         WHERE is_active AND role = 'auditor'
+         ORDER BY display_name`
+      ),
+      queryAll<{ id: number; display_name: string }>(
+        `SELECT id, display_name FROM users
+         WHERE is_active AND role = 'department_manager'
+         ORDER BY display_name`
+      ),
+      queryAll<{ id: number; name: string }>(
+        `SELECT id, name FROM brands WHERE is_active ORDER BY name`
+      ),
+      queryAll<{ id: number; name: string }>(
+        `SELECT id, name FROM departments WHERE is_active ORDER BY name`
+      ),
+    ]);
 
   const sops = canEdit
     ? await queryAll<{ id: number; title: string }>(
@@ -205,6 +212,8 @@ export default async function ControlDetailPage({
                       checkName={t.name}
                       auditors={auditors}
                       departmentManagers={departmentManagers}
+                      brands={modalBrands}
+                      departments={modalDepartments}
                     />
                   </td>
                 </tr>

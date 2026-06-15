@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser, canEditSops } from "@/lib/auth/guard";
-import { execute } from "@/lib/db";
+import { execute, queryOne } from "@/lib/db";
 import { createCheck, recordResult, getCheck } from "./repository";
 import { recomputeControlHealth } from "../controls/repository";
 import { createCapa } from "../capa/repository";
@@ -29,17 +29,14 @@ const ResultSchema = z.object({
   checklist_template_id: z.coerce.number().int().positive().optional().nullable(),
 });
 
-const AssignSchema = z
-  .object({
-    check_id: z.coerce.number().int().positive(),
-    auditor_user_id: z.coerce.number().int().positive().optional().nullable(),
-    dm_user_id: z.coerce.number().int().positive().optional().nullable(),
-    comment: z.string().trim().min(1, "Comment is required.").max(2000),
-  })
-  .refine(
-    (v) => !!(v.auditor_user_id || v.dm_user_id),
-    "Pick at least one assignee (Auditor or Department Manager)."
-  );
+const AssignSchema = z.object({
+  check_id: z.coerce.number().int().positive(),
+  assigned_user_id: z.coerce.number().int().positive(),
+  assigned_role: z.enum(["auditor", "dm"]),
+  brand_id: z.coerce.number().int().positive().optional().nullable(),
+  department_id: z.coerce.number().int().positive().optional().nullable(),
+  comment: z.string().trim().min(1, "Comment is required.").max(2000),
+});
 
 function nullEmpty<T extends Record<string, FormDataEntryValue>>(o: T) {
   const out: Record<string, unknown> = { ...o };
@@ -165,25 +162,47 @@ export async function assignTestAction(formData: FormData): Promise<void> {
 
   const parsed = AssignSchema.parse({
     check_id: raw.check_id,
-    auditor_user_id: blank(raw.auditor_user_id),
-    dm_user_id: blank(raw.dm_user_id),
+    assigned_user_id: raw.assigned_user_id,
+    assigned_role: raw.assigned_role,
+    brand_id: blank(raw.brand_id),
+    department_id: blank(raw.department_id),
     comment: raw.comment,
   });
 
   const check = await getCheck(parsed.check_id);
   if (!check) throw new Error("Test not found.");
 
-  const userIds = [parsed.auditor_user_id, parsed.dm_user_id].filter(
-    (n): n is number => typeof n === "number"
-  );
+  // Resolve optional brand + department labels so the notification body
+  // carries human-readable context, not just opaque IDs.
+  const brand = parsed.brand_id
+    ? await queryOne<{ name: string }>(
+        `SELECT name FROM brands WHERE id = $1`,
+        [parsed.brand_id]
+      )
+    : null;
+  const department = parsed.department_id
+    ? await queryOne<{ name: string }>(
+        `SELECT name FROM departments WHERE id = $1`,
+        [parsed.department_id]
+      )
+    : null;
+
+  const roleLabel =
+    parsed.assigned_role === "auditor" ? "Auditor" : "Department Manager";
+  const contextBits = [
+    brand ? `Brand: ${brand.name}` : null,
+    department ? `Department: ${department.name}` : null,
+  ].filter(Boolean);
+  const contextLine = contextBits.length > 0 ? contextBits.join(" · ") + ". " : "";
 
   await notify({
-    audience: { userIds, excludeActorId: user.id },
+    audience: { userIds: [parsed.assigned_user_id], excludeActorId: user.id },
     actor: { id: user.id, name: user.displayName, role: user.role },
     kind: "check:assigned",
-    title: `📋 You've been assigned to test: "${check.name}"`,
+    title: `📋 You've been assigned (${roleLabel}) to test: "${check.name}"`,
     body:
       `Assigned by ${user.displayName}. ` +
+      contextLine +
       `Comment: "${parsed.comment}". ` +
       `Sent ${new Date().toLocaleString()}.`,
     severity: "info",
@@ -204,8 +223,12 @@ export async function assignTestAction(formData: FormData): Promise<void> {
       JSON.stringify({
         check_name: check.name,
         comment: parsed.comment,
-        auditor_user_id: parsed.auditor_user_id ?? null,
-        dm_user_id: parsed.dm_user_id ?? null,
+        assigned_user_id: parsed.assigned_user_id,
+        assigned_role: parsed.assigned_role,
+        brand_id: parsed.brand_id ?? null,
+        brand_name: brand?.name ?? null,
+        department_id: parsed.department_id ?? null,
+        department_name: department?.name ?? null,
         assigned_by: user.displayName,
         assigned_by_role: user.role,
       }),

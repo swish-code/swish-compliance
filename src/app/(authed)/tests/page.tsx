@@ -36,21 +36,29 @@ export default async function TestsPage({
      ORDER BY name`
   );
 
-  // Audiences for the Assign-Test modal: active Auditors + active
-  // Department Managers. We resolve them server-side once and pass them
-  // to every row's modal so the dropdowns don't fetch over the network.
-  const [auditors, departmentManagers] = await Promise.all([
-    queryAll<{ id: number; display_name: string }>(
-      `SELECT id, display_name FROM users
-       WHERE is_active AND role = 'auditor'
-       ORDER BY display_name`
-    ),
-    queryAll<{ id: number; display_name: string }>(
-      `SELECT id, display_name FROM users
-       WHERE is_active AND role = 'department_manager'
-       ORDER BY display_name`
-    ),
-  ]);
+  // Audiences + lookups for the Assign-Test modal: active Auditors,
+  // active Department Managers, active Brands and active Departments.
+  // We resolve them server-side once and pass them to every row's modal
+  // so the dropdowns don't fetch over the network.
+  const [auditors, departmentManagers, modalBrands, modalDepartments] =
+    await Promise.all([
+      queryAll<{ id: number; display_name: string }>(
+        `SELECT id, display_name FROM users
+         WHERE is_active AND role = 'auditor'
+         ORDER BY display_name`
+      ),
+      queryAll<{ id: number; display_name: string }>(
+        `SELECT id, display_name FROM users
+         WHERE is_active AND role = 'department_manager'
+         ORDER BY display_name`
+      ),
+      queryAll<{ id: number; name: string }>(
+        `SELECT id, name FROM brands WHERE is_active ORDER BY name`
+      ),
+      queryAll<{ id: number; name: string }>(
+        `SELECT id, name FROM departments WHERE is_active ORDER BY name`
+      ),
+    ]);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -194,6 +202,8 @@ export default async function TestsPage({
                       checkName={ch.name}
                       auditors={auditors}
                       departmentManagers={departmentManagers}
+                      brands={modalBrands}
+                      departments={modalDepartments}
                     />
                   </td>
                 </tr>
