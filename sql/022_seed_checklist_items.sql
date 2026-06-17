@@ -1,4 +1,4 @@
-﻿-- =========================================================================
+-- =========================================================================
 -- Seed: Food / Chemical / Fire / Hygiene checklists (56 items) from the
 -- chicklist.xlsx file. Each item has a unique code (CHK-FOO-001 etc.),
 -- section, and is linked to a check (test) via the check_checklist_items
