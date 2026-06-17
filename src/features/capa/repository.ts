@@ -111,12 +111,18 @@ export async function transitionCapa(
       [id, data.resolution_note ?? null, data.evidence_url ?? null]
     );
   } else if (next === "verified" || next === "closed") {
+    // $2 is used twice — once assigned to status (VARCHAR(30)) and once
+    // compared against a TEXT literal ('closed'). Without the explicit
+    // ::text cast Postgres throws 42P08 "inconsistent types deduced for
+    // parameter" because it can't tell whether $2 should be VARCHAR or
+    // TEXT. Casting both sides to text makes the type unambiguous; the
+    // assignment then implicitly coerces back to VARCHAR(30).
     await execute(
       `UPDATE corrective_actions SET
-         status = $2,
+         status = $2::text,
          verified_by = $3,
          verified_at = COALESCE(verified_at, NOW()),
-         closed_at = CASE WHEN $2 = 'closed' THEN NOW() ELSE closed_at END
+         closed_at = CASE WHEN $2::text = 'closed' THEN NOW() ELSE closed_at END
        WHERE id = $1`,
       [id, next, data.verified_by ?? null]
     );
