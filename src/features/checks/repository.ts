@@ -1,6 +1,12 @@
 import "server-only";
 import { queryAll, queryOne, execute } from "@/lib/db";
-import type { Check, CheckResult, CheckStatus, CheckFrequency } from "./types";
+import type {
+  Check,
+  CheckResult,
+  CheckStatus,
+  CheckFrequency,
+  LinkedChecklistItem,
+} from "./types";
 
 const CHECK_SELECT = `
   ch.id, ch.code, ch.name, ch.description,
@@ -45,6 +51,35 @@ export async function listChecks(filters: {
 
 export async function getCheck(id: number): Promise<Check | undefined> {
   return queryOne<Check>(`SELECT ${CHECK_SELECT} WHERE ch.id = $1`, [id]);
+}
+
+/**
+ * All checklist items linked to a test via the check_checklist_items
+ * junction. Items come back grouped by template, ordered by section then
+ * sort_order, so the page can render them as one continuous list.
+ */
+export async function listLinkedChecklistItems(
+  checkId: number
+): Promise<LinkedChecklistItem[]> {
+  return queryAll<LinkedChecklistItem>(
+    `SELECT
+       ci.id           AS item_id,
+       ci.code         AS item_code,
+       ci.sort_order   AS item_no,
+       ci.section      AS section,
+       ci.question     AS question,
+       ci.weight       AS weight,
+       ci.is_critical  AS is_critical,
+       t.id            AS template_id,
+       t.code          AS template_code,
+       t.name          AS template_name
+     FROM check_checklist_items cci
+     JOIN checklist_items     ci ON ci.id = cci.checklist_item_id
+     JOIN checklist_templates t  ON t.id  = ci.template_id
+     WHERE cci.check_id = $1
+     ORDER BY t.name, ci.section NULLS LAST, ci.sort_order, ci.id`,
+    [checkId]
+  );
 }
 
 export async function listCheckResults(checkId: number, limit = 25): Promise<CheckResult[]> {

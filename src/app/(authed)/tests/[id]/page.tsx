@@ -2,7 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
-import { getCheck, listCheckResults } from "@/features/checks/repository";
+import {
+  getCheck,
+  listCheckResults,
+  listLinkedChecklistItems,
+} from "@/features/checks/repository";
 import { recordResultAction } from "@/features/checks/actions";
 import FilePicker from "@/features/sops/FilePicker";
 import { queryAll } from "@/lib/db";
@@ -22,7 +26,10 @@ export default async function CheckDetailPage({
   const id = Number(idStr);
   const check = await getCheck(id);
   if (!check) notFound();
-  const results = await listCheckResults(id, 50);
+  const [results, linkedItems] = await Promise.all([
+    listCheckResults(id, 50),
+    listLinkedChecklistItems(id),
+  ]);
 
   // Active checklists for the "Record a new result" dropdown.
   const checklists = await queryAll<{ id: number; name: string; category: string | null }>(
@@ -125,6 +132,112 @@ export default async function CheckDetailPage({
                 <div className="text-sm text-gray-800">{check.reviewer_role}</div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Linked Checklist Items — every item across every checklist mapped
+          to this test, grouped by template + section. Read-only for now;
+          per-item recording will come in a later iteration. */}
+      {linkedItems.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                Linked Checklist Items
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {linkedItems.length} checkpoint{linkedItems.length === 1 ? "" : "s"} across{" "}
+                {new Set(linkedItems.map((i) => i.template_id)).size} checklist
+                {new Set(linkedItems.map((i) => i.template_id)).size === 1 ? "" : "s"}
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium">Checklist Name</th>
+                  <th className="text-left px-4 py-3 font-medium">Checklist ID</th>
+                  <th className="text-left px-4 py-3 font-medium">Checklist Title</th>
+                  <th className="text-left px-4 py-3 font-medium">Item No.</th>
+                  <th className="text-left px-4 py-3 font-medium">Section</th>
+                  <th className="text-left px-4 py-3 font-medium">Checkpoint</th>
+                  <th className="text-right px-4 py-3 font-medium">Weight</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linkedItems.map((item, idx) => {
+                  const prev = idx > 0 ? linkedItems[idx - 1] : null;
+                  const isFirstOfTemplate = !prev || prev.template_id !== item.template_id;
+                  const isFirstOfSection =
+                    isFirstOfTemplate || prev?.section !== item.section;
+                  return (
+                    <tr
+                      key={item.item_id}
+                      className={`border-t border-gray-100 ${
+                        isFirstOfTemplate ? "border-t-2 border-t-gray-200" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-3 text-gray-700 align-top">
+                        {isFirstOfTemplate ? (
+                          <Link
+                            href={`/checklists/templates/${item.template_id}`}
+                            className="text-brand-700 hover:underline font-medium"
+                          >
+                            {item.template_name.replace(/ checklist$/i, "")}
+                          </Link>
+                        ) : (
+                          <span className="text-gray-300">·</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {item.item_code ? (
+                          <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                            {item.item_code}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 align-top whitespace-nowrap">
+                        {isFirstOfTemplate ? item.template_name : <span className="text-gray-300">·</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 align-top tabular-nums">
+                        {item.item_no}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {item.section ? (
+                          isFirstOfSection ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-800 border border-brand-200">
+                              {item.section}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300 text-xs">↑</span>
+                          )
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-900 align-top max-w-lg">
+                        <div className="flex items-start gap-2">
+                          {item.is_critical && (
+                            <span
+                              title="Critical checkpoint"
+                              className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0"
+                            />
+                          )}
+                          <span>{item.question}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-700 align-top tabular-nums">
+                        {item.weight}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

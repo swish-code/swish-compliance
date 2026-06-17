@@ -70,6 +70,20 @@ export const CHECK_STATUS_TONE: Record<CheckStatus, string> = {
   accepted_risk: "bg-indigo-50 text-indigo-700 border-indigo-200",
 };
 
+/** A single checklist item linked to a test (row on the Test detail page). */
+export type LinkedChecklistItem = {
+  item_id: number;
+  item_code: string | null;
+  item_no: number;
+  section: string | null;
+  question: string;
+  weight: number;
+  is_critical: boolean;
+  template_id: number;
+  template_code: string | null;
+  template_name: string;
+};
+
 export const FREQUENCY_LABEL: Record<CheckFrequency, string> = {
   daily: "Daily",
   weekly: "Weekly",
