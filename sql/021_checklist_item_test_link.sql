@@ -22,8 +22,15 @@ ALTER TABLE checklist_items
   ADD COLUMN IF NOT EXISTS code    VARCHAR(40),
   ADD COLUMN IF NOT EXISTS section VARCHAR(120);
 
+-- Regular (non-partial) unique index on code. We rely on Postgres's default
+-- NULLS DISTINCT semantics: each NULL is treated as a different value, so
+-- legacy items (from migration 004) that have code IS NULL stay valid AND
+-- can coexist with new items that have unique codes. A partial index
+-- (WHERE code IS NOT NULL) would require every ON CONFLICT to repeat the
+-- predicate to match it — a regular index keeps ON CONFLICT (code) simple.
+DROP INDEX IF EXISTS uq_checklist_items_code;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_checklist_items_code
-  ON checklist_items(code) WHERE code IS NOT NULL;
+  ON checklist_items(code);
 
 CREATE INDEX IF NOT EXISTS idx_checklist_items_section
   ON checklist_items(section);
