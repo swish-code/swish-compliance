@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { assignTestAction } from "./actions";
 
 type UserOpt = { id: number; display_name: string };
 type Lookup = { id: number; name: string };
-type OrgOpt = { id: number; display_label: string; level: number };
+type OrgOpt = {
+  id: number;
+  code: string;
+  name: string;
+  level: number;
+  parent_id: number | null;
+};
 
 export default function AssignTestModal({
   checkId,
@@ -27,13 +33,40 @@ export default function AssignTestModal({
   const [open, setOpen] = useState(false);
   const [brandId, setBrandId] = useState("");
   const [deptId, setDeptId] = useState("");
-  const [orgUnitId, setOrgUnitId] = useState("");
+  // Four cascading levels of the org tree. The submitted org_unit_id is
+  // the deepest non-empty level (or "" if none picked).
+  const [orgL1, setOrgL1] = useState("");
+  const [orgL2, setOrgL2] = useState("");
+  const [orgL3, setOrgL3] = useState("");
+  const [orgL4, setOrgL4] = useState("");
   // Combined value: "auditor:<id>" or "dm:<id>" so a single <select>
   // can offer both pools while keeping the role context attached.
   const [assignedValue, setAssignedValue] = useState("");
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Index orgUnits by parent_id so each cascading dropdown can look up its
+  // options in O(1) without re-scanning the whole array. "root" holds the
+  // top-level (parent_id IS NULL) nodes.
+  const childrenByParent = useMemo(() => {
+    const m = new Map<string, OrgOpt[]>();
+    for (const u of orgUnits) {
+      const key = u.parent_id == null ? "root" : String(u.parent_id);
+      const arr = m.get(key);
+      if (arr) arr.push(u);
+      else m.set(key, [u]);
+    }
+    return m;
+  }, [orgUnits]);
+
+  const orgLevel1 = childrenByParent.get("root") ?? [];
+  const orgLevel2 = orgL1 ? childrenByParent.get(orgL1) ?? [] : [];
+  const orgLevel3 = orgL2 ? childrenByParent.get(orgL2) ?? [] : [];
+  const orgLevel4 = orgL3 ? childrenByParent.get(orgL3) ?? [] : [];
+
+  // The deepest level the user has actually selected.
+  const orgUnitId = orgL4 || orgL3 || orgL2 || orgL1 || "";
 
   useEffect(() => {
     if (!open) return;
@@ -63,7 +96,10 @@ export default function AssignTestModal({
   function reset() {
     setBrandId("");
     setDeptId("");
-    setOrgUnitId("");
+    setOrgL1("");
+    setOrgL2("");
+    setOrgL3("");
+    setOrgL4("");
     setAssignedValue("");
     setComment("");
     setError(null);
@@ -205,27 +241,126 @@ export default function AssignTestModal({
                 </div>
               </div>
 
-              {/* Org Unit — single hierarchical dropdown (Centralised → */}
-              {/* department → sub-team, or Brand-wise → brand → branch).  */}
-              {/* Optional; auditor can leave as None for cross-cutting     */}
-              {/* tests that don't belong to any one node.                  */}
+              {/* Org Unit — 4 cascading dropdowns. Each level shows ONLY  */}
+              {/* the children of the previous level's selection, so the   */}
+              {/* tree (Centralised/Brand-wise → department → sub-team →   */}
+              {/* branch) is navigated step-by-step. The submitted         */}
+              {/* org_unit_id is the deepest non-empty level.              */}
               <div>
                 <label className="block text-sm font-semibold text-gray-800 mb-2">
                   Org Unit
                 </label>
-                <select
-                  value={orgUnitId}
-                  onChange={(e) => setOrgUnitId(e.target.value)}
-                  disabled={pending}
-                  className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-mono"
-                >
-                  <option value="">— None —</option>
-                  {orgUnits.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.display_label}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Level 1 — always visible (root: Centralised / Brand-wise) */}
+                  <select
+                    value={orgL1}
+                    onChange={(e) => {
+                      setOrgL1(e.target.value);
+                      // Picking a new root invalidates every deeper level.
+                      setOrgL2("");
+                      setOrgL3("");
+                      setOrgL4("");
+                    }}
+                    disabled={pending || orgLevel1.length === 0}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-mono disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">— Level 1 —</option>
+                    {orgLevel1.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.code} {u.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Level 2 — children of level 1 */}
+                  <select
+                    value={orgL2}
+                    onChange={(e) => {
+                      setOrgL2(e.target.value);
+                      setOrgL3("");
+                      setOrgL4("");
+                    }}
+                    disabled={pending || !orgL1 || orgLevel2.length === 0}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-mono disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">
+                      {!orgL1
+                        ? "— Pick Level 1 first —"
+                        : orgLevel2.length === 0
+                        ? "— No sub-units —"
+                        : "— Level 2 —"}
                     </option>
-                  ))}
-                </select>
+                    {orgLevel2.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.code} {u.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Level 3 — children of level 2 */}
+                  <select
+                    value={orgL3}
+                    onChange={(e) => {
+                      setOrgL3(e.target.value);
+                      setOrgL4("");
+                    }}
+                    disabled={pending || !orgL2 || orgLevel3.length === 0}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-mono disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">
+                      {!orgL2
+                        ? "— Pick Level 2 first —"
+                        : orgLevel3.length === 0
+                        ? "— No sub-units —"
+                        : "— Level 3 —"}
+                    </option>
+                    {orgLevel3.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.code} {u.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Level 4 — children of level 3 (branches, typically) */}
+                  <select
+                    value={orgL4}
+                    onChange={(e) => setOrgL4(e.target.value)}
+                    disabled={pending || !orgL3 || orgLevel4.length === 0}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-mono disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">
+                      {!orgL3
+                        ? "— Pick Level 3 first —"
+                        : orgLevel4.length === 0
+                        ? "— No sub-units —"
+                        : "— Level 4 —"}
+                    </option>
+                    {orgLevel4.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.code} {u.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* Live breadcrumb of the deepest selection. Helps the   */}
+                {/* user confirm exactly what gets attached to the test.  */}
+                {orgUnitId && (
+                  <p className="text-[11px] text-gray-500 mt-2">
+                    Selected:{" "}
+                    <span className="font-mono text-brand-700">
+                      {[orgL1, orgL2, orgL3, orgL4]
+                        .filter(Boolean)
+                        .map((id) => {
+                          const u = orgUnits.find(
+                            (x) => String(x.id) === id
+                          );
+                          return u ? `${u.code} ${u.name}` : "";
+                        })
+                        .filter(Boolean)
+                        .join("  ›  ")}
+                    </span>
+                  </p>
+                )}
                 {orgUnits.length === 0 && (
                   <p className="text-[11px] text-amber-700 mt-1.5">
                     No org units yet. Ask an admin to seed the tree at
