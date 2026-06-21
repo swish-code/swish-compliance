@@ -22,6 +22,18 @@ export type ChecklistItem = {
   is_critical: boolean;
 };
 
+export type ChecklistItemAnswer = "yes" | "no" | "na";
+
+/** Latest quick-run answer for a single item, joined with the user. */
+export type ChecklistItemLatestAnswer = {
+  item_id: number;
+  answer: ChecklistItemAnswer;
+  note: string | null;
+  answered_by: number | null;
+  answered_by_name: string | null;
+  answered_at: string;
+};
+
 // Fallback used only when the DB has no `checklist_category` rows yet.
 // The live list comes from config_options and is editable from /admin/config.
 export const CHECKLIST_CATEGORIES_FALLBACK = [

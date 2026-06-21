@@ -1,6 +1,11 @@
 import "server-only";
 import { queryAll, queryOne, execute } from "@/lib/db";
-import type { ChecklistTemplate, ChecklistItem } from "./types";
+import type {
+  ChecklistTemplate,
+  ChecklistItem,
+  ChecklistItemAnswer,
+  ChecklistItemLatestAnswer,
+} from "./types";
 
 const TPL_SELECT = `
   t.id, t.code, t.name, t.description, t.category, t.is_active,
@@ -94,4 +99,43 @@ export async function addItem(input: {
 
 export async function deleteItem(id: number): Promise<void> {
   await execute(`DELETE FROM checklist_items WHERE id = $1`, [id]);
+}
+
+/**
+ * One row per item in the template — the most recent answer, or no row
+ * at all if the item has never been answered. DISTINCT ON keeps the
+ * query simple and lets a partial index on (item_id, answered_at DESC)
+ * serve it directly.
+ */
+export async function listLatestAnswersForTemplate(
+  templateId: number
+): Promise<ChecklistItemLatestAnswer[]> {
+  return queryAll<ChecklistItemLatestAnswer>(
+    `SELECT DISTINCT ON (a.item_id)
+       a.item_id,
+       a.answer,
+       a.note,
+       a.answered_by,
+       u.display_name AS answered_by_name,
+       a.answered_at
+     FROM checklist_item_answers a
+     JOIN checklist_items i ON i.id = a.item_id
+     LEFT JOIN users u      ON u.id = a.answered_by
+     WHERE i.template_id = $1
+     ORDER BY a.item_id, a.answered_at DESC, a.id DESC`,
+    [templateId]
+  );
+}
+
+export async function recordItemAnswer(input: {
+  item_id: number;
+  answer: ChecklistItemAnswer;
+  note?: string | null;
+  answered_by: number;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO checklist_item_answers (item_id, answer, note, answered_by)
+     VALUES ($1, $2, $3, $4)`,
+    [input.item_id, input.answer, input.note ?? null, input.answered_by]
+  );
 }

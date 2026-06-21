@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser, canEditSops } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
-import { createTemplate, updateTemplate, addItem, deleteItem } from "./repository";
+import {
+  createTemplate,
+  updateTemplate,
+  addItem,
+  deleteItem,
+  recordItemAnswer,
+} from "./repository";
 
 const CreateTplSchema = z.object({
   code: z.string().trim().optional().nullable(),
@@ -81,6 +87,29 @@ export async function addItemAction(formData: FormData) {
     guidance: parsed.guidance ?? null,
     weight: parsed.weight,
     is_critical: parsed.is_critical === "on" || parsed.is_critical === "true",
+  });
+  revalidatePath(`/checklists/templates/${parsed.template_id}`);
+}
+
+const AnswerSchema = z.object({
+  item_id: z.coerce.number().int().positive(),
+  template_id: z.coerce.number().int().positive(),
+  answer: z.enum(["yes", "no", "na"]),
+  note: z.string().trim().optional().nullable(),
+});
+
+export async function recordChecklistItemAnswerAction(formData: FormData) {
+  const user = await requireUser();
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = AnswerSchema.parse({
+    ...raw,
+    note: raw.note === "" ? null : raw.note,
+  });
+  await recordItemAnswer({
+    item_id: parsed.item_id,
+    answer: parsed.answer,
+    note: parsed.note ?? null,
+    answered_by: user.id,
   });
   revalidatePath(`/checklists/templates/${parsed.template_id}`);
 }

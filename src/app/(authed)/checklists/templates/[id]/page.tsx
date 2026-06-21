@@ -5,11 +5,13 @@ import Workspace from "@/features/shell/Workspace";
 import {
   getTemplate,
   listTemplateItems,
+  listLatestAnswersForTemplate,
 } from "@/features/checklists/repository";
 import {
   updateTemplateAction,
   addItemAction,
   deleteItemAction,
+  recordChecklistItemAnswerAction,
 } from "@/features/checklists/actions";
 import { CHECKLIST_CATEGORIES_FALLBACK } from "@/features/checklists/types";
 import { listOptions } from "@/features/config/repository";
@@ -24,7 +26,11 @@ export default async function ChecklistTemplateDetailPage({
   const id = Number(idStr);
   const tpl = await getTemplate(id);
   if (!tpl) notFound();
-  const items = await listTemplateItems(id);
+  const [items, latestAnswers] = await Promise.all([
+    listTemplateItems(id),
+    listLatestAnswersForTemplate(id),
+  ]);
+  const answerByItem = new Map(latestAnswers.map((a) => [a.item_id, a]));
   const canEdit = canEditSops(user.role);
 
   const dbCategories = await listOptions("checklist_category", true);
@@ -114,54 +120,133 @@ export default async function ChecklistTemplateDetailPage({
             <tr>
               <th className="text-left px-5 py-3 font-medium w-12">#</th>
               <th className="text-left px-5 py-3 font-medium">Question</th>
-              <th className="text-left px-5 py-3 font-medium w-24">Weight</th>
-              <th className="text-left px-5 py-3 font-medium w-28">Critical?</th>
+              <th className="text-left px-5 py-3 font-medium w-20">Weight</th>
+              <th className="text-left px-5 py-3 font-medium w-24">Critical?</th>
+              <th className="text-left px-5 py-3 font-medium">Answer</th>
               {canEdit && <th className="text-right px-5 py-3 font-medium w-20"></th>}
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 5 : 4} className="px-5 py-8 text-center text-gray-400">
+                <td colSpan={canEdit ? 6 : 5} className="px-5 py-8 text-center text-gray-400">
                   No items yet. Add the first question below.
                 </td>
               </tr>
             )}
-            {items.map((item) => (
-              <tr key={item.id} className="border-t border-gray-100">
-                <td className="px-5 py-3 text-xs text-gray-400">{item.sort_order}</td>
-                <td className="px-5 py-3">
-                  <div className="text-gray-900">{item.question}</div>
-                  {item.guidance && (
-                    <div className="text-xs text-gray-500 mt-1">{item.guidance}</div>
-                  )}
-                </td>
-                <td className="px-5 py-3 text-gray-600">×{item.weight}</td>
-                <td className="px-5 py-3">
-                  {item.is_critical ? (
-                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded">
-                      Critical
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-400">—</span>
-                  )}
-                </td>
-                {canEdit && (
-                  <td className="px-5 py-3 text-right">
-                    <form action={deleteItemAction} className="inline">
-                      <input type="hidden" name="id" value={item.id} />
+            {items.map((item) => {
+              const latest = answerByItem.get(item.id);
+              return (
+                <tr key={item.id} className="border-t border-gray-100 align-top">
+                  <td className="px-5 py-3 text-xs text-gray-400">{item.sort_order}</td>
+                  <td className="px-5 py-3">
+                    <div className="text-gray-900">{item.question}</div>
+                    {item.guidance && (
+                      <div className="text-xs text-gray-500 mt-1">{item.guidance}</div>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-gray-600">×{item.weight}</td>
+                  <td className="px-5 py-3">
+                    {item.is_critical ? (
+                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded">
+                        Critical
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 min-w-[360px]">
+                    {latest && (
+                      <div
+                        className={`mb-2 p-2 rounded-lg border text-xs ${
+                          latest.answer === "yes"
+                            ? "bg-emerald-50 border-emerald-200"
+                            : latest.answer === "no"
+                            ? "bg-red-50 border-red-200"
+                            : "bg-gray-50 border-gray-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              latest.answer === "yes"
+                                ? "bg-emerald-600 text-white"
+                                : latest.answer === "no"
+                                ? "bg-red-600 text-white"
+                                : "bg-gray-500 text-white"
+                            }`}
+                          >
+                            {latest.answer === "na" ? "N/A" : latest.answer}
+                          </span>
+                          <span className="text-gray-600">
+                            {latest.answered_by_name ?? "—"}
+                          </span>
+                          <span className="text-gray-400">
+                            · {new Date(latest.answered_at).toLocaleString()}
+                          </span>
+                        </div>
+                        {latest.note && (
+                          <div className="text-gray-700 whitespace-pre-wrap mt-1">
+                            {latest.note}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <form
+                      action={recordChecklistItemAnswerAction}
+                      className="flex flex-wrap items-start gap-2"
+                    >
+                      <input type="hidden" name="item_id" value={item.id} />
                       <input type="hidden" name="template_id" value={tpl.id} />
+                      <div className="flex items-center gap-2">
+                        {(["yes", "no", "na"] as const).map((a) => (
+                          <label
+                            key={a}
+                            className="inline-flex items-center gap-1 px-2 py-1 border border-gray-200 rounded cursor-pointer text-xs has-checked:bg-brand-50 has-checked:border-brand-400"
+                          >
+                            <input
+                              type="radio"
+                              name="answer"
+                              value={a}
+                              required
+                              className="accent-brand-700"
+                            />
+                            <span className="font-medium">
+                              {a === "na" ? "N/A" : a === "yes" ? "Yes" : "No"}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      <input
+                        name="note"
+                        placeholder="Note (optional)"
+                        className="flex-1 min-w-[140px] px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      />
                       <button
                         type="submit"
-                        className="text-xs text-red-600 hover:text-red-800 hover:underline"
+                        className="bg-brand-700 hover:bg-brand-800 text-white px-3 py-1 rounded text-xs font-medium"
                       >
-                        Remove
+                        Save
                       </button>
                     </form>
                   </td>
-                )}
-              </tr>
-            ))}
+                  {canEdit && (
+                    <td className="px-5 py-3 text-right">
+                      <form action={deleteItemAction} className="inline">
+                        <input type="hidden" name="id" value={item.id} />
+                        <input type="hidden" name="template_id" value={tpl.id} />
+                        <button
+                          type="submit"
+                          className="text-xs text-red-600 hover:text-red-800 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </form>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
