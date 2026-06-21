@@ -11,7 +11,7 @@ type IconKey =
   | "my-work" | "roadmap" | "tests" | "reports"
   | "sops" | "checklists" | "audits" | "capa"
   | "frameworks" | "controls" | "policies"
-  | "admin-home" | "users" | "brands" | "departments" | "config" | "audit-logs"
+  | "admin-home" | "users" | "brands" | "departments" | "org-units" | "config" | "audit-logs"
   | "logout" | "chevron-right" | "menu" | "close";
 
 const ICON_PATHS: Record<IconKey, React.ReactNode> = {
@@ -115,6 +115,14 @@ const ICON_PATHS: Record<IconKey, React.ReactNode> = {
       <path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01" />
     </>
   ),
+  "org-units": (
+    <>
+      <circle cx="12" cy="5" r="2" />
+      <circle cx="6" cy="19" r="2" />
+      <circle cx="18" cy="19" r="2" />
+      <path d="M12 7v6m0 0H6v4m6-4h6v4" />
+    </>
+  ),
   config: (
     <>
       <circle cx="12" cy="12" r="3" />
@@ -215,6 +223,7 @@ const ADMINISTRATION: Section = {
     { href: "/admin/users", label: "Users", icon: "users" },
     { href: "/admin/brands", label: "Brands", icon: "brands" },
     { href: "/admin/departments", label: "Departments", icon: "departments" },
+    { href: "/admin/org-units", label: "Org Units", icon: "org-units" },
     { href: "/admin/config", label: "Config", icon: "config" },
     { href: "/admin/audit-logs", label: "Audit Logs", icon: "audit-logs" },
   ],

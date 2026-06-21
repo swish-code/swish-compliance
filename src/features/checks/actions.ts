@@ -35,6 +35,7 @@ const AssignSchema = z.object({
   assigned_role: z.enum(["auditor", "dm"]),
   brand_id: z.coerce.number().int().positive().optional().nullable(),
   department_id: z.coerce.number().int().positive().optional().nullable(),
+  org_unit_id: z.coerce.number().int().positive().optional().nullable(),
   comment: z.string().trim().min(1, "Comment is required.").max(2000),
 });
 
@@ -166,14 +167,15 @@ export async function assignTestAction(formData: FormData): Promise<void> {
     assigned_role: raw.assigned_role,
     brand_id: blank(raw.brand_id),
     department_id: blank(raw.department_id),
+    org_unit_id: blank(raw.org_unit_id),
     comment: raw.comment,
   });
 
   const check = await getCheck(parsed.check_id);
   if (!check) throw new Error("Test not found.");
 
-  // Resolve optional brand + department labels so the notification body
-  // carries human-readable context, not just opaque IDs.
+  // Resolve optional brand + department + org_unit labels so the
+  // notification body carries human-readable context, not just opaque IDs.
   const brand = parsed.brand_id
     ? await queryOne<{ name: string }>(
         `SELECT name FROM brands WHERE id = $1`,
@@ -186,12 +188,19 @@ export async function assignTestAction(formData: FormData): Promise<void> {
         [parsed.department_id]
       )
     : null;
+  const orgUnit = parsed.org_unit_id
+    ? await queryOne<{ code: string; name: string }>(
+        `SELECT code, name FROM org_units WHERE id = $1`,
+        [parsed.org_unit_id]
+      )
+    : null;
 
   const roleLabel =
     parsed.assigned_role === "auditor" ? "Auditor" : "Department Manager";
   const contextBits = [
     brand ? `Brand: ${brand.name}` : null,
     department ? `Department: ${department.name}` : null,
+    orgUnit ? `Org Unit: ${orgUnit.code} ${orgUnit.name}` : null,
   ].filter(Boolean);
   const contextLine = contextBits.length > 0 ? contextBits.join(" · ") + ". " : "";
 
@@ -229,6 +238,9 @@ export async function assignTestAction(formData: FormData): Promise<void> {
         brand_name: brand?.name ?? null,
         department_id: parsed.department_id ?? null,
         department_name: department?.name ?? null,
+        org_unit_id: parsed.org_unit_id ?? null,
+        org_unit_code: orgUnit?.code ?? null,
+        org_unit_name: orgUnit?.name ?? null,
         assigned_by: user.displayName,
         assigned_by_role: user.role,
       }),

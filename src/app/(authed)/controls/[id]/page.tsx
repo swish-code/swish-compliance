@@ -17,6 +17,7 @@ import {
 } from "@/features/controls/types";
 import { queryAll } from "@/lib/db";
 import AssignTestModal from "@/features/checks/AssignTestModal";
+import { listOrgUnitOptions } from "@/features/org-units/repository";
 
 export default async function ControlDetailPage({
   params,
@@ -46,7 +47,7 @@ export default async function ControlDetailPage({
   // Audiences for the per-row "Assign" modal on each Test in the table
   // below — Auditors and Department Managers, resolved once and passed
   // to every modal so opening one doesn't trigger a network round-trip.
-  const [auditors, departmentManagers, modalBrands, modalDepartments] =
+  const [auditors, departmentManagers, modalBrands, modalDepartments, modalOrgUnits] =
     await Promise.all([
       queryAll<{ id: number; display_name: string }>(
         `SELECT id, display_name FROM users
@@ -64,6 +65,7 @@ export default async function ControlDetailPage({
       queryAll<{ id: number; name: string }>(
         `SELECT id, name FROM departments WHERE is_active ORDER BY name`
       ),
+      listOrgUnitOptions(),
     ]);
 
   const sops = canEdit
@@ -214,6 +216,7 @@ export default async function ControlDetailPage({
                       departmentManagers={departmentManagers}
                       brands={modalBrands}
                       departments={modalDepartments}
+                      orgUnits={modalOrgUnits}
                     />
                   </td>
                 </tr>

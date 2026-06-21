@@ -5,6 +5,7 @@ import { assignTestAction } from "./actions";
 
 type UserOpt = { id: number; display_name: string };
 type Lookup = { id: number; name: string };
+type OrgOpt = { id: number; display_label: string; level: number };
 
 export default function AssignTestModal({
   checkId,
@@ -13,6 +14,7 @@ export default function AssignTestModal({
   departmentManagers,
   brands,
   departments,
+  orgUnits,
 }: {
   checkId: number;
   checkName: string;
@@ -20,10 +22,12 @@ export default function AssignTestModal({
   departmentManagers: UserOpt[];
   brands: Lookup[];
   departments: Lookup[];
+  orgUnits: OrgOpt[];
 }) {
   const [open, setOpen] = useState(false);
   const [brandId, setBrandId] = useState("");
   const [deptId, setDeptId] = useState("");
+  const [orgUnitId, setOrgUnitId] = useState("");
   // Combined value: "auditor:<id>" or "dm:<id>" so a single <select>
   // can offer both pools while keeping the role context attached.
   const [assignedValue, setAssignedValue] = useState("");
@@ -59,6 +63,7 @@ export default function AssignTestModal({
   function reset() {
     setBrandId("");
     setDeptId("");
+    setOrgUnitId("");
     setAssignedValue("");
     setComment("");
     setError(null);
@@ -84,6 +89,7 @@ export default function AssignTestModal({
     fd.append("assigned_role", assignedRole);
     if (brandId) fd.append("brand_id", brandId);
     if (deptId) fd.append("department_id", deptId);
+    if (orgUnitId) fd.append("org_unit_id", orgUnitId);
     fd.append("comment", comment.trim());
 
     startTransition(async () => {
@@ -197,6 +203,35 @@ export default function AssignTestModal({
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Org Unit — single hierarchical dropdown (Centralised → */}
+              {/* department → sub-team, or Brand-wise → brand → branch).  */}
+              {/* Optional; auditor can leave as None for cross-cutting     */}
+              {/* tests that don't belong to any one node.                  */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                  Org Unit
+                </label>
+                <select
+                  value={orgUnitId}
+                  onChange={(e) => setOrgUnitId(e.target.value)}
+                  disabled={pending}
+                  className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 font-mono"
+                >
+                  <option value="">— None —</option>
+                  {orgUnits.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.display_label}
+                    </option>
+                  ))}
+                </select>
+                {orgUnits.length === 0 && (
+                  <p className="text-[11px] text-amber-700 mt-1.5">
+                    No org units yet. Ask an admin to seed the tree at
+                    /admin/org-units.
+                  </p>
+                )}
               </div>
 
               {/* Assign To — grouped (Auditor / Department Manager) */}

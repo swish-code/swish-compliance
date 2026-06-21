@@ -6,6 +6,7 @@ import { CHECK_STATUS_LABEL, CHECK_STATUS_TONE, FREQUENCY_LABEL, type CheckStatu
 import { queryAll } from "@/lib/db";
 import { createCheckAction } from "@/features/checks/actions";
 import AssignTestModal from "@/features/checks/AssignTestModal";
+import { listOrgUnitOptions } from "@/features/org-units/repository";
 
 export default async function TestsPage({
   searchParams,
@@ -40,7 +41,7 @@ export default async function TestsPage({
   // active Department Managers, active Brands and active Departments.
   // We resolve them server-side once and pass them to every row's modal
   // so the dropdowns don't fetch over the network.
-  const [auditors, departmentManagers, modalBrands, modalDepartments] =
+  const [auditors, departmentManagers, modalBrands, modalDepartments, modalOrgUnits] =
     await Promise.all([
       queryAll<{ id: number; display_name: string }>(
         `SELECT id, display_name FROM users
@@ -58,6 +59,7 @@ export default async function TestsPage({
       queryAll<{ id: number; name: string }>(
         `SELECT id, name FROM departments WHERE is_active ORDER BY name`
       ),
+      listOrgUnitOptions(),
     ]);
 
   const today = new Date().toISOString().split("T")[0];
@@ -204,6 +206,7 @@ export default async function TestsPage({
                       departmentManagers={departmentManagers}
                       brands={modalBrands}
                       departments={modalDepartments}
+                      orgUnits={modalOrgUnits}
                     />
                   </td>
                 </tr>
