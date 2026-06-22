@@ -10,7 +10,7 @@ import ThemeToggle from "./ThemeToggle";
 type IconKey =
   | "my-work" | "roadmap" | "tests" | "reports"
   | "sops" | "checklists" | "audits" | "capa"
-  | "frameworks" | "controls" | "policies"
+  | "domains" | "frameworks" | "controls" | "policies"
   | "admin-home" | "users" | "brands" | "departments" | "org-units" | "config" | "audit-logs"
   | "logout" | "chevron-right" | "menu" | "close";
 
@@ -66,6 +66,12 @@ const ICON_PATHS: Record<IconKey, React.ReactNode> = {
   capa: (
     <>
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </>
+  ),
+  domains: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
     </>
   ),
   frameworks: (
@@ -210,6 +216,7 @@ const COMPLIANCE: Section = {
     { href: "/checklists/templates", label: "Checklists", icon: "checklists" },
     { href: "/audits", label: "Audits", icon: "audits" },
     { href: "/capa", label: "Corrective Actions", icon: "capa" },
+    { href: "/domains", label: "Domains", icon: "domains" },
     { href: "/frameworks", label: "Frameworks", icon: "frameworks" },
     { href: "/controls", label: "Controls", icon: "controls" },
     { href: "/policies", label: "Policies", icon: "policies" },
