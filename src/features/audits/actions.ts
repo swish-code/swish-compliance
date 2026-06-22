@@ -39,6 +39,11 @@ const CreateSchema = z.object({
   test_ids: z
     .array(z.coerce.number().int().positive())
     .min(1, "Pick at least one test."),
+  // Audit window + assignee — all optional. datetime-local inputs send
+  // ISO-ish strings ("2026-06-22T09:00") that Postgres can cast directly.
+  start_at: z.string().optional().nullable(),
+  end_at: z.string().optional().nullable(),
+  assigned_to: z.coerce.number().int().positive().optional().nullable(),
 });
 
 const ResponseSchema = z.object({
@@ -96,6 +101,9 @@ export async function createAuditAction(formData: FormData) {
     location: blank(raw.location),
     audit_date: blank(raw.audit_date),
     policy_id: blank(raw.policy_id),
+    start_at: blank(raw.start_at),
+    end_at: blank(raw.end_at),
+    assigned_to: blank(raw.assigned_to),
     test_ids: testIds,
   });
 
@@ -109,6 +117,9 @@ export async function createAuditAction(formData: FormData) {
     framework_id: parsed.framework_id,
     domain_id: parsed.domain_id,
     control_id: parsed.control_id,
+    start_at: parsed.start_at,
+    end_at: parsed.end_at,
+    assigned_to: parsed.assigned_to,
     auditor_id: user.id,
   });
 
@@ -137,9 +148,35 @@ export async function createAuditAction(formData: FormData) {
         framework_id: parsed.framework_id,
         control_id: parsed.control_id,
         test_count: parsed.test_ids.length,
+        start_at: parsed.start_at ?? null,
+        end_at: parsed.end_at ?? null,
+        assigned_to: parsed.assigned_to ?? null,
       }),
     ]
   );
+
+  // If the creator picked an assignee, ping them. notify() swallows its
+  // own errors so a flaky notification can't take the audit insert down.
+  if (parsed.assigned_to && parsed.assigned_to !== user.id) {
+    const windowBits = [
+      parsed.start_at ? `Starts ${new Date(parsed.start_at).toLocaleString()}` : null,
+      parsed.end_at   ? `Ends ${new Date(parsed.end_at).toLocaleString()}`     : null,
+    ].filter(Boolean);
+    const windowLine = windowBits.length ? windowBits.join(" · ") + ". " : "";
+    await notify({
+      audience: { userIds: [parsed.assigned_to] },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "audit:assigned",
+      title: `📋 You've been assigned a new audit`,
+      body:
+        `Assigned by ${user.displayName}. ` +
+        windowLine +
+        `Open the audit to start recording responses.`,
+      severity: "info",
+      entity: { type: "audit", id, href: `/audits/${id}` },
+    });
+  }
+
   revalidatePath("/audits");
   redirect(`/audits/${id}`);
 }

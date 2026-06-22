@@ -84,6 +84,19 @@ export default async function NewAuditPage({
      LIMIT 2000`
   );
 
+  // Assignee dropdown — every active user, grouped by role so picking
+  // the right person is easier in larger orgs.
+  const assignees = await queryAll<{
+    id: number;
+    display_name: string;
+    role: string;
+  }>(
+    `SELECT id, display_name, role
+     FROM users
+     WHERE is_active = TRUE
+     ORDER BY role, display_name`
+  );
+
   if (templates.length === 0) {
     return (
       <Workspace
@@ -178,6 +191,71 @@ export default async function NewAuditPage({
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
+          </div>
+
+          {/* Audit window — when the audit is expected to run. datetime-local
+              gives both a date and a time picker in a single native widget. */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Start at
+              </label>
+              <input
+                type="datetime-local"
+                name="start_at"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                End at
+              </label>
+              <input
+                type="datetime-local"
+                name="end_at"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Assign — pick the user who actually runs this audit. Grouped */}
+          {/* by role so larger user lists stay scannable.                 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              Assign to
+            </label>
+            <select
+              name="assigned_to"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="">— No one yet —</option>
+              {Array.from(
+                assignees.reduce((acc, u) => {
+                  const k = u.role || "other";
+                  const arr = acc.get(k) ?? acc.set(k, []).get(k)!;
+                  arr.push(u);
+                  return acc;
+                }, new Map<string, typeof assignees>())
+              ).map(([role, list]) => (
+                <optgroup
+                  key={role}
+                  label={role
+                    .split("_")
+                    .map((w) => w[0]?.toUpperCase() + w.slice(1))
+                    .join(" ")}
+                >
+                  {list.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.display_name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              The assigned user receives a notification with this audit
+              link. Leave empty to assign later.
+            </p>
           </div>
 
           {/* ── Audit scope — Domain → Framework → Control → Tests ──── */}
