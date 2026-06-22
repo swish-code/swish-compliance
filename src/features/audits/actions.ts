@@ -24,7 +24,21 @@ const CreateSchema = z.object({
   location: z.string().trim().optional().nullable(),
   audit_date: z.string().optional().nullable(),
   policy_id: z.coerce.number().int().positive().optional().nullable(),
-  framework_id: z.coerce.number().int().positive().optional().nullable(),
+  // Audit scope — domain → framework → control → tests. All required by
+  // the form; the schema mirrors that so the action throws if any are
+  // missing instead of silently creating a half-scoped audit.
+  domain_id: z.coerce.number().int().positive({
+    message: "Domain is required.",
+  }),
+  framework_id: z.coerce.number().int().positive({
+    message: "Framework is required.",
+  }),
+  control_id: z.coerce.number().int().positive({
+    message: "Control is required.",
+  }),
+  test_ids: z
+    .array(z.coerce.number().int().positive())
+    .min(1, "Pick at least one test."),
 });
 
 const ResponseSchema = z.object({
@@ -65,7 +79,16 @@ function assertCanEditAudit(audit: AuditGuardSubject, actor: AuditGuardActor): v
 export async function createAuditAction(formData: FormData) {
   const user = await requireUser();
   const raw = Object.fromEntries(formData.entries());
-  const blank = (v: FormDataEntryValue | undefined) => (v === "" || v === undefined ? null : v);
+  // test_ids comes through as repeated `<input name="test_ids">` entries,
+  // one per checkbox. Object.fromEntries collapses repeats to the last
+  // value, so we have to pull the array from FormData directly.
+  const testIds = formData
+    .getAll("test_ids")
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  const blank = (v: FormDataEntryValue | undefined) =>
+    v === "" || v === undefined ? null : v;
   const parsed = CreateSchema.parse({
     ...raw,
     brand_id: blank(raw.brand_id),
@@ -73,9 +96,33 @@ export async function createAuditAction(formData: FormData) {
     location: blank(raw.location),
     audit_date: blank(raw.audit_date),
     policy_id: blank(raw.policy_id),
-    framework_id: blank(raw.framework_id),
+    test_ids: testIds,
   });
-  const id = await createAudit({ ...parsed, auditor_id: user.id });
+
+  const id = await createAudit({
+    template_id: parsed.template_id,
+    brand_id: parsed.brand_id,
+    department_id: parsed.department_id,
+    location: parsed.location,
+    audit_date: parsed.audit_date,
+    policy_id: parsed.policy_id,
+    framework_id: parsed.framework_id,
+    domain_id: parsed.domain_id,
+    control_id: parsed.control_id,
+    auditor_id: user.id,
+  });
+
+  // Populate the audit_tests junction. Bulk-insert via a single VALUES
+  // list so we don't fire N round-trips on the happy path.
+  const placeholders = parsed.test_ids
+    .map((_, i) => `($1, $${i + 2})`)
+    .join(", ");
+  await execute(
+    `INSERT INTO audit_tests (audit_id, check_id) VALUES ${placeholders}
+     ON CONFLICT DO NOTHING`,
+    [id, ...parsed.test_ids]
+  );
+
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
      VALUES ($1, $2, 'create', 'audit', $3, $4)`,
@@ -86,7 +133,10 @@ export async function createAuditAction(formData: FormData) {
       JSON.stringify({
         template_id: parsed.template_id,
         policy_id: parsed.policy_id ?? null,
-        framework_id: parsed.framework_id ?? null,
+        domain_id: parsed.domain_id,
+        framework_id: parsed.framework_id,
+        control_id: parsed.control_id,
+        test_count: parsed.test_ids.length,
       }),
     ]
   );

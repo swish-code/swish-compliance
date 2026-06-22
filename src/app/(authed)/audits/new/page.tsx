@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { queryAll } from "@/lib/db";
 import { createAuditAction } from "@/features/audits/actions";
+import AuditScopePicker from "@/features/audits/AuditScopePicker";
 
 export default async function NewAuditPage({
   searchParams,
@@ -40,17 +41,47 @@ export default async function NewAuditPage({
      LIMIT 500`
   );
 
-  const frameworks = await queryAll<{
+  // Scope picker dataset — Domain → Framework → Control → Tests.
+  // Pre-load all four lists once and let the client component filter the
+  // cascade in memory. The volumes are small enough (<2k rows total) that
+  // a per-change API round-trip would only hurt UX.
+  const scopeDomains = await queryAll<{ id: number; code: string; name: string }>(
+    `SELECT id, code, name FROM domains WHERE is_active ORDER BY sort_order, name`
+  );
+  const scopeFrameworks = await queryAll<{
     id: number;
     code: string;
     name: string;
-    category: string | null;
+    domain_id: number | null;
   }>(
-    `SELECT id, code, name, category
+    `SELECT id, code, name, domain_id
      FROM frameworks
      WHERE is_active
-     ORDER BY category NULLS LAST, name
-     LIMIT 500`
+     ORDER BY code, name`
+  );
+  const scopeControls = await queryAll<{
+    id: number;
+    code: string | null;
+    name: string;
+    framework_id: number | null;
+  }>(
+    `SELECT id, code, name, framework_id
+     FROM controls
+     WHERE is_active
+     ORDER BY code NULLS LAST, name
+     LIMIT 1000`
+  );
+  const scopeTests = await queryAll<{
+    id: number;
+    code: string | null;
+    name: string;
+    control_id: number | null;
+  }>(
+    `SELECT id, code, name, control_id
+     FROM checks
+     WHERE is_active
+     ORDER BY code NULLS LAST, name
+     LIMIT 2000`
   );
 
   if (templates.length === 0) {
@@ -149,53 +180,39 @@ export default async function NewAuditPage({
             </div>
           </div>
 
-          {/* ── Policy & Framework — what's being audited against ──── */}
+          {/* ── Audit scope — Domain → Framework → Control → Tests ──── */}
+          {/* Cascading picker. The previous standalone Framework dropdown   */}
+          {/* is folded into this cascade so the auditor can't pick a        */}
+          {/* framework that doesn't belong to the chosen domain.            */}
+          <AuditScopePicker
+            domains={scopeDomains}
+            frameworks={scopeFrameworks}
+            controls={scopeControls}
+            tests={scopeTests}
+          />
+
+          {/* ── Policy / SOP — what governing document this audit checks ── */}
           <div className="border-t border-gray-100 pt-5">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              What is this audit checking against?
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                  Policy / SOP
-                </label>
-                <select
-                  name="policy_id"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="">— None —</option>
-                  {policies.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code ? `${p.code} · ` : ""}
-                      {p.title}
-                      {p.department_name ? ` · ${p.department_name}` : ""}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Approved SOPs only. Pick the policy this audit verifies compliance with.
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                  Framework / Standard
-                </label>
-                <select
-                  name="framework_id"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="">— None —</option>
-                  {frameworks.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.code} · {f.name}
-                      {f.category ? ` · ${f.category}` : ""}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Active frameworks only (HACCP, ISO 22000, Fire Safety, …).
-                </p>
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Policy / SOP
+              </label>
+              <select
+                name="policy_id"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">— None —</option>
+                {policies.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code ? `${p.code} · ` : ""}
+                    {p.title}
+                    {p.department_name ? ` · ${p.department_name}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Approved SOPs only. Pick the policy this audit verifies compliance with.
+              </p>
             </div>
           </div>
 

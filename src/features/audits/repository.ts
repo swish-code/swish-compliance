@@ -78,12 +78,15 @@ export async function createAudit(input: {
   audit_date?: string | null;
   policy_id?: number | null;
   framework_id?: number | null;
+  /** Audit scope — domain → framework → control. Added in migration 028. */
+  domain_id?: number | null;
+  control_id?: number | null;
 }): Promise<number> {
   const row = await queryOne<{ id: number }>(
     `INSERT INTO audits
        (template_id, brand_id, department_id, location, auditor_id, audit_date,
-        policy_id, framework_id)
-     VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7, $8)
+        policy_id, framework_id, domain_id, control_id)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7, $8, $9, $10)
      RETURNING id`,
     [
       input.template_id,
@@ -94,6 +97,8 @@ export async function createAudit(input: {
       input.audit_date ?? null,
       input.policy_id ?? null,
       input.framework_id ?? null,
+      input.domain_id ?? null,
+      input.control_id ?? null,
     ]
   );
   return row!.id;
