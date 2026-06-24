@@ -100,12 +100,19 @@ export default async function CheckDetailPage({
               <div className="text-sm text-gray-800 whitespace-pre-wrap">{check.procedure_steps}</div>
             </div>
           )}
-          {check.evidence_needed && (
+          {(check.evidence_needed || check.evidence_code) && (
             <div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
-                Evidence needed
+              <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1 flex items-center gap-2">
+                <span>Evidence needed</span>
+                {check.evidence_code && (
+                  <span className="font-mono text-[10px] text-brand-700 bg-brand-50 border border-brand-200 px-1.5 py-0.5 rounded normal-case">
+                    {check.evidence_code}
+                  </span>
+                )}
               </div>
-              <div className="text-sm text-gray-800 whitespace-pre-wrap">{check.evidence_needed}</div>
+              {check.evidence_needed && (
+                <div className="text-sm text-gray-800 whitespace-pre-wrap">{check.evidence_needed}</div>
+              )}
             </div>
           )}
           {/* Pass / Fail criteria — side-by-side card pair so the auditor

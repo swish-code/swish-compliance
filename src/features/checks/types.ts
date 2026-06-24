@@ -45,6 +45,8 @@ export type Check = {
   pass_criteria: string | null;
   fail_criteria: string | null;
   frequency_label: string | null;
+  // Per-test evidence ID (EVD-IT-0001, EVD-HR-0023, …) added in migration 035.
+  evidence_code: string | null;
 };
 
 export type CheckResult = {
