@@ -17,6 +17,7 @@ const CHECK_SELECT = `
   ch.created_at, ch.updated_at,
   ch.procedure_steps, ch.evidence_needed, ch.method,
   ch.performer_role, ch.reviewer_role,
+  ch.pass_criteria, ch.fail_criteria, ch.frequency_label,
   (SELECT COUNT(*)::int FROM check_results r WHERE r.check_id = ch.id) AS result_count
 FROM checks ch
 LEFT JOIN controls            c ON c.id = ch.control_id

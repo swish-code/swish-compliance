@@ -38,6 +38,13 @@ export type Check = {
   method: string | null;
   performer_role: string | null;
   reviewer_role: string | null;
+  // Pass/fail criteria + free-form frequency label (migration 032).
+  // pass/fail_criteria are full sentences from the auditor's source; the
+  // frequency enum stays for scheduling logic, frequency_label preserves
+  // the human cadence ("Monthly / Quarterly").
+  pass_criteria: string | null;
+  fail_criteria: string | null;
+  frequency_label: string | null;
 };
 
 export type CheckResult = {
