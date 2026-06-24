@@ -97,8 +97,19 @@ export default async function FrameworkDetailPage({
             ) : (
               fw.owner_name ?? "—"
             )}
+            {/* owner_label is the role/team string from the source
+                spreadsheet ("IT Security / IT Manager"); coexists with
+                the user FK above. */}
+            {fw.owner_label && (
+              <div className="text-xs text-gray-500 mt-1">{fw.owner_label}</div>
+            )}
           </Field>
-          <Field label="Review frequency">{fw.review_frequency ?? "—"}</Field>
+          {/* Prefer audit_frequency (from migration 031) over the legacy
+              review_frequency. Fall back so older imported frameworks
+              that only have review_frequency still display something. */}
+          <Field label="Audit frequency">
+            {fw.audit_frequency ?? fw.review_frequency ?? "—"}
+          </Field>
           <Field label="Activated">
             {fw.activated_at ? new Date(fw.activated_at).toLocaleDateString() : "—"}
             {fw.activated_by_name && <div className="text-xs text-gray-500">by {fw.activated_by_name}</div>}
