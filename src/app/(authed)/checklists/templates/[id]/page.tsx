@@ -32,6 +32,11 @@ export default async function ChecklistTemplateDetailPage({
   ]);
   const answerByItem = new Map(latestAnswers.map((a) => [a.item_id, a]));
   const canEdit = canEditSops(user.role);
+  // Renaming a template, rewording its description, switching category, or
+  // deactivating it cascades to every audit that ever used it. Lock those
+  // header fields to admins only — non-admins can still answer items and
+  // (if they have canEditSops) add/remove items.
+  const isAdmin = user.role === "admin";
 
   const dbCategories = await listOptions("checklist_category", true);
   const categories =
@@ -46,46 +51,45 @@ export default async function ChecklistTemplateDetailPage({
       sessionLabel="Session"
       userLabel={user.displayName}
     >
-      {/* Header */}
+      {/* Header — admin-only. Non-admin viewers see the same info as a   */}
+      {/* read-only summary; the edit form is hidden entirely so the      */}
+      {/* "Save header" button can never sit unused.                       */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
-        <form action={updateTemplateAction} className="space-y-4">
-          <input type="hidden" name="id" value={tpl.id} />
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Name</label>
-              <input
-                name="name"
-                defaultValue={tpl.name}
-                disabled={!canEdit}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
-              />
+        {isAdmin ? (
+          <form action={updateTemplateAction} className="space-y-4">
+            <input type="hidden" name="id" value={tpl.id} />
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Name</label>
+                <input
+                  name="name"
+                  defaultValue={tpl.name}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Category</label>
+                <select
+                  name="category"
+                  defaultValue={tpl.category ?? ""}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">— None —</option>
+                  {categories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Category</label>
-              <select
-                name="category"
-                defaultValue={tpl.category ?? ""}
-                disabled={!canEdit}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
-              >
-                <option value="">— None —</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Description</label>
+              <textarea
+                name="description"
+                defaultValue={tpl.description ?? ""}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
             </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Description</label>
-            <textarea
-              name="description"
-              defaultValue={tpl.description ?? ""}
-              rows={2}
-              disabled={!canEdit}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
-            />
-          </div>
-          {canEdit && (
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="is_active" defaultChecked={tpl.is_active} className="accent-brand-700" />
@@ -98,8 +102,47 @@ export default async function ChecklistTemplateDetailPage({
                 Save header
               </button>
             </div>
-          )}
-        </form>
+          </form>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <div className="text-xs font-medium text-gray-500 mb-0.5">Name</div>
+                <div className="text-sm text-gray-900">{tpl.name}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-gray-500 mb-0.5">Category</div>
+                <div className="text-sm text-gray-700">{tpl.category ?? "—"}</div>
+              </div>
+            </div>
+            {tpl.description && (
+              <div>
+                <div className="text-xs font-medium text-gray-500 mb-0.5">Description</div>
+                <div className="text-sm text-gray-700 whitespace-pre-wrap">{tpl.description}</div>
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-xs text-gray-500 pt-1">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${
+                  tpl.is_active
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    tpl.is_active ? "bg-emerald-500" : "bg-gray-400"
+                  }`}
+                />
+                {tpl.is_active ? "Active" : "Inactive"}
+              </span>
+              <span className="text-gray-300">·</span>
+              <span>
+                Only an admin can rename or edit this template&rsquo;s header.
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Items table */}
@@ -134,11 +177,15 @@ export default async function ChecklistTemplateDetailPage({
                 </td>
               </tr>
             )}
-            {items.map((item) => {
+            {items.map((item, idx) => {
               const latest = answerByItem.get(item.id);
               return (
                 <tr key={item.id} className="border-t border-gray-100 align-top">
-                  <td className="px-5 py-3 text-xs text-gray-400">{item.sort_order}</td>
+                  {/* # is the visible row position (1..N), not sort_order.
+                      sort_order has gaps after deletions; the displayed
+                      number should always be 1, 2, 3, … so the column
+                      reads naturally to the auditor. */}
+                  <td className="px-5 py-3 text-xs text-gray-400">{idx + 1}</td>
                   <td className="px-5 py-3">
                     <div className="text-gray-900">{item.question}</div>
                     {item.guidance && (

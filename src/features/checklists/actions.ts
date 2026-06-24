@@ -60,7 +60,11 @@ export async function createTemplateAction(formData: FormData) {
 
 export async function updateTemplateAction(formData: FormData) {
   const user = await requireUser();
-  if (!canEditSops(user.role)) throw new Error("Not authorized.");
+  // Header edits (name / description / category / active) ripple into
+  // every audit that's ever used this template. Lock the action to admin
+  // so the UI gate (isAdmin only) and the server gate stay in sync —
+  // otherwise a non-admin could craft a POST and bypass the hidden form.
+  if (user.role !== "admin") throw new Error("Only an admin can edit a template's header.");
   const raw = Object.fromEntries(formData.entries());
   const parsed = UpdateTplSchema.parse({
     ...raw,
