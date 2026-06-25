@@ -29,11 +29,27 @@ type CapaItem = {
 
 type AuditItem = {
   id: number;
-  template_name: string;
+  template_name: string | null;
+  domain_name: string | null;
+  framework_code: string | null;
+  framework_name: string | null;
+  control_code: string | null;
+  control_name: string | null;
   brand_name: string | null;
+  department_name: string | null;
   location: string | null;
   status: string;
   audit_date: string;
+  // Submitted/closed audits already carry the score on the row; for
+  // in_progress we compute answered/total via the same UNION used by
+  // listItemsWithResponses so the progress matches what the auditor sees.
+  score: string | null;
+  answered_count: number;
+  total_count: number;
+  // Whether the current viewer is the creator or assignee — drives the
+  // little chip in the UI ("Created" vs "Assigned").
+  is_owner: boolean;
+  is_assignee: boolean;
 };
 
 type SopAckPending = {
@@ -83,10 +99,12 @@ export default async function MyWorkPage() {
        (SELECT COUNT(*)::int FROM corrective_actions
         WHERE assigned_to = $1 AND due_date < CURRENT_DATE
           AND status IN ('open','in_progress','submitted'))                                AS my_capas_overdue,
+       -- Both creator AND assignee count as "mine" (matches the audit
+       -- visibility gate we shipped — anyone who can edit shows up here).
        (SELECT COUNT(*)::int FROM audits
-        WHERE auditor_id = $1 AND status = 'in_progress')                                  AS audits_in_progress,
+        WHERE (auditor_id = $1 OR assigned_to = $1) AND status = 'in_progress') AS audits_in_progress,
        (SELECT COUNT(*)::int FROM audits
-        WHERE auditor_id = $1 AND status = 'submitted')                                    AS audits_submitted,
+        WHERE (auditor_id = $1 OR assigned_to = $1) AND status = 'submitted')   AS audits_submitted,
        (SELECT COUNT(*)::int FROM sops
         WHERE (created_by = $1 OR owner_id = $1)
           AND status IN ('draft','returned_to_dm','returned_to_compliance','returned_to_be')) AS sops_owned_draft,
@@ -105,13 +123,49 @@ export default async function MyWorkPage() {
       [user.id]
     ),
     queryAll<AuditItem>(
-      `SELECT a.id, t.name AS template_name, b.name AS brand_name,
-              a.location, a.status, a.audit_date
+      // LEFT JOIN templates: template_id is NULL in the new tests-first
+      // flow, the previous INNER JOIN would have hidden those audits.
+      // Domain/framework/control are surfaced so the auditor reads the
+      // SAME scope chain here as on the audit detail page.
+      //
+      // answered_count + total_count use the same UNION as
+      // listItemsWithResponses so the progress matches the page exactly:
+      //   answered = distinct items with response IN (pass,fail,na)
+      //   total    = distinct items from template OR via audit_tests links
+      `SELECT a.id,
+              t.name   AS template_name,
+              dom.name AS domain_name,
+              f.code   AS framework_code, f.name AS framework_name,
+              ctrl.code AS control_code,  ctrl.name AS control_name,
+              b.name   AS brand_name,
+              d.name   AS department_name,
+              a.location, a.status, a.audit_date,
+              a.score::text AS score,
+              (SELECT COUNT(DISTINCT r.item_id)::int
+                 FROM audit_responses r
+                 WHERE r.audit_id = a.id
+                   AND r.response IN ('pass','fail','na'))        AS answered_count,
+              (SELECT COUNT(*)::int FROM (
+                 SELECT ci.id FROM checklist_items ci
+                 WHERE ci.template_id = a.template_id
+                 UNION
+                 SELECT cci.checklist_item_id
+                 FROM audit_tests at
+                 JOIN check_checklist_items cci ON cci.check_id = at.check_id
+                 WHERE at.audit_id = a.id
+               ) AS items)                                         AS total_count,
+              (a.auditor_id  = $1) AS is_owner,
+              (a.assigned_to = $1) AS is_assignee
        FROM audits a
-       JOIN checklist_templates t ON t.id = a.template_id
-       LEFT JOIN brands b ON b.id = a.brand_id
-       WHERE a.auditor_id = $1 AND a.status IN ('in_progress','submitted')
-       ORDER BY a.audit_date DESC LIMIT 5`,
+       LEFT JOIN checklist_templates t   ON t.id   = a.template_id
+       LEFT JOIN brands       b   ON b.id   = a.brand_id
+       LEFT JOIN departments  d   ON d.id   = a.department_id
+       LEFT JOIN domains      dom ON dom.id = a.domain_id
+       LEFT JOIN frameworks   f   ON f.id   = a.framework_id
+       LEFT JOIN controls    ctrl ON ctrl.id = a.control_id
+       WHERE (a.auditor_id = $1 OR a.assigned_to = $1)
+         AND a.status IN ('in_progress','submitted')
+       ORDER BY a.audit_date DESC LIMIT 8`,
       [user.id]
     ),
     listSopsAwaitingAck(user.id, user.role, myDeptId, 6),
@@ -383,37 +437,121 @@ export default async function MyWorkPage() {
             <Empty icon="📋" text="No active audits assigned to you." />
           ) : (
             <ul className="divide-y divide-gray-100">
-              {myAudits.map((a) => (
-                <li key={a.id}>
-                  <Link
-                    href={`/audits/${a.id}`}
-                    className="flex items-start gap-3 px-3 py-3 -mx-3 rounded-lg hover:bg-gray-50 transition-colors group"
-                  >
-                    <span className="shrink-0 w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center text-sm">
-                      🔍
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 group-hover:text-brand-700 truncate">
-                        {a.template_name}
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
-                        <span>{a.brand_name ?? "—"}</span>
-                        {a.location && <span>· {a.location}</span>}
-                        <span>· {new Date(a.audit_date).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                    <span
-                      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full self-center font-medium shrink-0 ${
-                        a.status === "in_progress"
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-indigo-50 text-indigo-700"
-                      }`}
+              {myAudits.map((a) => {
+                // Title fallback chain: template_name → control_name →
+                // framework_name → "#id". Mirrors auditTitle() in
+                // features/audits/actions.ts so my-work reads the same.
+                const title =
+                  a.template_name ||
+                  a.control_name ||
+                  a.framework_name ||
+                  `Audit #${a.id}`;
+                // Final score for submitted/closed; live progress for
+                // in_progress. Submitted always renders a number even if
+                // score is "0", so check status, not the value.
+                const isFinal = a.status === "submitted";
+                const finalPct =
+                  isFinal && a.score != null ? Number(a.score) : null;
+                const progressPct =
+                  !isFinal && a.total_count > 0
+                    ? Math.round((a.answered_count / a.total_count) * 100)
+                    : null;
+                const pctValue = finalPct ?? progressPct;
+                const pctTone =
+                  pctValue == null
+                    ? "bg-gray-100 text-gray-500"
+                    : pctValue >= 90
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : pctValue >= 70
+                    ? "bg-amber-50 text-amber-700 border border-amber-200"
+                    : pctValue > 0
+                    ? "bg-red-50 text-red-700 border border-red-200"
+                    : "bg-gray-100 text-gray-600 border border-gray-200";
+
+                return (
+                  <li key={a.id}>
+                    <Link
+                      href={`/audits/${a.id}`}
+                      className="flex items-start gap-3 px-3 py-3 -mx-3 rounded-lg hover:bg-gray-50 transition-colors group"
                     >
-                      {a.status.replace("_", " ")}
-                    </span>
-                  </Link>
-                </li>
-              ))}
+                      <span className="shrink-0 w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center text-sm">
+                        🔍
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-medium text-gray-900 group-hover:text-brand-700 truncate">
+                            {title}
+                          </span>
+                          {a.is_assignee && !a.is_owner && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 shrink-0">
+                              Assigned
+                            </span>
+                          )}
+                          {a.is_owner && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
+                              Created
+                            </span>
+                          )}
+                        </div>
+                        {/* Scope chain — Domain · Framework · Control */}
+                        {(a.domain_name || a.framework_code || a.control_code) && (
+                          <div className="flex flex-wrap items-center gap-1 mt-0.5 text-[10px]">
+                            {a.domain_name && (
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
+                                {a.domain_name}
+                              </span>
+                            )}
+                            {a.framework_code && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono">
+                                {a.framework_code}
+                              </span>
+                            )}
+                            {a.control_code && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-mono">
+                                {a.control_code}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-1">
+                          {a.brand_name && <span>{a.brand_name}</span>}
+                          {a.department_name && <span>· {a.department_name}</span>}
+                          {a.location && <span>· {a.location}</span>}
+                          <span>· {new Date(a.audit_date).toLocaleDateString()}</span>
+                          {!isFinal && a.total_count > 0 && (
+                            <span className="text-gray-400">
+                              · {a.answered_count}/{a.total_count} answered
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0 self-center">
+                        {pctValue != null && (
+                          <span
+                            className={`text-xs font-bold px-2 py-0.5 rounded-full tabular-nums ${pctTone}`}
+                            title={
+                              isFinal
+                                ? `Final score: ${pctValue}%`
+                                : `Progress: ${a.answered_count}/${a.total_count} answered`
+                            }
+                          >
+                            {pctValue}%
+                          </span>
+                        )}
+                        <span
+                          className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full font-medium ${
+                            a.status === "in_progress"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-indigo-50 text-indigo-700"
+                          }`}
+                        >
+                          {a.status.replace("_", " ")}
+                        </span>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
