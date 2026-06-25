@@ -221,17 +221,18 @@ export default async function CheckDetailPage({
                         isFirstOfTemplate ? "border-t-2 border-t-gray-200" : ""
                       }`}
                     >
+                      {/* Render template name + title on EVERY row. The earlier
+                          "first of template only" trick was meant to reduce
+                          visual repetition, but it read as missing data. The
+                          group separator border (border-t-2 above) is enough
+                          to show grouping. */}
                       <td className="px-4 py-3 text-gray-700 align-top">
-                        {isFirstOfTemplate ? (
-                          <Link
-                            href={`/checklists/templates/${item.template_id}`}
-                            className="text-brand-700 hover:underline font-medium"
-                          >
-                            {item.template_name.replace(/ checklist$/i, "")}
-                          </Link>
-                        ) : (
-                          <span className="text-gray-300">·</span>
-                        )}
+                        <Link
+                          href={`/checklists/templates/${item.template_id}`}
+                          className="text-brand-700 hover:underline font-medium"
+                        >
+                          {item.template_name.replace(/ checklist$/i, "")}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 align-top">
                         {item.item_code ? (
@@ -243,7 +244,7 @@ export default async function CheckDetailPage({
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-600 align-top whitespace-nowrap">
-                        {isFirstOfTemplate ? item.template_name : <span className="text-gray-300">·</span>}
+                        {item.template_name}
                       </td>
                       <td className="px-4 py-3 text-gray-600 align-top tabular-nums">
                         {item.item_no}
