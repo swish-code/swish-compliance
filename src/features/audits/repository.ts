@@ -2,6 +2,7 @@ import "server-only";
 import { queryAll, queryOne, execute } from "@/lib/db";
 import type {
   Audit,
+  AuditAttachment,
   AuditResponse,
   AuditScopeRow,
   AuditStatus,
@@ -65,6 +66,60 @@ export async function listAudits(filters: {
 
 export async function getAudit(id: number): Promise<Audit | undefined> {
   return queryOne<Audit>(`SELECT ${AUDIT_SELECT} WHERE a.id = $1`, [id]);
+}
+
+/** Audit-level attachments — many files per audit (migration 039). */
+export async function listAuditAttachments(
+  auditId: number
+): Promise<AuditAttachment[]> {
+  return queryAll<AuditAttachment>(
+    `SELECT
+       att.id, att.audit_id, att.file_url, att.file_name, att.file_mime,
+       att.file_size, att.uploaded_by, u.display_name AS uploaded_by_name,
+       att.uploaded_at
+     FROM audit_attachments att
+     LEFT JOIN users u ON u.id = att.uploaded_by
+     WHERE att.audit_id = $1
+     ORDER BY att.uploaded_at DESC, att.id DESC`,
+    [auditId]
+  );
+}
+
+export async function addAuditAttachment(input: {
+  audit_id: number;
+  file_url: string;
+  file_name: string;
+  file_mime: string | null;
+  file_size: number | null;
+  uploaded_by: number;
+}): Promise<number> {
+  const row = await queryOne<{ id: number }>(
+    `INSERT INTO audit_attachments
+       (audit_id, file_url, file_name, file_mime, file_size, uploaded_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [
+      input.audit_id,
+      input.file_url,
+      input.file_name,
+      input.file_mime,
+      input.file_size,
+      input.uploaded_by,
+    ]
+  );
+  return row!.id;
+}
+
+export async function deleteAuditAttachment(
+  attachmentId: number
+): Promise<number | null> {
+  // Returns the parent audit_id so the action can revalidate the right
+  // page without an extra round-trip.
+  const row = await queryOne<{ audit_id: number }>(
+    `DELETE FROM audit_attachments WHERE id = $1 RETURNING audit_id`,
+    [attachmentId]
+  );
+  return row?.audit_id ?? null;
 }
 
 /**

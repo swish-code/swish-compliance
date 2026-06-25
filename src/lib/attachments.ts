@@ -62,3 +62,55 @@ export async function extractAttachment(
     mime: entry.type,
   };
 }
+
+/**
+ * Plural variant — pull every File entry under the same field name and
+ * validate each. <input type="file" multiple> posts multiple entries
+ * under the same name; formData.getAll() returns the array.
+ *
+ * Validation is done per-file so a 6-file upload where ONE file is over
+ * the limit fails with a clear error and the other 5 are not silently
+ * dropped at the storage layer.
+ *
+ * Includes `size` so the caller (and the audit_attachments table) can
+ * record how big each file was.
+ */
+export type ExtractedMultiFile = {
+  dataUrl: string;
+  name: string;
+  mime: string;
+  size: number;
+};
+
+export async function extractAttachments(
+  formData: FormData,
+  fieldName: string
+): Promise<ExtractedMultiFile[]> {
+  const entries = formData.getAll(fieldName);
+  const out: ExtractedMultiFile[] = [];
+  for (const entry of entries) {
+    if (!(entry instanceof File)) continue;
+    if (entry.size === 0) continue;
+    if (entry.size > MAX_ATTACHMENT_BYTES) {
+      throw new Error(
+        `"${entry.name}" is too large. Max ${Math.round(
+          MAX_ATTACHMENT_BYTES / 1024 / 1024
+        )} MB per file.`
+      );
+    }
+    if (!ALLOWED_ATTACHMENT_MIMES.has(entry.type)) {
+      throw new Error(
+        `"${entry.name}" has unsupported type "${entry.type || "unknown"}". ` +
+          `Allowed: PDF, Word, Excel, PowerPoint, image, text, CSV.`
+      );
+    }
+    const buffer = Buffer.from(await entry.arrayBuffer());
+    out.push({
+      dataUrl: `data:${entry.type};base64,${buffer.toString("base64")}`,
+      name: entry.name || "attachment",
+      mime: entry.type,
+      size: entry.size,
+    });
+  }
+  return out;
+}

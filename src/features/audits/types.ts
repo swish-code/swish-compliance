@@ -84,6 +84,19 @@ export type AuditResponse = {
   evidence_mime: string | null;
 };
 
+/** One file attached at the audit level (migration 039). */
+export type AuditAttachment = {
+  id: number;
+  audit_id: number;
+  file_url: string;
+  file_name: string;
+  file_mime: string | null;
+  file_size: number | null;
+  uploaded_by: number | null;
+  uploaded_by_name: string | null;
+  uploaded_at: string;
+};
+
 export const AUDIT_STATUS_LABEL: Record<AuditStatus, string> = {
   in_progress: "In progress",
   submitted: "Submitted",

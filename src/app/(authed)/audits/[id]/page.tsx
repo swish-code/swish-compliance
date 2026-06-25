@@ -5,6 +5,7 @@ import Workspace from "@/features/shell/Workspace";
 import {
   getAudit,
   listAuditScopeItems,
+  listAuditAttachments,
 } from "@/features/audits/repository";
 import {
   submitAuditAction,
@@ -12,6 +13,7 @@ import {
   reopenAuditAction,
 } from "@/features/audits/actions";
 import AuditQuestionRow from "@/features/audits/AuditQuestionRow";
+import AuditAttachments from "@/features/audits/AuditAttachments";
 import {
   AUDIT_STATUS_LABEL,
   AUDIT_STATUS_TONE,
@@ -28,7 +30,10 @@ export default async function AuditDetailPage({
   const id = Number(idStr);
   const audit = await getAudit(id);
   if (!audit) notFound();
-  const scopeRows = await listAuditScopeItems(id);
+  const [scopeRows, attachments] = await Promise.all([
+    listAuditScopeItems(id),
+    listAuditAttachments(id),
+  ]);
 
   // Editing rules: only auditor (creator) or admin can edit; never edit a
   // closed audit. The form still renders for read-only viewers but the
@@ -340,8 +345,18 @@ export default async function AuditDetailPage({
 
       {/* ─── Actions ─── */}
       {isOpen && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Submit audit</h3>
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
+          <h3 className="text-sm font-semibold text-gray-700">Submit audit</h3>
+
+          {/* Multi-file attachments — sits ABOVE the form so files persist
+              even if the auditor doesn't submit yet. AuditAttachments owns
+              its own server actions; the Submit form below stays isolated. */}
+          <AuditAttachments
+            auditId={audit.id}
+            attachments={attachments}
+            canEdit={canEdit}
+          />
+
           <form action={submitAuditAction} className="space-y-4">
             <input type="hidden" name="id" value={audit.id} />
             <textarea
@@ -382,6 +397,18 @@ export default async function AuditDetailPage({
               </Link>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Read-only attachments for submitted/closed audits — so reviewers
+          can still download the files the auditor uploaded. */}
+      {!isOpen && attachments.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
+          <AuditAttachments
+            auditId={audit.id}
+            attachments={attachments}
+            canEdit={false}
+          />
         </div>
       )}
 

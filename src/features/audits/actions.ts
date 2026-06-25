@@ -12,10 +12,12 @@ import {
   closeAudit,
   reopenAudit,
   getAudit,
+  addAuditAttachment,
+  deleteAuditAttachment,
 } from "./repository";
 import { createCapa } from "../capa/repository";
 import { notify } from "@/features/notifications/service";
-import { extractAttachment } from "@/lib/attachments";
+import { extractAttachment, extractAttachments } from "@/lib/attachments";
 
 const CreateSchema = z.object({
   // template_id is now optional (migration 038). The audit's checklist
@@ -186,6 +188,72 @@ export async function createAuditAction(formData: FormData) {
 
   revalidatePath("/audits");
   redirect(`/audits/${id}`);
+}
+
+/**
+ * Upload one or more files (photos / PDFs / docs) at the audit level.
+ * Reuses the per-item evidence gate: only the auditor or admin can
+ * attach, and never on a closed audit.
+ */
+export async function addAuditAttachmentsAction(formData: FormData) {
+  const user = await requireUser();
+  const auditId = Number(formData.get("audit_id"));
+  if (!Number.isFinite(auditId) || auditId <= 0) {
+    throw new Error("Invalid audit id.");
+  }
+  const audit = await getAudit(auditId);
+  if (!audit) throw new Error("Audit not found.");
+  assertCanEditAudit(audit, user);
+
+  const files = await extractAttachments(formData, "files");
+  if (files.length === 0) {
+    throw new Error("Pick at least one file to upload.");
+  }
+  for (const f of files) {
+    await addAuditAttachment({
+      audit_id: auditId,
+      file_url: f.dataUrl,
+      file_name: f.name,
+      file_mime: f.mime,
+      file_size: f.size,
+      uploaded_by: user.id,
+    });
+  }
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'audit:attachment_added', 'audit', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      auditId,
+      JSON.stringify({ count: files.length, names: files.map((f) => f.name) }),
+    ]
+  );
+  revalidatePath(`/audits/${auditId}`);
+}
+
+/**
+ * Remove one attachment. Same edit gate as the upload — auditor / admin,
+ * not closed.
+ */
+export async function deleteAuditAttachmentAction(formData: FormData) {
+  const user = await requireUser();
+  const attachmentId = Number(formData.get("attachment_id"));
+  const auditId = Number(formData.get("audit_id"));
+  if (!Number.isFinite(attachmentId) || attachmentId <= 0) {
+    throw new Error("Invalid attachment id.");
+  }
+  const audit = await getAudit(auditId);
+  if (!audit) throw new Error("Audit not found.");
+  assertCanEditAudit(audit, user);
+
+  await deleteAuditAttachment(attachmentId);
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'audit:attachment_removed', 'audit', $3, $4)`,
+    [user.id, user.email, auditId, JSON.stringify({ attachment_id: attachmentId })]
+  );
+  revalidatePath(`/audits/${auditId}`);
 }
 
 export async function saveResponseAction(formData: FormData) {
