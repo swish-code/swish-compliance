@@ -10,9 +10,9 @@ import {
 import {
   updateTemplateAction,
   addItemAction,
-  deleteItemAction,
   recordChecklistItemAnswerAction,
 } from "@/features/checklists/actions";
+import DeleteItemButton from "@/features/checklists/DeleteItemButton";
 import { CHECKLIST_CATEGORIES_FALLBACK } from "@/features/checklists/types";
 import { listOptions } from "@/features/config/repository";
 
@@ -279,16 +279,11 @@ export default async function ChecklistTemplateDetailPage({
                   </td>
                   {canEdit && (
                     <td className="px-5 py-3 text-right">
-                      <form action={deleteItemAction} className="inline">
-                        <input type="hidden" name="id" value={item.id} />
-                        <input type="hidden" name="template_id" value={tpl.id} />
-                        <button
-                          type="submit"
-                          className="text-xs text-red-600 hover:text-red-800 hover:underline"
-                        >
-                          Remove
-                        </button>
-                      </form>
+                      <DeleteItemButton
+                        itemId={item.id}
+                        templateId={tpl.id}
+                        question={item.question}
+                      />
                     </td>
                   )}
                 </tr>
