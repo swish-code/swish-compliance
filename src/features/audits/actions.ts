@@ -54,8 +54,10 @@ const ResponseSchema = z.object({
   audit_id: z.coerce.number().int().positive(),
   item_id: z.coerce.number().int().positive(),
   response: z.enum(["pass", "fail", "na"]).optional().nullable(),
-  // Notes are required whenever a response is being saved.
-  notes: z.string().trim().min(1, "Notes are required to record a response."),
+  // Notes are now optional. The Test → Checklist quick-answer UI lets
+  // the auditor click Yes/No/N/A and move on; they only have to type
+  // a note when they actually want to capture context.
+  notes: z.string().trim().optional().nullable(),
 });
 
 const SubmitSchema = z.object({
@@ -217,7 +219,7 @@ export async function saveResponseAction(formData: FormData) {
     audit_id: parsed.audit_id,
     item_id: parsed.item_id,
     response: parsed.response ?? null,
-    notes: parsed.notes,
+    notes: parsed.notes ?? null,
     // Only touch the evidence columns when the client says it has something
     // new to write (file uploaded OR explicit removal). Plain Pass / notes
     // re-saves leave existing evidence untouched.

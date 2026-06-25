@@ -1,6 +1,11 @@
 import "server-only";
 import { queryAll, queryOne, execute } from "@/lib/db";
-import type { Audit, AuditResponse, AuditStatus } from "./types";
+import type {
+  Audit,
+  AuditResponse,
+  AuditScopeRow,
+  AuditStatus,
+} from "./types";
 import type { ChecklistItem } from "../checklists/types";
 
 const AUDIT_SELECT = `
@@ -11,14 +16,25 @@ const AUDIT_SELECT = `
   a.audit_date, a.status, a.score, a.max_score, a.critical_failed, a.summary,
   a.submitted_at, a.closed_at, a.created_at, a.updated_at,
   a.policy_id, p.title AS policy_title, p.code AS policy_code,
-  a.framework_id, f.name AS framework_name, f.code AS framework_code
+  a.framework_id, f.name AS framework_name, f.code AS framework_code,
+  -- Scope chain (migration 028) + window/assignee (029)
+  a.domain_id,  dom.name  AS domain_name,  dom.code  AS domain_code,
+  a.control_id, ctrl.name AS control_name, ctrl.code AS control_code,
+  a.assigned_to, u_at.display_name AS assigned_to_name,
+  a.start_at, a.end_at
 FROM audits a
-JOIN checklist_templates t ON t.id = a.template_id
-LEFT JOIN brands       b ON b.id = a.brand_id
-LEFT JOIN departments  d ON d.id = a.department_id
-LEFT JOIN users        u ON u.id = a.auditor_id
-LEFT JOIN sops         p ON p.id = a.policy_id
-LEFT JOIN frameworks   f ON f.id = a.framework_id
+-- LEFT JOIN templates: template_id is nullable since migration 038. The
+-- previous INNER JOIN would have hidden every audit created from the
+-- new tests-first flow.
+LEFT JOIN checklist_templates t   ON t.id   = a.template_id
+LEFT JOIN brands       b   ON b.id   = a.brand_id
+LEFT JOIN departments  d   ON d.id   = a.department_id
+LEFT JOIN users        u   ON u.id   = a.auditor_id
+LEFT JOIN sops         p   ON p.id   = a.policy_id
+LEFT JOIN frameworks   f   ON f.id   = a.framework_id
+LEFT JOIN domains      dom ON dom.id = a.domain_id
+LEFT JOIN controls    ctrl ON ctrl.id = a.control_id
+LEFT JOIN users      u_at  ON u_at.id = a.assigned_to
 `;
 
 export async function listAudits(filters: {
@@ -49,6 +65,41 @@ export async function listAudits(filters: {
 
 export async function getAudit(id: number): Promise<Audit | undefined> {
   return queryOne<Audit>(`SELECT ${AUDIT_SELECT} WHERE a.id = $1`, [id]);
+}
+
+/**
+ * Items for the audit grouped by Test → Template. Same item appears
+ * once per test it's linked to — the auditor sees the question in the
+ * context of every test that needs it, not just once.
+ *
+ * Ordered by test (so the page can group them in order they were
+ * picked), then template name, then sort_order within the template.
+ *
+ * The latest response per item is LEFT JOINed; since the
+ * audit_responses UNIQUE constraint is (audit_id, item_id), the same
+ * response repeats across every instance of the item — answering it
+ * under Test A updates the read-back under Test B.
+ */
+export async function listAuditScopeItems(
+  auditId: number
+): Promise<AuditScopeRow[]> {
+  return queryAll<AuditScopeRow>(
+    `SELECT
+       ch.id    AS test_id,    ch.code AS test_code, ch.name AS test_name,
+       t.id     AS template_id, t.code AS template_code, t.name AS template_name,
+       i.id     AS item_id,    i.code AS item_code, i.sort_order AS item_sort_order,
+       i.question, i.weight, i.is_critical,
+       r.response, r.notes, r.evidence_url, r.evidence_name, r.evidence_mime
+     FROM audit_tests at
+     JOIN checks                ch  ON ch.id = at.check_id
+     JOIN check_checklist_items cci ON cci.check_id = at.check_id
+     JOIN checklist_items       i   ON i.id  = cci.checklist_item_id
+     JOIN checklist_templates   t   ON t.id  = i.template_id
+     LEFT JOIN audit_responses  r   ON r.audit_id = at.audit_id AND r.item_id = i.id
+     WHERE at.audit_id = $1
+     ORDER BY ch.code NULLS LAST, ch.id, t.name, i.sort_order, i.id`,
+    [auditId]
+  );
 }
 
 export async function getAuditItems(

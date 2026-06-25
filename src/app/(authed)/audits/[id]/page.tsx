@@ -2,17 +2,21 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
-import { getAudit, getAuditItems } from "@/features/audits/repository";
+import {
+  getAudit,
+  listAuditScopeItems,
+} from "@/features/audits/repository";
 import {
   submitAuditAction,
   closeAuditAction,
   reopenAuditAction,
 } from "@/features/audits/actions";
-import AuditItem from "@/features/audits/AuditItem";
+import AuditQuestionRow from "@/features/audits/AuditQuestionRow";
 import {
   AUDIT_STATUS_LABEL,
   AUDIT_STATUS_TONE,
 } from "@/features/audits/types";
+import type { AuditScopeRow } from "@/features/audits/types";
 
 export default async function AuditDetailPage({
   params,
@@ -24,31 +28,48 @@ export default async function AuditDetailPage({
   const id = Number(idStr);
   const audit = await getAudit(id);
   if (!audit) notFound();
-  const items = await getAuditItems(id);
+  const scopeRows = await listAuditScopeItems(id);
 
-  // Editing rules:
-  //  - Only the auditor (creator) or an admin can edit
-  //  - Once closed, NOBODY can edit
+  // Editing rules: only auditor (creator) or admin can edit; never edit a
+  // closed audit. The form still renders for read-only viewers but the
+  // radios + Save are disabled.
   const isOwner = audit.auditor_id === user.id;
   const isAdmin = user.role === "admin";
   const isClosed = audit.status === "closed";
   const canEdit = !isClosed && (isOwner || isAdmin);
   const isOpen = audit.status === "in_progress" && canEdit;
-  const answered = items.filter((i) => i.response).length;
-  const failed = items.filter((i) => i.response === "fail").length;
+
+  // Group scope rows: test → template → items. Same item can appear under
+  // multiple tests on purpose — the auditor sees the question in the
+  // context of each test it belongs to.
+  const grouped = groupByTestAndTemplate(scopeRows);
+
+  // Progress is computed over UNIQUE item ids (a question that appears
+  // under three tests is still one answer in the underlying response row).
+  const uniqueAnswered = new Set(
+    scopeRows.filter((r) => r.response).map((r) => r.item_id)
+  ).size;
+  const uniqueTotal = new Set(scopeRows.map((r) => r.item_id)).size;
+  const uniqueFailed = new Set(
+    scopeRows.filter((r) => r.response === "fail").map((r) => r.item_id)
+  ).size;
+
+  const headerTitle = audit.template_name
+    ? `${audit.template_name} — #${audit.id}`
+    : `Audit #${audit.id}`;
 
   return (
     <Workspace
       section="Compliance / Audits"
-      subtitle={`${audit.template_name} — #${audit.id}`}
+      subtitle={headerTitle}
       sessionLabel="Session"
       userLabel={user.displayName}
     >
-      {/* Header card */}
+      {/* ─── Header card ─── */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
               <span
                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${AUDIT_STATUS_TONE[audit.status]}`}
               >
@@ -61,85 +82,127 @@ export default async function AuditDetailPage({
                 <span className="text-xs text-brand-700">{audit.template_category}</span>
               )}
             </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-gray-600">
-              <div>
-                <span className="text-xs uppercase tracking-wider text-gray-400">Brand</span>
-                <div>{audit.brand_name ?? "—"}</div>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-gray-400">Department</span>
-                <div>{audit.department_name ?? "—"}</div>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-gray-400">Location</span>
-                <div>{audit.location ?? "—"}</div>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-gray-400">Auditor</span>
-                <div>{audit.auditor_name ?? "—"}</div>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-gray-400">Policy</span>
-                <div>
-                  {audit.policy_id ? (
-                    <Link
-                      href={`/sops/${audit.policy_id}`}
-                      className="text-brand-700 hover:underline"
-                    >
-                      {audit.policy_code ? `${audit.policy_code} · ` : ""}
-                      {audit.policy_title}
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </div>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-gray-400">Framework</span>
-                <div>
-                  {audit.framework_id ? (
-                    <Link
-                      href={`/frameworks/${audit.framework_id}`}
-                      className="text-brand-700 hover:underline"
-                    >
-                      {audit.framework_code} · {audit.framework_name}
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </div>
-              </div>
+
+            {/* Scope chain (biggest → smallest). Renders even when some  */}
+            {/* levels are missing on legacy audits — the empty ones show */}
+            {/* a dash.                                                   */}
+            <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-2">
+              Audit scope
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <Field label="Domain">
+                {audit.domain_id ? (
+                  <Link
+                    href={`/domains/${audit.domain_id}`}
+                    className="text-brand-700 hover:underline"
+                  >
+                    {audit.domain_name}
+                  </Link>
+                ) : "—"}
+              </Field>
+              <Field label="Framework">
+                {audit.framework_id ? (
+                  <Link
+                    href={`/frameworks/${audit.framework_id}`}
+                    className="text-brand-700 hover:underline"
+                  >
+                    {audit.framework_code} · {audit.framework_name}
+                  </Link>
+                ) : "—"}
+              </Field>
+              <Field label="Control">
+                {audit.control_id ? (
+                  <Link
+                    href={`/controls/${audit.control_id}`}
+                    className="text-brand-700 hover:underline"
+                  >
+                    {audit.control_code ? `${audit.control_code} · ` : ""}
+                    {audit.control_name}
+                  </Link>
+                ) : "—"}
+              </Field>
+              <Field label="Tests">
+                {grouped.length > 0
+                  ? `${grouped.length} test${grouped.length === 1 ? "" : "s"}`
+                  : "—"}
+              </Field>
+            </div>
+
+            {/* Operational + ownership row */}
+            <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-2">
+              Context & ownership
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Field label="Brand">{audit.brand_name ?? "—"}</Field>
+              <Field label="Department">{audit.department_name ?? "—"}</Field>
+              <Field label="Location">{audit.location ?? "—"}</Field>
+              <Field label="Auditor (creator)">{audit.auditor_name ?? "—"}</Field>
+              <Field label="Assigned to">
+                {audit.assigned_to_name ?? (
+                  <span className="text-gray-400">No one yet</span>
+                )}
+              </Field>
+              <Field label="Start at">
+                {audit.start_at
+                  ? new Date(audit.start_at).toLocaleString()
+                  : "—"}
+              </Field>
+              <Field label="End at">
+                {audit.end_at ? new Date(audit.end_at).toLocaleString() : "—"}
+              </Field>
+              <Field label="Policy">
+                {audit.policy_id ? (
+                  <Link
+                    href={`/sops/${audit.policy_id}`}
+                    className="text-brand-700 hover:underline"
+                  >
+                    {audit.policy_code ? `${audit.policy_code} · ` : ""}
+                    {audit.policy_title}
+                  </Link>
+                ) : "—"}
+              </Field>
             </div>
           </div>
 
           {audit.score !== null && (
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <div
                 className={`text-4xl font-bold ${
-                  Number(audit.score) >= 90 ? "text-emerald-600" :
-                  Number(audit.score) >= 70 ? "text-amber-600" :
-                  "text-red-600"
+                  Number(audit.score) >= 90
+                    ? "text-emerald-600"
+                    : Number(audit.score) >= 70
+                    ? "text-amber-600"
+                    : "text-red-600"
                 }`}
               >
                 {Number(audit.score).toFixed(1)}%
               </div>
-              <div className="text-xs uppercase tracking-wider text-gray-500">Score</div>
+              <div className="text-xs uppercase tracking-wider text-gray-500">
+                Score
+              </div>
               {audit.critical_failed > 0 && (
                 <div className="text-xs text-red-700 mt-1 font-medium">
-                  {audit.critical_failed} critical fail{audit.critical_failed > 1 ? "s" : ""}
+                  {audit.critical_failed} critical fail
+                  {audit.critical_failed > 1 ? "s" : ""}
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Progress */}
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-gray-500 pt-3 border-t border-gray-100">
           {isOpen
-            ? `Answered ${answered} of ${items.length} items${failed > 0 ? ` — ${failed} marked fail` : ""}`
+            ? `Answered ${uniqueAnswered} of ${uniqueTotal} unique items${
+                uniqueFailed > 0 ? ` — ${uniqueFailed} marked No / fail` : ""
+              }`
             : audit.summary
-              ? <span><span className="font-medium text-gray-700">Summary:</span> {audit.summary}</span>
-              : "Submitted with no summary."}
+            ? (
+              <span>
+                <span className="font-medium text-gray-700">Summary:</span>{" "}
+                {audit.summary}
+              </span>
+            )
+            : "Submitted with no summary."}
         </div>
       </div>
 
@@ -150,7 +213,7 @@ export default async function AuditDetailPage({
           <div className="text-sm text-emerald-900">
             <div className="font-semibold mb-0.5">This audit is closed</div>
             <div className="text-xs text-emerald-800">
-              No further changes are allowed by any user. The audit is preserved for the record.
+              No further changes are allowed by any user.
             </div>
           </div>
         </div>
@@ -162,103 +225,120 @@ export default async function AuditDetailPage({
             <div className="font-semibold mb-0.5">Read-only view</div>
             <div className="text-xs text-amber-800">
               Only the auditor who created this audit
-              {audit.auditor_name ? <> ({audit.auditor_name})</> : null} can edit responses,
-              submit it, or close it.
+              {audit.auditor_name ? <> ({audit.auditor_name})</> : null} can
+              edit responses, submit it, or close it.
             </div>
           </div>
         </div>
       )}
 
-      {/* Items */}
-      <div className="space-y-3 mb-4">
-        {items.map((item) => {
-          // While the audit is still 'in_progress' AND the current viewer can
-          // edit, render the live AuditItem (auto-save on click / blur).
-          if (isOpen) {
-            return (
-              <AuditItem
-                key={item.item_id}
-                auditId={audit.id}
-                itemId={item.item_id}
-                sortOrder={item.sort_order}
-                question={item.question}
-                guidance={item.guidance}
-                weight={item.weight}
-                isCritical={item.is_critical}
-                initialResponse={item.response}
-                initialNotes={item.notes}
-                initialEvidenceUrl={item.evidence_url}
-                initialEvidenceName={item.evidence_name}
-                initialEvidenceMime={item.evidence_mime}
-                canEdit
-              />
-            );
-          }
-
-          // Read-only display: submitted / closed audit, or non-editor viewer.
-          const r = item.response;
-          return (
+      {/* ─── Tests → Checklists → Questions ─── */}
+      {grouped.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center text-gray-400">
+          No tests linked to this audit. Pick tests when creating the audit
+          so the checklists appear here.
+        </div>
+      ) : (
+        <div className="space-y-3 mb-4">
+          {grouped.map((test) => (
             <div
-              key={item.item_id}
-              className={`bg-white rounded-2xl border shadow-sm p-5 ${
-                r === "fail" ? "border-red-200 bg-red-50/30" :
-                r === "pass" ? "border-emerald-200 bg-emerald-50/30" :
-                "border-gray-200"
-              }`}
+              key={test.test_id}
+              className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
             >
-              <div className="flex items-start gap-3 mb-3">
-                <div className="text-xs text-gray-400 font-mono mt-1">{item.sort_order}</div>
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-gray-900">
-                    {item.question}
-                    {item.is_critical && (
-                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 rounded">
-                        CRITICAL
+              {/* Test header */}
+              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/60">
+                <div className="flex items-center gap-3">
+                  {test.test_code && (
+                    <span className="font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                      {test.test_code}
+                    </span>
+                  )}
+                  <h3 className="text-sm font-semibold text-gray-800">
+                    {test.test_name}
+                  </h3>
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {test.templates.length} checklist
+                    {test.templates.length === 1 ? "" : "s"} ·{" "}
+                    {test.templates.reduce(
+                      (acc, t) => acc + t.items.length,
+                      0
+                    )}{" "}
+                    question
+                    {test.templates.reduce(
+                      (acc, t) => acc + t.items.length,
+                      0
+                    ) === 1
+                      ? ""
+                      : "s"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Each checklist is a <details> so the user clicks to expand */}
+              {test.templates.map((tpl) => (
+                <details
+                  key={`${test.test_id}-${tpl.template_id}`}
+                  className="group border-b border-gray-100 last:border-b-0"
+                >
+                  <summary className="px-5 py-3 cursor-pointer flex items-center gap-3 hover:bg-gray-50">
+                    <span className="text-gray-400 group-open:rotate-90 transition-transform">
+                      ▶
+                    </span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {tpl.template_name}
+                    </span>
+                    {tpl.template_code && (
+                      <span className="font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                        {tpl.template_code}
                       </span>
                     )}
-                  </div>
-                  {item.guidance && (
-                    <div className="text-xs text-gray-500 mt-1">{item.guidance}</div>
-                  )}
-                </div>
-                <div className="text-xs text-gray-400">×{item.weight}</div>
-              </div>
-              <div className="space-y-1 pl-7">
-                <div className="text-xs">
-                  Response: <span className={
-                    r === "pass" ? "text-emerald-700 font-medium" :
-                    r === "fail" ? "text-red-700 font-medium" :
-                    "text-gray-500"
-                  }>{r ? r.toUpperCase() : "Not answered"}</span>
-                </div>
-                {item.notes && <div className="text-xs text-gray-600 italic">&ldquo;{item.notes}&rdquo;</div>}
-                {item.evidence_url && (
-                  <a
-                    href={item.evidence_url}
-                    download={item.evidence_name ?? undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 mt-1 text-xs text-brand-700 hover:underline"
-                    title={item.evidence_name ?? "Evidence"}
-                  >
-                    <span>
-                      {item.evidence_mime?.startsWith("image/") ? "🖼️"
-                        : item.evidence_mime === "application/pdf" ? "📄"
-                        : item.evidence_mime?.includes("word") ? "📝"
-                        : item.evidence_mime?.includes("excel") || item.evidence_mime?.includes("spreadsheet") ? "📊"
-                        : item.evidence_mime?.includes("powerpoint") || item.evidence_mime?.includes("presentation") ? "📑"
-                        : "📎"}
+                    <span className="text-xs text-gray-500 ml-auto">
+                      {tpl.items.length} question
+                      {tpl.items.length === 1 ? "" : "s"}
                     </span>
-                    <span className="truncate max-w-xs">{item.evidence_name ?? "Evidence"}</span>
-                  </a>
-                )}
-              </div>
+                  </summary>
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-600 text-[10px] uppercase tracking-wider">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium w-12">
+                          #
+                        </th>
+                        <th className="text-left px-3 py-2 font-medium">
+                          Question
+                        </th>
+                        <th className="text-left px-3 py-2 font-medium w-16">
+                          Weight
+                        </th>
+                        <th className="text-left px-3 py-2 font-medium">
+                          Answer
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tpl.items.map((item, idx) => (
+                        <AuditQuestionRow
+                          key={`${test.test_id}-${item.item_id}`}
+                          auditId={audit.id}
+                          itemId={item.item_id}
+                          question={item.question}
+                          weight={item.weight}
+                          isCritical={item.is_critical}
+                          itemNo={idx + 1}
+                          initialResponse={item.response}
+                          initialNotes={item.notes}
+                          canEdit={isOpen}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
+              ))}
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Actions */}
+      {/* ─── Actions ─── */}
       {isOpen && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Submit audit</h3>
@@ -271,11 +351,19 @@ export default async function AuditDetailPage({
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <label className="flex items-start gap-3 p-3 border border-amber-200 bg-amber-50 rounded-lg cursor-pointer text-sm">
-              <input type="checkbox" name="spawn_capa" defaultChecked className="accent-amber-600 mt-0.5" />
+              <input
+                type="checkbox"
+                name="spawn_capa"
+                defaultChecked
+                className="accent-amber-600 mt-0.5"
+              />
               <div>
-                <div className="font-medium text-amber-900">Auto-create CAPAs for failed items</div>
+                <div className="font-medium text-amber-900">
+                  Auto-create CAPAs for failed items
+                </div>
                 <div className="text-xs text-amber-700">
-                  Each fail (especially critical ones) gets a corrective action with a 7-day default due date.
+                  Each fail (especially critical ones) gets a corrective action
+                  with a 7-day default due date.
                 </div>
               </div>
             </label>
@@ -286,7 +374,10 @@ export default async function AuditDetailPage({
               >
                 Submit audit
               </button>
-              <Link href="/audits" className="text-sm text-gray-500 hover:text-gray-700 self-center">
+              <Link
+                href="/audits"
+                className="text-sm text-gray-500 hover:text-gray-700 self-center"
+              >
                 Back to list
               </Link>
             </div>
@@ -297,10 +388,12 @@ export default async function AuditDetailPage({
       {audit.status === "submitted" && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-gray-600 flex-1 min-w-[260px]">
-            Submitted {audit.submitted_at && new Date(audit.submitted_at).toLocaleString()}.
+            Submitted{" "}
+            {audit.submitted_at && new Date(audit.submitted_at).toLocaleString()}
+            .{" "}
             {canEdit
-              ? " You can edit the audit until it's closed, or mark it as closed when all related CAPAs are addressed."
-              : " Only the auditor who created this audit can edit or close it."}
+              ? "You can edit until the audit is closed, or close it when all CAPAs are addressed."
+              : "Only the auditor who created this audit can edit or close it."}
           </div>
           {canEdit && (
             <div className="flex gap-2">
@@ -309,12 +402,7 @@ export default async function AuditDetailPage({
                 <button
                   type="submit"
                   className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium"
-                  title="Reopen this audit so you can change responses. Score will be recomputed on resubmit."
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </svg>
                   Edit audit
                 </button>
               </form>
@@ -332,5 +420,73 @@ export default async function AuditDetailPage({
         </div>
       )}
     </Workspace>
+  );
+}
+
+/* ─── Helpers ─────────────────────────────────────────────────────── */
+
+type GroupedTemplate = {
+  template_id: number;
+  template_code: string | null;
+  template_name: string;
+  items: AuditScopeRow[];
+};
+
+type GroupedTest = {
+  test_id: number;
+  test_code: string | null;
+  test_name: string;
+  templates: GroupedTemplate[];
+};
+
+/**
+ * Walks the flat (test, item) pair list once, building a tree where
+ * each test holds its templates and each template holds its items in
+ * source order. Linear in row count — no nested sorts.
+ */
+function groupByTestAndTemplate(rows: AuditScopeRow[]): GroupedTest[] {
+  const tests: GroupedTest[] = [];
+  const testIdx = new Map<number, number>();
+  const tplIdx = new Map<string, number>(); // key: testId-tplId
+
+  for (const r of rows) {
+    let ti = testIdx.get(r.test_id);
+    if (ti === undefined) {
+      ti = tests.length;
+      testIdx.set(r.test_id, ti);
+      tests.push({
+        test_id: r.test_id,
+        test_code: r.test_code,
+        test_name: r.test_name,
+        templates: [],
+      });
+    }
+    const test = tests[ti];
+
+    const tk = `${r.test_id}-${r.template_id}`;
+    let pi = tplIdx.get(tk);
+    if (pi === undefined) {
+      pi = test.templates.length;
+      tplIdx.set(tk, pi);
+      test.templates.push({
+        template_id: r.template_id,
+        template_code: r.template_code,
+        template_name: r.template_name,
+        items: [],
+      });
+    }
+    test.templates[pi].items.push(r);
+  }
+  return tests;
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">
+        {label}
+      </div>
+      <div className="text-sm text-gray-900 truncate">{children}</div>
+    </div>
   );
 }

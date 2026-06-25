@@ -2,8 +2,11 @@ export type AuditStatus = "in_progress" | "submitted" | "closed";
 
 export type Audit = {
   id: number;
-  template_id: number;
-  template_name: string;
+  // template_id is nullable since migration 038 — new audits scope by
+  // tests, not a single template. template_name/category are NULL for
+  // those audits.
+  template_id: number | null;
+  template_name: string | null;
   template_category: string | null;
   brand_id: number | null;
   brand_name: string | null;
@@ -29,6 +32,45 @@ export type Audit = {
   framework_id: number | null;
   framework_name: string | null;
   framework_code: string | null;
+  // Scope chain (migration 028) + window/assignee (029)
+  domain_id: number | null;
+  domain_name: string | null;
+  domain_code: string | null;
+  control_id: number | null;
+  control_name: string | null;
+  control_code: string | null;
+  assigned_to: number | null;
+  assigned_to_name: string | null;
+  start_at: string | null;
+  end_at: string | null;
+};
+
+/**
+ * One row per (test, item) pair for an audit. The same item can appear
+ * under multiple tests when it's linked to several of them via the
+ * check_checklist_items junction — that's intentional, the auditor
+ * sees the question in the context of each test.
+ */
+export type AuditScopeRow = {
+  test_id: number;
+  test_code: string | null;
+  test_name: string;
+  template_id: number;
+  template_code: string | null;
+  template_name: string;
+  item_id: number;
+  item_code: string | null;
+  item_sort_order: number;
+  question: string;
+  weight: number;
+  is_critical: boolean;
+  // Latest response on this item for this audit (shared across all
+  // instances of the same item under different tests).
+  response: "pass" | "fail" | "na" | null;
+  notes: string | null;
+  evidence_url: string | null;
+  evidence_name: string | null;
+  evidence_mime: string | null;
 };
 
 export type AuditResponse = {
