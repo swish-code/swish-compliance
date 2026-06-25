@@ -11,6 +11,7 @@ import {
 import { execute } from "@/lib/db";
 import {
   createSop,
+  updateSop,
   setSopStatus,
   getSopById,
   setSopAttachment,
@@ -18,6 +19,7 @@ import {
 import {
   findTransition,
   isSopLocked,
+  canEditSopFields,
   type SopStatus,
 } from "./types";
 import { notify } from "@/features/notifications/service";
@@ -116,6 +118,48 @@ function planSopNotification(
     default:
       return null;
   }
+}
+
+/**
+ * Edit notification — fire when someone saves the SOP in a returned
+ * state so the OTHER side knows the rework is in progress. Quiet when
+ * SOP is in a forward-flowing status (the role's own court is normal,
+ * not noteworthy).
+ */
+type EditNotifPlan = {
+  audience: { roles?: string[]; userIds?: number[] };
+  title: string;
+  body: string;
+};
+
+function planSopEditNotification(
+  role: string,
+  status: SopStatus,
+  sopTitle: string,
+  actorName: string,
+  ownerId: number | null
+): EditNotifPlan | null {
+  const ownerArr = ownerId ? [ownerId] : [];
+  // DM saving → ping Compliance (they're waiting for the resubmit).
+  if (role === "department_manager") {
+    if (status === "returned_to_dm" || status === "returned_to_compliance") {
+      return {
+        audience: { roles: ["compliance"] },
+        title: `DM edited SOP "${sopTitle}"`,
+        body: `${actorName} updated the content. Review the changes and approve or reject.`,
+      };
+    }
+  }
+  // Compliance saving in returned_to_compliance → ping the DM so they
+  // see the SOP is moving even if they don't act on it themselves.
+  if (role === "compliance" && status === "returned_to_compliance") {
+    return {
+      audience: { userIds: ownerArr },
+      title: `Compliance edited your SOP "${sopTitle}"`,
+      body: `${actorName} updated the content. You can review or wait for the resubmit to BE.`,
+    };
+  }
+  return null;
 }
 
 /** Trim, drop empty strings to null, and cap at 30k characters so a single
@@ -277,6 +321,159 @@ export async function createSopAction(formData: FormData) {
 
   revalidatePath("/sops");
   redirect(`/sops/${id}`);
+}
+
+const UpdateSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  code: z.string().trim().optional().nullable(),
+  title: z.string().trim().min(1, "Title is required"),
+  description: z.string().trim().optional().nullable(),
+  file_url: z.string().trim().url().optional().nullable().or(z.literal("")),
+  brand_id: z.coerce.number().int().positive().optional().nullable(),
+  department_id: z.coerce.number().int().positive().optional().nullable(),
+  effective_date: z.string().optional().nullable(),
+  review_date: z.string().optional().nullable(),
+  purpose:                sectionField,
+  scope:                  sectionField,
+  process_flow:           sectionField,
+  roles_responsibilities: sectionField,
+  inputs_outputs:         sectionField,
+  tools_forms:            sectionField,
+  kpis:                   sectionField,
+  ownership_review:       sectionField,
+  appendices:             sectionField,
+  signatures_approval:    sectionField,
+});
+
+/**
+ * Edit SOP content (header + the 10 sections + attachment). The status
+ * is left untouched — the user picks a transition button separately if
+ * they want to resubmit.
+ *
+ * On save we ping the other side of the workflow (DM → Compliance,
+ * Compliance in returned → DM) so they're aware the rework is moving.
+ * Forward-flow edits (compliance editing while in their court) stay
+ * silent to avoid notification fatigue.
+ */
+export async function updateSopAction(formData: FormData) {
+  const user = await requireUser();
+  const idRaw = Number(formData.get("id"));
+  if (!Number.isFinite(idRaw) || idRaw <= 0) {
+    throw new Error("Invalid SOP id.");
+  }
+  const current = await getSopById(idRaw);
+  if (!current) throw new Error("SOP not found.");
+  if (!canEditSopFields(user.role, current.status)) {
+    throw new Error(
+      `Your role (${user.role}) can't edit an SOP in status "${current.status}".`
+    );
+  }
+
+  const file = await extractAttachment(formData, "attachment_file");
+  const removeAttachment = formData.get("remove_attachment") === "true";
+
+  const raw = Object.fromEntries(formData.entries());
+  delete (raw as Record<string, unknown>).attachment_file;
+  delete (raw as Record<string, unknown>).remove_attachment;
+
+  const blankToNull = (v: FormDataEntryValue | undefined) =>
+    v === "" || v === undefined ? null : v;
+
+  // Same sentinel handling as create — "__function__" / "__all__" become
+  // boolean flags so Zod doesn't see them.
+  const brandIsFunction = raw.brand_id === "__function__";
+  const isAllDepartments = raw.department_id === "__all__";
+  if (brandIsFunction) (raw as Record<string, unknown>).brand_id = "";
+  if (isAllDepartments) (raw as Record<string, unknown>).department_id = "";
+
+  const parsed = UpdateSchema.parse({
+    ...raw,
+    file_url: blankToNull(raw.file_url),
+    code: blankToNull(raw.code),
+    description: blankToNull(raw.description),
+    brand_id: blankToNull(raw.brand_id),
+    department_id: blankToNull(raw.department_id),
+    effective_date: blankToNull(raw.effective_date),
+    review_date: blankToNull(raw.review_date),
+    purpose:                blankToNull(raw.purpose),
+    scope:                  blankToNull(raw.scope),
+    process_flow:           blankToNull(raw.process_flow),
+    roles_responsibilities: blankToNull(raw.roles_responsibilities),
+    inputs_outputs:         blankToNull(raw.inputs_outputs),
+    tools_forms:            blankToNull(raw.tools_forms),
+    kpis:                   blankToNull(raw.kpis),
+    ownership_review:       blankToNull(raw.ownership_review),
+    appendices:             blankToNull(raw.appendices),
+    signatures_approval:    blankToNull(raw.signatures_approval),
+  });
+
+  await updateSop({
+    id: parsed.id,
+    code: parsed.code ?? null,
+    title: parsed.title,
+    description: parsed.description ?? null,
+    file_url: parsed.file_url || null,
+    update_attachment: !!file || removeAttachment,
+    attachment_data_url: file?.dataUrl ?? null,
+    attachment_name: file?.name ?? null,
+    attachment_mime: file?.mime ?? null,
+    brand_id: parsed.brand_id ?? null,
+    department_id: parsed.department_id ?? null,
+    effective_date: parsed.effective_date ?? null,
+    review_date: parsed.review_date ?? null,
+    brand_is_function: brandIsFunction,
+    is_all_departments: isAllDepartments,
+    purpose: parsed.purpose ?? null,
+    scope: parsed.scope ?? null,
+    process_flow: parsed.process_flow ?? null,
+    roles_responsibilities: parsed.roles_responsibilities ?? null,
+    inputs_outputs: parsed.inputs_outputs ?? null,
+    tools_forms: parsed.tools_forms ?? null,
+    kpis: parsed.kpis ?? null,
+    ownership_review: parsed.ownership_review ?? null,
+    appendices: parsed.appendices ?? null,
+    signatures_approval: parsed.signatures_approval ?? null,
+  });
+
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'sop:updated', 'sop', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      parsed.id,
+      JSON.stringify({
+        user_name: user.displayName,
+        user_role: user.role,
+        status_at_edit: current.status,
+        title_changed: current.title !== parsed.title,
+        attachment_changed: !!file || removeAttachment,
+      }),
+    ]
+  );
+
+  // Notify the OTHER side of the workflow so rework momentum is visible.
+  const editPlan = planSopEditNotification(
+    user.role,
+    current.status,
+    parsed.title,
+    user.displayName,
+    current.created_by ?? current.owner_id
+  );
+  if (editPlan) {
+    await notify({
+      audience: editPlan.audience,
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "sop:updated",
+      title: editPlan.title,
+      body: editPlan.body,
+      severity: "info",
+      entity: { type: "sop", id: parsed.id, href: `/sops/${parsed.id}` },
+    });
+  }
+
+  revalidatePath("/sops");
+  revalidatePath(`/sops/${parsed.id}`);
 }
 
 export async function updateSopAttachmentAction(formData: FormData) {

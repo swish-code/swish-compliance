@@ -162,6 +162,111 @@ export async function createSop(input: CreateSopInput): Promise<number> {
   return row!.id;
 }
 
+export type UpdateSopInput = {
+  id: number;
+  code?: string | null;
+  title: string;
+  description?: string | null;
+  file_url?: string | null;
+  attachment_data_url?: string | null;
+  attachment_name?: string | null;
+  attachment_mime?: string | null;
+  /** When true, the attachment columns are replaced (including to NULL).
+   *  When false, the existing attachment stays untouched. Lets the edit
+   *  form re-save title/sections without forcing a re-upload. */
+  update_attachment: boolean;
+  brand_id?: number | null;
+  department_id?: number | null;
+  owner_id?: number | null;
+  effective_date?: string | null;
+  review_date?: string | null;
+  brand_is_function?: boolean;
+  is_all_departments?: boolean;
+  purpose?: string | null;
+  scope?: string | null;
+  process_flow?: string | null;
+  roles_responsibilities?: string | null;
+  inputs_outputs?: string | null;
+  tools_forms?: string | null;
+  kpis?: string | null;
+  ownership_review?: string | null;
+  appendices?: string | null;
+  signatures_approval?: string | null;
+};
+
+/**
+ * In-place edit of an SOP's content (title, description, 10 sections,
+ * brand/dept/scope flags, dates, file URL/attachment). Status is NOT
+ * touched — workflow stays driven by setSopStatus/transitionSopAction.
+ *
+ * The attachment columns are conditionally updated via CASE based on
+ * `update_attachment` so a routine field edit doesn't blow away an
+ * already-uploaded file.
+ */
+export async function updateSop(input: UpdateSopInput): Promise<void> {
+  const brandId = input.brand_is_function ? null : input.brand_id ?? null;
+  const departmentId = input.is_all_departments
+    ? null
+    : input.department_id ?? null;
+
+  await execute(
+    `UPDATE sops SET
+       code                   = $2,
+       title                  = $3,
+       description            = $4,
+       file_url               = $5,
+       attachment_data_url    = CASE WHEN $6  THEN $7  ELSE attachment_data_url END,
+       attachment_name        = CASE WHEN $6  THEN $8  ELSE attachment_name     END,
+       attachment_mime        = CASE WHEN $6  THEN $9  ELSE attachment_mime     END,
+       brand_id               = $10,
+       department_id          = $11,
+       owner_id               = COALESCE($12, owner_id),
+       effective_date         = $13,
+       review_date            = $14,
+       brand_is_function      = $15,
+       is_all_departments     = $16,
+       purpose                = $17,
+       scope                  = $18,
+       process_flow           = $19,
+       roles_responsibilities = $20,
+       inputs_outputs         = $21,
+       tools_forms            = $22,
+       kpis                   = $23,
+       ownership_review       = $24,
+       appendices             = $25,
+       signatures_approval    = $26
+     WHERE id = $1`,
+    [
+      input.id,
+      input.code ?? null,
+      input.title,
+      input.description ?? null,
+      input.file_url ?? null,
+      input.update_attachment,
+      input.attachment_data_url ?? null,
+      input.attachment_name ?? null,
+      input.attachment_mime ?? null,
+      brandId,
+      departmentId,
+      input.owner_id ?? null,
+      input.effective_date ?? null,
+      input.review_date ?? null,
+      input.brand_is_function ?? false,
+      input.is_all_departments ?? false,
+      input.purpose ?? null,
+      input.scope ?? null,
+      input.process_flow ?? null,
+      input.roles_responsibilities ?? null,
+      input.inputs_outputs ?? null,
+      input.tools_forms ?? null,
+      input.kpis ?? null,
+      input.ownership_review ?? null,
+      input.appendices ?? null,
+      input.signatures_approval ?? null,
+    ]
+  );
+}
+
 export async function setSopAttachment(
   id: number,
   dataUrl: string | null,

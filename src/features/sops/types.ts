@@ -111,6 +111,37 @@ export function isSopLocked(status: SopStatus): boolean {
   return status === "approved" || status === "archived";
 }
 
+/**
+ * Can this role edit the SOP's content (header + sections) at the given
+ * status? Shared between the UI (decides whether to render the Edit
+ * button) and the server action (enforces it at write time). The two
+ * MUST stay in sync — keep them here.
+ *
+ * Returned_to_compliance is the special case the user asked for: BOTH
+ * the DM and Compliance can edit (whichever acts first).
+ */
+export function canEditSopFields(role: string, status: SopStatus): boolean {
+  if (status === "approved" || status === "archived") return false;
+  if (role === "admin") return true;
+  if (role === "department_manager") {
+    return (
+      status === "draft" ||
+      status === "returned_to_dm" ||
+      status === "returned_to_compliance"
+    );
+  }
+  if (role === "compliance") {
+    return status === "pending_compliance" || status === "returned_to_compliance";
+  }
+  if (role === "business_excellence") {
+    return (
+      status === "pending_business_excellence" || status === "returned_to_be"
+    );
+  }
+  if (role === "ceo") return status === "pending_ceo";
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Transition map — single source of truth for the workflow.
 // Used by both the server action (validation) and the UI (which buttons
@@ -176,10 +207,35 @@ export const SOP_TRANSITIONS: SopTransition[] = [
     from: "returned_to_compliance",
     to: "pending_business_excellence",
     allowedRoles: ["compliance", "admin"],
+    commentRequired: true,
+    label: "Approve & Resubmit to Business Excellence",
+    description: "After applying BE's feedback, send the SOP back to BE for review. Comment required.",
+    tone: "bg-emerald-600 hover:bg-emerald-700",
+  },
+  {
+    // NEW (workflow extension): Compliance can also bounce the SOP back
+    // to the DM if the BE feedback needs deeper rework that the original
+    // owner should handle.
+    from: "returned_to_compliance",
+    to: "returned_to_dm",
+    allowedRoles: ["compliance", "admin"],
+    commentRequired: true,
+    label: "Reject — return to Department Manager",
+    description: "Bounce back to the DM with required changes. Reason required.",
+    tone: "bg-red-600 hover:bg-red-700",
+  },
+  {
+    // NEW (workflow extension): when the SOP is back with Compliance after
+    // BE rejection, the original DM can also choose to step in, edit the
+    // content, and resubmit straight to Compliance (skipping their own
+    // returned_to_dm bucket).
+    from: "returned_to_compliance",
+    to: "pending_compliance",
+    allowedRoles: ["department_manager", "admin"],
     commentRequired: false,
-    label: "Resubmit to Business Excellence",
-    description: "After applying BE's feedback, send the SOP back to BE for review.",
-    tone: "bg-indigo-600 hover:bg-indigo-700",
+    label: "Resubmit to Compliance",
+    description: "DM edited the SOP and is sending it back to Compliance for review.",
+    tone: "bg-amber-600 hover:bg-amber-700",
   },
 
   // ------------------------------------------------------------ BE reviews

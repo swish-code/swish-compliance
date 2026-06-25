@@ -9,6 +9,7 @@ import {
   SOP_SECTIONS,
   isSopLocked,
   availableTransitions,
+  canEditSopFields,
 } from "@/features/sops/types";
 import {
   updateSopAttachmentAction,
@@ -146,9 +147,22 @@ export default async function SopDetailPage({
           </div>
         )}
 
-        <Link href="/sops" className="text-sm text-gray-500 hover:text-gray-700">
-          ← Back to list
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/sops" className="text-sm text-gray-500 hover:text-gray-700">
+            ← Back to list
+          </Link>
+          {/* Edit button — visible only when the current role + status combo
+              allows content edits (matches the canEditSopFields gate in
+              the action). Locked statuses (approved / archived) hide it. */}
+          {canEditSopFields(user.role, sop.status) && (
+            <Link
+              href={`/sops/${sop.id}/edit`}
+              className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100"
+            >
+              ✏️ Edit SOP
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Highlight the most-recent rejection comment so the current actor sees it */}
