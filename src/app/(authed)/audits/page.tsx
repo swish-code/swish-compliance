@@ -30,7 +30,7 @@ export default async function AuditsPage({
             type="text"
             name="search"
             defaultValue={sp.search ?? ""}
-            placeholder="Search by template or location…"
+            placeholder="Search by template, location, control, framework, or domain…"
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <select
@@ -60,7 +60,7 @@ export default async function AuditsPage({
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
               <th className="text-left px-5 py-3 font-medium">#</th>
-              <th className="text-left px-5 py-3 font-medium">Template</th>
+              <th className="text-left px-5 py-3 font-medium">Audit Scope</th>
               <th className="text-left px-5 py-3 font-medium">Brand / Dept</th>
               <th className="text-left px-5 py-3 font-medium">Location</th>
               <th className="text-left px-5 py-3 font-medium">Auditor</th>
@@ -81,12 +81,34 @@ export default async function AuditsPage({
               <tr key={a.id} className="border-t border-gray-100 hover:bg-gray-50">
                 <td className="px-5 py-3 font-mono text-xs text-gray-400">#{a.id}</td>
                 <td className="px-5 py-3">
-                  <Link href={`/audits/${a.id}`} className="font-medium text-brand-700 hover:underline">
-                    {a.template_name}
+                  {/* Two render paths depending on how the audit was
+                      created:
+                       - New flow (post-migration 038): show the
+                         Domain → Framework → Control chain + test count
+                         as the primary label; template_name is NULL.
+                       - Legacy flow: fall back to the template name,
+                         like the old column. */}
+                  <Link
+                    href={`/audits/${a.id}`}
+                    className="font-medium text-brand-700 hover:underline"
+                  >
+                    {a.control_name ?? a.framework_name ?? a.template_name ?? `Audit #${a.id}`}
                   </Link>
-                  {a.template_category && (
+                  {(a.domain_name || a.framework_code || a.test_count > 0) ? (
+                    <div className="text-[11px] text-gray-500 mt-0.5 truncate max-w-md">
+                      {[
+                        a.domain_code ?? a.domain_name,
+                        a.framework_code ?? a.framework_name,
+                        a.test_count > 0
+                          ? `${a.test_count} test${a.test_count === 1 ? "" : "s"}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  ) : a.template_category ? (
                     <div className="text-[11px] text-gray-500">{a.template_category}</div>
-                  )}
+                  ) : null}
                 </td>
                 <td className="px-5 py-3 text-gray-600 text-xs">
                   {a.brand_name ?? "—"}

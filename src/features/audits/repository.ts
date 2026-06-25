@@ -22,7 +22,11 @@ const AUDIT_SELECT = `
   a.domain_id,  dom.name  AS domain_name,  dom.code  AS domain_code,
   a.control_id, ctrl.name AS control_name, ctrl.code AS control_code,
   a.assigned_to, u_at.display_name AS assigned_to_name,
-  a.start_at, a.end_at
+  a.start_at, a.end_at,
+  -- How many tests are pinned to this audit (audit_tests rows).
+  -- Used by the list page so we can render the scope summary without
+  -- a per-row follow-up query.
+  (SELECT COUNT(*)::int FROM audit_tests at WHERE at.audit_id = a.id) AS test_count
 FROM audits a
 -- LEFT JOIN templates: template_id is nullable since migration 038. The
 -- previous INNER JOIN would have hidden every audit created from the
@@ -46,8 +50,15 @@ export async function listAudits(filters: {
   const conditions: string[] = [];
   const params: unknown[] = [];
   if (filters.search) {
+    // template name is NULL for the new tests-first flow, so also match
+    // against control/framework/domain names so the search still finds
+    // recent audits by their scope.
     params.push(`%${filters.search}%`);
-    conditions.push(`(t.name ILIKE $${params.length} OR a.location ILIKE $${params.length})`);
+    const i = params.length;
+    conditions.push(
+      `(t.name ILIKE $${i} OR a.location ILIKE $${i}
+        OR ctrl.name ILIKE $${i} OR f.name ILIKE $${i} OR dom.name ILIKE $${i})`
+    );
   }
   if (filters.status) {
     params.push(filters.status);
