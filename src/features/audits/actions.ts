@@ -82,6 +82,25 @@ type AuditGuardSubject = {
 };
 type AuditGuardActor = { id: number; role: string };
 
+/**
+ * Pick a human-readable title for an audit in notifications / logs.
+ * template_name is NULL in the tests-first flow (no pre-picked template),
+ * so a fallback chain stops the UI from rendering "Audit "null"".
+ */
+function auditTitle(audit: {
+  id: number;
+  template_name?: string | null;
+  control_name?: string | null;
+  framework_name?: string | null;
+}): string {
+  return (
+    audit.template_name ||
+    audit.control_name ||
+    audit.framework_name ||
+    `#${audit.id}`
+  );
+}
+
 function assertCanEditAudit(audit: AuditGuardSubject, actor: AuditGuardActor): void {
   if (audit.status === "closed") {
     throw new Error("This audit is closed and can't be edited anymore.");
@@ -362,9 +381,11 @@ export async function submitAuditAction(formData: FormData) {
       : { roles: ["compliance", "admin"] },
     actor: { id: user.id, name: user.displayName, role: user.role },
     kind: hasCritical ? "audit:critical" : "audit:submitted",
+    // template_name is NULL for the tests-first flow. Fall back to the
+    // control name, then the audit id, so titles never read "null".
     title: hasCritical
-      ? `🚨 Audit "${audit.template_name}" submitted with ${criticalFailed} CRITICAL failure(s)`
-      : `Audit "${audit.template_name}" submitted (score ${scorePct}%)`,
+      ? `🚨 Audit "${auditTitle(audit)}" submitted with ${criticalFailed} CRITICAL failure(s)`
+      : `Audit "${auditTitle(audit)}" submitted (score ${scorePct}%)`,
     body: `${audit.brand_name ?? "Brand —"} · ${audit.department_name ?? "Department —"} · ${audit.location ?? "Location —"}. ${failedItemIds.length} total fails.`,
     severity: hasCritical ? "critical" : scorePct < 70 ? "warning" : "info",
     entity: { type: "audit", id: parsed.id, href: `/audits/${parsed.id}` },
@@ -406,7 +427,7 @@ export async function reopenAuditAction(formData: FormData) {
     audience: { roles: ["compliance", "admin"] },
     actor: { id: user.id, name: user.displayName, role: user.role },
     kind: "audit:reopened",
-    title: `Audit "${audit.template_name}" reopened for editing`,
+    title: `Audit "${auditTitle(audit)}" reopened for editing`,
     body: `${audit.brand_name ?? "Brand —"} · ${audit.department_name ?? "Department —"}. Previous score (${audit.score ?? "—"}%) cleared; will be recomputed on resubmit.`,
     severity: "info",
     entity: { type: "audit", id, href: `/audits/${id}` },
