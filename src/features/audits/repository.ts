@@ -54,6 +54,15 @@ export async function getAudit(id: number): Promise<Audit | undefined> {
 export async function getAuditItems(
   auditId: number
 ): Promise<(ChecklistItem & AuditResponse)[]> {
+  // The auditable items come from TWO places, unioned:
+  //   1. Legacy: every item under the audit's checklist_template_id.
+  //      Some older audits were created with a single template attached.
+  //   2. New (migration 038): items linked to any test in audit_tests,
+  //      via the check_checklist_items junction. This is the path the
+  //      new /audits/new flow uses since it no longer asks for a
+  //      template up-front.
+  // An audit may carry both. UNION dedupes so an item that satisfies
+  // both paths shows up exactly once.
   return queryAll(
     `SELECT
        i.id, i.template_id, i.sort_order, i.question, i.guidance, i.weight, i.is_critical,
@@ -63,14 +72,24 @@ export async function getAuditItems(
        r.response, r.notes, r.evidence_url, r.evidence_name, r.evidence_mime
      FROM checklist_items i
      LEFT JOIN audit_responses r ON r.item_id = i.id AND r.audit_id = $1
-     WHERE i.template_id = (SELECT template_id FROM audits WHERE id = $1)
-     ORDER BY i.sort_order ASC, i.id ASC`,
+     WHERE i.id IN (
+       SELECT ci.id FROM checklist_items ci
+       WHERE ci.template_id = (SELECT template_id FROM audits WHERE id = $1)
+       UNION
+       SELECT cci.checklist_item_id
+       FROM audit_tests at
+       JOIN check_checklist_items cci ON cci.check_id = at.check_id
+       WHERE at.audit_id = $1
+     )
+     ORDER BY i.template_id NULLS LAST, i.sort_order ASC, i.id ASC`,
     [auditId]
   );
 }
 
 export async function createAudit(input: {
-  template_id: number;
+  /** Optional since migration 038 — audits now scope by tests, not a
+   *  single template. Kept around so legacy audits keep working. */
+  template_id?: number | null;
   brand_id?: number | null;
   department_id?: number | null;
   location?: string | null;
@@ -94,7 +113,7 @@ export async function createAudit(input: {
      VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
     [
-      input.template_id,
+      input.template_id ?? null,
       input.brand_id ?? null,
       input.department_id ?? null,
       input.location ?? null,
@@ -168,13 +187,25 @@ export async function computeAuditScore(auditId: number): Promise<{
     earned_weight: number;
     critical_failed: number;
   }>(
+    // Same union as listItemsWithResponses — score over the full set of
+    // items the audit covers (legacy template + new test links), not just
+    // the template. Otherwise audits created from the new tests-first
+    // flow would always score 0.
     `SELECT
        COALESCE(SUM(CASE WHEN r.response IN ('pass','fail') THEN i.weight ELSE 0 END), 0)::int AS total_weight,
        COALESCE(SUM(CASE WHEN r.response = 'pass' THEN i.weight ELSE 0 END), 0)::int          AS earned_weight,
        COALESCE(SUM(CASE WHEN r.response = 'fail' AND i.is_critical THEN 1 ELSE 0 END), 0)::int AS critical_failed
      FROM checklist_items i
      LEFT JOIN audit_responses r ON r.item_id = i.id AND r.audit_id = $1
-     WHERE i.template_id = (SELECT template_id FROM audits WHERE id = $1)`,
+     WHERE i.id IN (
+       SELECT ci.id FROM checklist_items ci
+       WHERE ci.template_id = (SELECT template_id FROM audits WHERE id = $1)
+       UNION
+       SELECT cci.checklist_item_id
+       FROM audit_tests at
+       JOIN check_checklist_items cci ON cci.check_id = at.check_id
+       WHERE at.audit_id = $1
+     )`,
     [auditId]
   );
   const total = row?.total_weight ?? 0;

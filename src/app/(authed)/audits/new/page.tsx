@@ -5,18 +5,12 @@ import { queryAll } from "@/lib/db";
 import { createAuditAction } from "@/features/audits/actions";
 import AuditScopePicker from "@/features/audits/AuditScopePicker";
 
-export default async function NewAuditPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ template?: string }>;
-}) {
+export default async function NewAuditPage() {
+  // template_id is no longer required (migration 038). The audit's
+  // questions come from check_checklist_items off the selected tests,
+  // not a single pre-picked template. The auditor sees the merged
+  // checklist automatically once the audit opens.
   const user = await requireUser();
-  const sp = await searchParams;
-  const presetTemplateId = sp.template ? Number(sp.template) : null;
-
-  const templates = await queryAll<{ id: number; name: string; category: string | null }>(
-    `SELECT id, name, category FROM checklist_templates WHERE is_active ORDER BY name`
-  );
   const brands = await queryAll<{ id: number; name: string }>(
     `SELECT id, name FROM brands WHERE is_active ORDER BY name`
   );
@@ -97,31 +91,6 @@ export default async function NewAuditPage({
      ORDER BY role, display_name`
   );
 
-  if (templates.length === 0) {
-    return (
-      <Workspace
-        section="Compliance / Audits"
-        subtitle="Start a new audit"
-        sessionLabel="Session"
-        userLabel={user.displayName}
-      >
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
-          <div className="text-4xl mb-3">📋</div>
-          <h2 className="text-lg font-semibold mb-2">No checklist templates yet</h2>
-          <p className="text-sm text-gray-500 mb-5">
-            You need to create at least one template before running an audit.
-          </p>
-          <Link
-            href="/checklists/templates/new"
-            className="inline-block bg-brand-700 hover:bg-brand-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium"
-          >
-            Create a template
-          </Link>
-        </div>
-      </Workspace>
-    );
-  }
-
   return (
     <Workspace
       section="Compliance / Audits"
@@ -131,24 +100,16 @@ export default async function NewAuditPage({
     >
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 max-w-2xl">
         <form action={createAuditAction} className="space-y-5">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">
-              Checklist template <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="template_id"
-              required
-              defaultValue={presetTemplateId ?? ""}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="">— Choose a template —</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}{t.category ? ` · ${t.category}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* ── Audit scope — Domain → Framework → Control → Tests ──── */}
+          {/* This is the first thing the user picks. The auditor's      */}
+          {/* questions come from the checklists linked to the selected  */}
+          {/* tests (no separate "pick a checklist template" step).      */}
+          <AuditScopePicker
+            domains={scopeDomains}
+            frameworks={scopeFrameworks}
+            controls={scopeControls}
+            tests={scopeTests}
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -257,17 +218,6 @@ export default async function NewAuditPage({
               link. Leave empty to assign later.
             </p>
           </div>
-
-          {/* ── Audit scope — Domain → Framework → Control → Tests ──── */}
-          {/* Cascading picker. The previous standalone Framework dropdown   */}
-          {/* is folded into this cascade so the auditor can't pick a        */}
-          {/* framework that doesn't belong to the chosen domain.            */}
-          <AuditScopePicker
-            domains={scopeDomains}
-            frameworks={scopeFrameworks}
-            controls={scopeControls}
-            tests={scopeTests}
-          />
 
           {/* ── Policy / SOP — what governing document this audit checks ── */}
           <div className="border-t border-gray-100 pt-5">

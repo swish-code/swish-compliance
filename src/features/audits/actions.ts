@@ -18,7 +18,11 @@ import { notify } from "@/features/notifications/service";
 import { extractAttachment } from "@/lib/attachments";
 
 const CreateSchema = z.object({
-  template_id: z.coerce.number().int().positive(),
+  // template_id is now optional (migration 038). The audit's checklist
+  // items come from the selected tests' linked items, not a pre-picked
+  // template. Older audits with a template still work because the
+  // detail page falls back to the template when no tests are linked.
+  template_id: z.coerce.number().int().positive().optional().nullable(),
   brand_id: z.coerce.number().int().positive().optional().nullable(),
   department_id: z.coerce.number().int().positive().optional().nullable(),
   location: z.string().trim().optional().nullable(),
@@ -96,6 +100,7 @@ export async function createAuditAction(formData: FormData) {
     v === "" || v === undefined ? null : v;
   const parsed = CreateSchema.parse({
     ...raw,
+    template_id: blank(raw.template_id),
     brand_id: blank(raw.brand_id),
     department_id: blank(raw.department_id),
     location: blank(raw.location),
@@ -108,7 +113,7 @@ export async function createAuditAction(formData: FormData) {
   });
 
   const id = await createAudit({
-    template_id: parsed.template_id,
+    template_id: parsed.template_id ?? null,
     brand_id: parsed.brand_id,
     department_id: parsed.department_id,
     location: parsed.location,
@@ -142,7 +147,7 @@ export async function createAuditAction(formData: FormData) {
       user.email,
       id,
       JSON.stringify({
-        template_id: parsed.template_id,
+        template_id: parsed.template_id ?? null,
         policy_id: parsed.policy_id ?? null,
         domain_id: parsed.domain_id,
         framework_id: parsed.framework_id,
