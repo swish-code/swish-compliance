@@ -46,9 +46,18 @@ export async function listAudits(filters: {
   search?: string;
   status?: AuditStatus;
   brandId?: number;
+  /** When set, restricts to audits where the user is creator or assignee.
+   *  Admins should leave this off to see everything. */
+  scopedToUserId?: number;
 } = {}): Promise<Audit[]> {
   const conditions: string[] = [];
   const params: unknown[] = [];
+  if (filters.scopedToUserId) {
+    params.push(filters.scopedToUserId);
+    conditions.push(
+      `(a.auditor_id = $${params.length} OR a.assigned_to = $${params.length})`
+    );
+  }
   if (filters.search) {
     // template name is NULL for the new tests-first flow, so also match
     // against control/framework/domain names so the search still finds

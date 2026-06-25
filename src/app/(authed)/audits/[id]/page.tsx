@@ -30,18 +30,26 @@ export default async function AuditDetailPage({
   const id = Number(idStr);
   const audit = await getAudit(id);
   if (!audit) notFound();
+
+  // Visibility gate: only the auditor (creator), the current assignee,
+  // and admin may see this audit. Re-assigning transfers access — the
+  // previous assignee loses sight of the audit. Return notFound() (not
+  // an "unauthorized" error) so we don't leak that the audit exists.
+  const isOwner = audit.auditor_id === user.id;
+  const isAssignee = audit.assigned_to === user.id;
+  const isAdmin = user.role === "admin";
+  if (!isOwner && !isAssignee && !isAdmin) notFound();
+
   const [scopeRows, attachments] = await Promise.all([
     listAuditScopeItems(id),
     listAuditAttachments(id),
   ]);
 
-  // Editing rules: only auditor (creator) or admin can edit; never edit a
-  // closed audit. The form still renders for read-only viewers but the
-  // radios + Save are disabled.
-  const isOwner = audit.auditor_id === user.id;
-  const isAdmin = user.role === "admin";
+  // Editing rules: creator + assignee + admin can edit; never edit a
+  // closed audit. Anyone outside that set was already bounced by the
+  // visibility gate above, so canEdit narrows down to the "closed?" check.
   const isClosed = audit.status === "closed";
-  const canEdit = !isClosed && (isOwner || isAdmin);
+  const canEdit = !isClosed;
   const isOpen = audit.status === "in_progress" && canEdit;
 
   // Group scope rows: test → template → items. Same item can appear under
@@ -223,19 +231,11 @@ export default async function AuditDetailPage({
           </div>
         </div>
       )}
-      {!isClosed && !canEdit && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 flex items-start gap-3">
-          <span className="text-xl leading-none">👁️</span>
-          <div className="text-sm text-amber-900">
-            <div className="font-semibold mb-0.5">Read-only view</div>
-            <div className="text-xs text-amber-800">
-              Only the auditor who created this audit
-              {audit.auditor_name ? <> ({audit.auditor_name})</> : null} can
-              edit responses, submit it, or close it.
-            </div>
-          </div>
-        </div>
-      )}
+      {/* The "Read-only view" banner that used to live here is gone: the
+          visibility gate at the top of this file already bounces anyone
+          who isn't creator / assignee / admin to notFound(), so by the
+          time we render the page every viewer can edit unless the audit
+          is closed (handled by the banner above). */}
 
       {/* ─── Tests → Checklists → Questions ─── */}
       {grouped.length === 0 ? (

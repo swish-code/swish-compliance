@@ -70,10 +70,16 @@ const SubmitSchema = z.object({
 
 /**
  * Editing rules for audits:
- *   1. Only the auditor (creator) — or an admin — may edit the audit.
+ *   1. Only the auditor (creator), the current assignee, or an admin may
+ *      edit the audit. Re-assigning the audit transfers edit rights —
+ *      previous assignees lose access (matches what we told the user).
  *   2. Once the audit is closed, no further edits are allowed by anyone.
  */
-type AuditGuardSubject = { auditor_id: number | null; status: string };
+type AuditGuardSubject = {
+  auditor_id: number | null;
+  assigned_to: number | null;
+  status: string;
+};
 type AuditGuardActor = { id: number; role: string };
 
 function assertCanEditAudit(audit: AuditGuardSubject, actor: AuditGuardActor): void {
@@ -81,10 +87,11 @@ function assertCanEditAudit(audit: AuditGuardSubject, actor: AuditGuardActor): v
     throw new Error("This audit is closed and can't be edited anymore.");
   }
   const isOwner = audit.auditor_id === actor.id;
+  const isAssignee = audit.assigned_to === actor.id;
   const isAdmin = actor.role === "admin";
-  if (!isOwner && !isAdmin) {
+  if (!isOwner && !isAssignee && !isAdmin) {
     throw new Error(
-      "Only the auditor who created this audit can edit it."
+      "Only the auditor who created this audit, the user it's assigned to, or an admin can edit it."
     );
   }
 }

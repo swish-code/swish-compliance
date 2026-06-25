@@ -15,7 +15,13 @@ export default async function AuditsPage({
 }) {
   const user = await requireUser();
   const sp = await searchParams;
-  const audits = await listAudits({ search: sp.search, status: sp.status });
+  // Non-admins only see audits they created or are currently assigned to.
+  // Admins see everything (same as before).
+  const audits = await listAudits({
+    search: sp.search,
+    status: sp.status,
+    scopedToUserId: user.role === "admin" ? undefined : user.id,
+  });
 
   return (
     <Workspace
