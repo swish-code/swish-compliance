@@ -17,8 +17,38 @@ type FrameworkRow = {
   draft_sops: number;
 };
 
-export default async function RoadmapPage() {
+type TestResultEvent = {
+  id: number;
+  check_id: number;
+  check_code: string | null;
+  check_name: string;
+  control_code: string | null;
+  control_name: string | null;
+  framework_code: string | null;
+  framework_name: string | null;
+  status: "passing" | "failing" | "pending_review" | "accepted_risk";
+  notes: string | null;
+  performed_by_name: string | null;
+  created_at: string;
+};
+
+// Default window for the timeline when the user hasn't picked dates.
+const DEFAULT_DAYS_BACK = 30;
+
+export default async function RoadmapPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
   const user = await requireUser();
+  const sp = await searchParams;
+
+  // Default to the last 30 days when no range is picked. We render the
+  // ISO strings back into the date inputs so the form remembers state.
+  const today = new Date();
+  const defaultFrom = new Date(today.getTime() - DEFAULT_DAYS_BACK * 86400e3);
+  const fromStr = sp.from || defaultFrom.toISOString().split("T")[0];
+  const toStr = sp.to || today.toISOString().split("T")[0];
 
   // Per-framework readiness (projection over controls / CAPAs / SOPs)
   const frameworks = await queryAll<FrameworkRow>(
@@ -61,6 +91,42 @@ export default async function RoadmapPage() {
        (SELECT COUNT(*)::int FROM sops WHERE status = 'pending_review')                     AS pending_sops,
        (SELECT COUNT(*)::int FROM checks WHERE last_status = 'failing')                     AS failing_checks`
   );
+
+  // Test results timeline — every check_result inside the chosen window,
+  // joined back to its check / control / framework so the row can show
+  // the full lineage without per-row follow-ups. Order newest first.
+  // toStr + " 23:59:59" makes the upper bound inclusive of the whole day.
+  const testEvents = await queryAll<TestResultEvent>(
+    `SELECT
+       r.id, r.check_id,
+       ch.code AS check_code, ch.name AS check_name,
+       ctrl.code AS control_code, ctrl.name AS control_name,
+       f.code   AS framework_code, f.name AS framework_name,
+       r.status, r.notes,
+       u.display_name AS performed_by_name,
+       r.created_at
+     FROM check_results r
+     JOIN checks      ch   ON ch.id   = r.check_id
+     LEFT JOIN controls    ctrl ON ctrl.id = ch.control_id
+     LEFT JOIN frameworks  f    ON f.id    = ctrl.framework_id
+     LEFT JOIN users       u    ON u.id    = r.performed_by
+     WHERE r.created_at >= $1::timestamptz
+       AND r.created_at <  ($2::date + INTERVAL '1 day')
+     ORDER BY r.created_at DESC
+     LIMIT 200`,
+    [fromStr, toStr]
+  );
+
+  // Group events by date for the timeline render — heading per day with
+  // its rows clustered underneath. Sort keys descending so today is up.
+  const eventsByDay = new Map<string, TestResultEvent[]>();
+  for (const ev of testEvents) {
+    const day = new Date(ev.created_at).toISOString().split("T")[0];
+    const list = eventsByDay.get(day) ?? [];
+    list.push(ev);
+    eventsByDay.set(day, list);
+  }
+  const dayKeys = Array.from(eventsByDay.keys()).sort().reverse();
 
   return (
     <Workspace
@@ -139,6 +205,171 @@ export default async function RoadmapPage() {
             </Link>
           );
         })}
+      </div>
+
+      {/* ─── Test results timeline ─── */}
+      <div className="flex items-center justify-between mt-10 mb-3 gap-3 flex-wrap">
+        <h3 className="text-xs uppercase tracking-widest text-gray-500">
+          Test results timeline
+        </h3>
+        <form method="get" className="flex items-end gap-2">
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              From
+            </label>
+            <input
+              type="date"
+              name="from"
+              defaultValue={fromStr}
+              className="px-2 py-1 text-xs border border-gray-300 rounded-md"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              To
+            </label>
+            <input
+              type="date"
+              name="to"
+              defaultValue={toStr}
+              className="px-2 py-1 text-xs border border-gray-300 rounded-md"
+            />
+          </div>
+          <button
+            type="submit"
+            className="bg-brand-700 hover:bg-brand-800 text-white text-xs px-3 py-1.5 rounded-md"
+          >
+            Apply
+          </button>
+          {(sp.from || sp.to) && (
+            <Link
+              href="/roadmap"
+              className="text-xs text-gray-500 hover:text-gray-700 self-center"
+            >
+              Reset
+            </Link>
+          )}
+        </form>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        {testEvents.length === 0 ? (
+          <div className="px-6 py-12 text-center text-gray-400 text-sm">
+            No test results in this range. Pick a wider date window to see
+            history.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {dayKeys.map((day) => {
+              const dayEvents = eventsByDay.get(day) ?? [];
+              return (
+                <div key={day}>
+                  <div className="bg-gray-50 px-5 py-2 text-[11px] uppercase tracking-wider text-gray-500 font-semibold border-b border-gray-100 flex items-center justify-between">
+                    <span>
+                      {new Date(day).toLocaleDateString(undefined, {
+                        weekday: "short",
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    <span className="text-gray-400">
+                      {dayEvents.length} result
+                      {dayEvents.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <ul>
+                    {dayEvents.map((ev) => {
+                      const tone =
+                        ev.status === "passing"
+                          ? {
+                              dot: "bg-emerald-500",
+                              chip: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                              label: "PASS",
+                            }
+                          : ev.status === "failing"
+                          ? {
+                              dot: "bg-red-500",
+                              chip: "bg-red-50 text-red-700 border-red-200",
+                              label: "FAIL",
+                            }
+                          : ev.status === "pending_review"
+                          ? {
+                              dot: "bg-amber-500",
+                              chip: "bg-amber-50 text-amber-700 border-amber-200",
+                              label: "REVIEW",
+                            }
+                          : {
+                              dot: "bg-indigo-500",
+                              chip: "bg-indigo-50 text-indigo-700 border-indigo-200",
+                              label: "RISK",
+                            };
+                      return (
+                        <li
+                          key={ev.id}
+                          className="px-5 py-3 hover:bg-gray-50 flex items-start gap-3 group"
+                        >
+                          <span
+                            className={`shrink-0 w-2.5 h-2.5 rounded-full mt-1.5 ${tone.dot}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${tone.chip}`}
+                              >
+                                {tone.label}
+                              </span>
+                              <Link
+                                href={`/tests/${ev.check_id}`}
+                                className="text-sm font-medium text-gray-900 group-hover:text-brand-700 truncate"
+                              >
+                                {ev.check_name}
+                              </Link>
+                              {ev.check_code && (
+                                <span className="font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                  {ev.check_code}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-gray-500 flex-wrap">
+                              {ev.framework_code && (
+                                <span className="text-emerald-700 font-mono">
+                                  {ev.framework_code}
+                                </span>
+                              )}
+                              {ev.control_code && (
+                                <>
+                                  <span className="text-gray-300">·</span>
+                                  <span className="text-amber-700 font-mono">
+                                    {ev.control_code}
+                                  </span>
+                                </>
+                              )}
+                              <span className="text-gray-300">·</span>
+                              <span>{ev.performed_by_name ?? "—"}</span>
+                              <span className="text-gray-300">·</span>
+                              <span>
+                                {new Date(ev.created_at).toLocaleTimeString(
+                                  undefined,
+                                  { hour: "2-digit", minute: "2-digit" }
+                                )}
+                              </span>
+                            </div>
+                            {ev.notes && (
+                              <div className="text-xs text-gray-600 mt-1 italic truncate">
+                                &ldquo;{ev.notes}&rdquo;
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </Workspace>
   );
