@@ -1,4 +1,8 @@
-export type AuditStatus = "in_progress" | "submitted" | "closed";
+export type AuditStatus =
+  | "in_progress"
+  | "submitted"
+  | "closed"
+  | "cancelled"; // assignment was cancelled by creator/admin — no execution
 
 export type Audit = {
   id: number;
@@ -104,10 +108,12 @@ export const AUDIT_STATUS_LABEL: Record<AuditStatus, string> = {
   in_progress: "In progress",
   submitted: "Submitted",
   closed: "Closed",
+  cancelled: "Cancelled",
 };
 
 export const AUDIT_STATUS_TONE: Record<AuditStatus, string> = {
   in_progress: "bg-amber-50 text-amber-700 border-amber-200",
   submitted: "bg-indigo-50 text-indigo-700 border-indigo-200",
   closed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  cancelled: "bg-gray-100 text-gray-600 border-gray-300",
 };

@@ -11,6 +11,7 @@ import {
   submitAuditAction,
   closeAuditAction,
   reopenAuditAction,
+  cancelAuditAction,
 } from "@/features/audits/actions";
 import AuditQuestionRow from "@/features/audits/AuditQuestionRow";
 import AuditAttachments from "@/features/audits/AuditAttachments";
@@ -412,8 +413,42 @@ export default async function AuditDetailPage({
               >
                 Back to list
               </Link>
+              {/* Cancel — available while the audit is in_progress
+                  (gate also enforced server-side). Confirmed twice via
+                  the native form prompt since cancel is one-way. */}
+              {(isOwner ||
+                user.role === "admin" ||
+                user.role === "compliance" ||
+                user.role === "business_excellence") && (
+                <form
+                  action={cancelAuditAction}
+                  className="ml-auto"
+                >
+                  <input type="hidden" name="id" value={audit.id} />
+                  <button
+                    type="submit"
+                    className="text-sm text-red-600 hover:text-red-700 border border-red-200 hover:border-red-300 bg-white px-4 py-2 rounded-lg"
+                    title="Mark this audit as cancelled. Cannot be undone."
+                  >
+                    Cancel audit
+                  </button>
+                </form>
+              )}
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Cancelled banner — replaces all action UI. */}
+      {audit.status === "cancelled" && (
+        <div className="bg-gray-50 border border-gray-300 rounded-2xl p-6 mb-4 text-center">
+          <div className="text-3xl mb-2">🚫</div>
+          <div className="text-sm font-semibold text-gray-800">
+            This audit was cancelled
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            No responses, scores, or further actions can be recorded.
+          </div>
         </div>
       )}
 

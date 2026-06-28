@@ -10,6 +10,7 @@ import {
   upsertResponse,
   submitAudit,
   closeAudit,
+  cancelAudit,
   reopenAudit,
   getAudit,
   addAuditAttachment,
@@ -432,6 +433,75 @@ export async function reopenAuditAction(formData: FormData) {
     severity: "info",
     entity: { type: "audit", id, href: `/audits/${id}` },
   });
+
+  revalidatePath("/audits");
+  revalidatePath(`/audits/${id}`);
+}
+
+/**
+ * Cancel an assigned audit. The creator, an admin, compliance, or BE
+ * can call this off — typically because the assignment was wrong or no
+ * longer needed. We block cancel after submission so a completed audit
+ * with a score can't be erased; closed audits also stay closed.
+ *
+ * Notifies the previous assignee so they know the work has been
+ * called off.
+ */
+export async function cancelAuditAction(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid audit id.");
+
+  const audit = await getAudit(id);
+  if (!audit) throw new Error("Audit not found.");
+
+  if (audit.status === "closed" || audit.status === "submitted") {
+    throw new Error(
+      "This audit has already been submitted or closed — it can no longer be cancelled."
+    );
+  }
+  if (audit.status === "cancelled") {
+    throw new Error("This audit is already cancelled.");
+  }
+
+  const isCreator = audit.auditor_id === user.id;
+  const isAllowed =
+    isCreator ||
+    user.role === "admin" ||
+    user.role === "compliance" ||
+    user.role === "business_excellence";
+  if (!isAllowed) {
+    throw new Error(
+      "Only the audit creator, compliance, business excellence, or admin can cancel an audit."
+    );
+  }
+
+  await cancelAudit(id);
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'audit:cancelled', 'audit', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      id,
+      JSON.stringify({
+        by_user_name: user.displayName,
+        prev_assigned_to: audit.assigned_to,
+      }),
+    ]
+  );
+
+  if (audit.assigned_to && audit.assigned_to !== user.id) {
+    await notify({
+      audience: { userIds: [audit.assigned_to] },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "audit:cancelled",
+      title: `Audit "${auditTitle(audit)}" was cancelled`,
+      body: `${user.displayName} cancelled this audit. You no longer need to act on it.`,
+      severity: "warning",
+      entity: { type: "audit", id, href: `/audits/${id}` },
+    });
+  }
 
   revalidatePath("/audits");
   revalidatePath(`/audits/${id}`);

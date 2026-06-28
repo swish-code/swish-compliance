@@ -72,6 +72,11 @@ export async function listAudits(filters: {
   if (filters.status) {
     params.push(filters.status);
     conditions.push(`a.status = $${params.length}`);
+  } else {
+    // Cancelled audits don't belong in the default register — they
+    // litter "audits in progress" counts and search results. Surface
+    // only when the user explicitly filters by status=cancelled.
+    conditions.push(`a.status <> 'cancelled'`);
   }
   if (filters.brandId) {
     params.push(filters.brandId);
@@ -377,6 +382,18 @@ export async function submitAudit(
 export async function closeAudit(id: number): Promise<void> {
   await execute(
     `UPDATE audits SET status = 'closed', closed_at = NOW() WHERE id = $1`,
+    [id]
+  );
+}
+
+/**
+ * Mark an audit as cancelled — used when the assignment is called off
+ * before any work happens (no responses, no score). Filtered out of
+ * default audit lists; My Work hides them via the same status filter.
+ */
+export async function cancelAudit(id: number): Promise<void> {
+  await execute(
+    `UPDATE audits SET status = 'cancelled' WHERE id = $1`,
     [id]
   );
 }

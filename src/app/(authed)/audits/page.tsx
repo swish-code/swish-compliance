@@ -15,12 +15,17 @@ export default async function AuditsPage({
 }) {
   const user = await requireUser();
   const sp = await searchParams;
-  // Non-admins only see audits they created or are currently assigned to.
-  // Admins see everything (same as before).
+  // Compliance / BE / admin have full visibility over every audit so
+  // they can monitor the whole register. Everyone else still sees only
+  // audits they created or are assigned to.
+  const fullVisibility =
+    user.role === "admin" ||
+    user.role === "compliance" ||
+    user.role === "business_excellence";
   const audits = await listAudits({
     search: sp.search,
     status: sp.status,
-    scopedToUserId: user.role === "admin" ? undefined : user.id,
+    scopedToUserId: fullVisibility ? undefined : user.id,
   });
 
   return (
