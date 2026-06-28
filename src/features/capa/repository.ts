@@ -25,6 +25,12 @@ export async function listCapas(filters: {
   status?: CapaStatus;
   assigned_to?: number;
   search?: string;
+  /** When set, restricts to CAPAs in this department. Used for the DM
+   *  role on the main register. */
+  scopedToDepartmentId?: number;
+  /** When set, restricts to CAPAs assigned to OR created by this user.
+   *  Used for non-privileged roles so they only see their own work. */
+  scopedToUserId?: number;
 } = {}): Promise<Capa[]> {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -35,6 +41,16 @@ export async function listCapas(filters: {
   if (filters.assigned_to) {
     params.push(filters.assigned_to);
     conditions.push(`c.assigned_to = $${params.length}`);
+  }
+  if (filters.scopedToDepartmentId) {
+    params.push(filters.scopedToDepartmentId);
+    conditions.push(`c.department_id = $${params.length}`);
+  }
+  if (filters.scopedToUserId) {
+    params.push(filters.scopedToUserId);
+    conditions.push(
+      `(c.assigned_to = $${params.length} OR c.created_by = $${params.length})`
+    );
   }
   if (filters.search) {
     params.push(`%${filters.search}%`);
@@ -48,6 +64,18 @@ export async function listCapas(filters: {
        c.due_date NULLS LAST, c.id DESC
      LIMIT 200`,
     params
+  );
+}
+
+/** Change who a CAPA is assigned to. The notify on the action layer */
+/** picks up the new assignee separately. */
+export async function setCapaAssignee(
+  id: number,
+  assigneeId: number | null
+): Promise<void> {
+  await execute(
+    `UPDATE corrective_actions SET assigned_to = $2 WHERE id = $1`,
+    [id, assigneeId]
   );
 }
 

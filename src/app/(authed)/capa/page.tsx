@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { listCapas } from "@/features/capa/repository";
+import { queryOne } from "@/lib/db";
 import {
   CAPA_STATUS_LABEL,
   CAPA_STATUS_TONE,
@@ -17,7 +18,38 @@ export default async function CapaPage({
 }) {
   const user = await requireUser();
   const sp = await searchParams;
-  const items = await listCapas({ search: sp.search, status: sp.status });
+
+  // Role-based CAPA visibility (per user spec):
+  //   - admin / compliance / business_excellence: see every CAPA
+  //   - department_manager: see only CAPAs filed against their department
+  //   - everyone else: see only CAPAs they created or are assigned to
+  // We read department_id from the DB because session.user only carries
+  // role + name, and the DM scope needs the actual dept link.
+  const fullVisibility =
+    user.role === "admin" ||
+    user.role === "compliance" ||
+    user.role === "business_excellence";
+
+  let scopedToDepartmentId: number | undefined;
+  let scopedToUserId: number | undefined;
+  if (!fullVisibility) {
+    if (user.role === "department_manager") {
+      const me = await queryOne<{ department_id: number | null }>(
+        `SELECT department_id FROM users WHERE id = $1`,
+        [user.id]
+      );
+      scopedToDepartmentId = me?.department_id ?? -1; // -1 → never matches, hides everything
+    } else {
+      scopedToUserId = user.id;
+    }
+  }
+
+  const items = await listCapas({
+    search: sp.search,
+    status: sp.status,
+    scopedToDepartmentId,
+    scopedToUserId,
+  });
 
   const today = new Date().toISOString().split("T")[0];
 

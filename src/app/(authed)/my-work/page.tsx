@@ -94,11 +94,28 @@ export default async function MyWorkPage() {
     `SELECT
        (SELECT COUNT(*)::int FROM sops
         WHERE status = COALESCE($2, ''))                                                   AS pending_sops_for_me,
+       -- CAPA counts widen for the privileged roles (compliance / BE /
+       -- admin see everything; DM sees their own department; everyone
+       -- else still scopes to "assigned to me"). $3 carries the role,
+       -- $4 the dept id so the predicate stays a pure WHERE on the same
+       -- aggregate query.
        (SELECT COUNT(*)::int FROM corrective_actions
-        WHERE assigned_to = $1 AND status IN ('open','in_progress'))                       AS my_capas_open,
+        WHERE status IN ('open','in_progress')
+          AND (
+            $3 IN ('admin','compliance','business_excellence')
+            OR ($3 = 'department_manager' AND department_id = $4)
+            OR ($3 NOT IN ('admin','compliance','business_excellence','department_manager')
+                AND assigned_to = $1)
+          ))                                                                                AS my_capas_open,
        (SELECT COUNT(*)::int FROM corrective_actions
-        WHERE assigned_to = $1 AND due_date < CURRENT_DATE
-          AND status IN ('open','in_progress','submitted'))                                AS my_capas_overdue,
+        WHERE due_date < CURRENT_DATE
+          AND status IN ('open','in_progress','submitted')
+          AND (
+            $3 IN ('admin','compliance','business_excellence')
+            OR ($3 = 'department_manager' AND department_id = $4)
+            OR ($3 NOT IN ('admin','compliance','business_excellence','department_manager')
+                AND assigned_to = $1)
+          ))                                                                                AS my_capas_overdue,
        -- Both creator AND assignee count as "mine" (matches the audit
        -- visibility gate we shipped — anyone who can edit shows up here).
        (SELECT COUNT(*)::int FROM audits
@@ -110,17 +127,26 @@ export default async function MyWorkPage() {
           AND status IN ('draft','returned_to_dm','returned_to_compliance','returned_to_be')) AS sops_owned_draft,
        (SELECT COUNT(*)::int FROM audits
         WHERE submitted_at::date = CURRENT_DATE AND critical_failed > 0)                   AS failed_critical_today`,
-    [user.id, pendingStatus]
+    [user.id, pendingStatus, user.role, myDeptId ?? -1]
   );
 
   /* ── Lists ──────────────────────────────────────────────────── */
   const [myCapas, myAudits, sopsAwaitingAck, mySopsInWip] = await Promise.all([
     queryAll<CapaItem>(
+      // Same role-scoped visibility as the counts above. Privileged
+      // roles get the full register on My Work; DM sees only their
+      // department; everyone else still sees "assigned to me".
       `SELECT id, code, title, status, due_date, severity
        FROM corrective_actions
-       WHERE assigned_to = $1 AND status IN ('open','in_progress','submitted')
+       WHERE status IN ('open','in_progress','submitted')
+         AND (
+           $2 IN ('admin','compliance','business_excellence')
+           OR ($2 = 'department_manager' AND department_id = $3)
+           OR ($2 NOT IN ('admin','compliance','business_excellence','department_manager')
+               AND assigned_to = $1)
+         )
        ORDER BY due_date NULLS LAST, id DESC LIMIT 6`,
-      [user.id]
+      [user.id, user.role, myDeptId ?? -1]
     ),
     queryAll<AuditItem>(
       // LEFT JOIN templates: template_id is NULL in the new tests-first

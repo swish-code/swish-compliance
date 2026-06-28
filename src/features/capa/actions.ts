@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser, canApproveSops } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
-import { createCapa, transitionCapa, getCapa } from "./repository";
+import { createCapa, transitionCapa, getCapa, setCapaAssignee } from "./repository";
 import type { CapaStatus } from "./types";
 import { notify } from "@/features/notifications/service";
 
@@ -63,6 +63,74 @@ export async function createCapaAction(formData: FormData) {
   redirect(`/capa/${id}`);
 }
 
+const AssignSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  assigned_to: z.coerce.number().int().positive().optional().nullable(),
+});
+
+/**
+ * Reassign a CAPA after creation. Allowed for the CAPA creator, the
+ * compliance/BE/admin roles, and the previous assignee (so they can
+ * hand it off). Everyone else gets blocked.
+ */
+export async function assignCapaAction(formData: FormData) {
+  const user = await requireUser();
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = AssignSchema.parse({
+    id: raw.id,
+    assigned_to: raw.assigned_to === "" ? null : raw.assigned_to,
+  });
+
+  const before = await getCapa(parsed.id);
+  if (!before) throw new Error("CAPA not found.");
+
+  const isCreator = before.created_by === user.id;
+  const isPrevAssignee = before.assigned_to === user.id;
+  const isAllowed =
+    user.role === "admin" ||
+    user.role === "compliance" ||
+    user.role === "business_excellence" ||
+    isCreator ||
+    isPrevAssignee;
+  if (!isAllowed) {
+    throw new Error(
+      "Only the CAPA creator, compliance, business excellence, admin, or the current assignee can change the assignment."
+    );
+  }
+
+  await setCapaAssignee(parsed.id, parsed.assigned_to ?? null);
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'capa:reassigned', 'capa', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      parsed.id,
+      JSON.stringify({
+        from_user_id: before.assigned_to,
+        to_user_id: parsed.assigned_to ?? null,
+        by_user_name: user.displayName,
+      }),
+    ]
+  );
+
+  // Notify the new assignee they've picked it up (only when there IS one).
+  if (parsed.assigned_to && parsed.assigned_to !== user.id) {
+    await notify({
+      audience: { userIds: [parsed.assigned_to] },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "capa:reassigned",
+      title: `CAPA "${before.title}" assigned to you`,
+      body: `${user.displayName} assigned this CAPA to you. Severity: ${before.severity}.`,
+      severity: before.severity === "critical" ? "critical" : "info",
+      entity: { type: "capa", id: parsed.id, href: `/capa/${parsed.id}` },
+    });
+  }
+
+  revalidatePath("/capa");
+  revalidatePath(`/capa/${parsed.id}`);
+}
+
 export async function transitionCapaAction(formData: FormData) {
   const user = await requireUser();
   const raw = Object.fromEntries(formData.entries());
@@ -76,15 +144,35 @@ export async function transitionCapaAction(formData: FormData) {
   if (!before) throw new Error("CAPA not found.");
 
   // Permission rules
+  // ───────────────────────────────────────────────────────────────
+  // Segregation of duties (per user spec):
+  //   verify / close / reject CANNOT be performed by the assignee
+  //   (the person who actually did the work). Those decisions
+  //   belong to compliance, the CAPA creator (auditor), business
+  //   excellence, or admin.
+  // ───────────────────────────────────────────────────────────────
   const next: CapaStatus = parsed.status;
+  const isAssignee = before.assigned_to === user.id;
+  const isCreator = before.created_by === user.id;
+  const isCompliance = user.role === "compliance";
+  const isAdminOrBE = canApproveSops(user.role); // admin OR business_excellence
+
   if (next === "verified" || next === "closed" || next === "rejected") {
-    if (!canApproveSops(user.role)) {
-      throw new Error("Only Admin or Business Excellence can verify CAPAs.");
+    if (isAssignee) {
+      throw new Error(
+        "The CAPA assignee can't verify, close, or reject their own work. " +
+          "Ask the CAPA creator, compliance, or an admin."
+      );
+    }
+    const isAllowedReviewer = isAdminOrBE || isCompliance || isCreator;
+    if (!isAllowedReviewer) {
+      throw new Error(
+        "Only Compliance, the CAPA creator, Business Excellence, or admin can verify/close/reject CAPAs."
+      );
     }
   }
   if (next === "submitted" || next === "in_progress") {
-    const isAssignee = before.assigned_to === user.id;
-    if (!isAssignee && !canApproveSops(user.role) && user.role !== "compliance") {
+    if (!isAssignee && !isAdminOrBE && !isCompliance) {
       throw new Error("Only the assignee or compliance team can update this CAPA.");
     }
   }
