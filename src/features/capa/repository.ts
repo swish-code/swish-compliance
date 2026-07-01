@@ -165,18 +165,21 @@ export async function listAuditFindings(filters: {
        ctrl.id   AS control_id, ctrl.code AS control_code, ctrl.name AS control_name,
        -- Pick the FIRST test that links to this item for this audit. A
        -- question could theoretically appear under two tests; the audit
-       -- resolves it once. Order by check id for stable pairing.
-       (SELECT ch.id   FROM audit_tests at JOIN check_checklist_items cci
-        ON cci.check_id = at.check_id
+       -- resolves it once. First subquery just uses at.check_id so we
+       -- don't need to JOIN checks (that was the bug); the other two
+       -- do JOIN because they need code + name off checks.
+       (SELECT at.check_id
+        FROM audit_tests at
+        JOIN check_checklist_items cci ON cci.check_id = at.check_id
         WHERE at.audit_id = a.id AND cci.checklist_item_id = i.id
-        ORDER BY ch.id LIMIT 1) AS test_id,
-       (SELECT ch.code FROM audit_tests at JOIN check_checklist_items cci
-        ON cci.check_id = at.check_id
+        ORDER BY at.check_id LIMIT 1) AS test_id,
+       (SELECT ch.code FROM audit_tests at
+        JOIN check_checklist_items cci ON cci.check_id = at.check_id
         JOIN checks ch ON ch.id = at.check_id
         WHERE at.audit_id = a.id AND cci.checklist_item_id = i.id
         ORDER BY ch.id LIMIT 1) AS test_code,
-       (SELECT ch.name FROM audit_tests at JOIN check_checklist_items cci
-        ON cci.check_id = at.check_id
+       (SELECT ch.name FROM audit_tests at
+        JOIN check_checklist_items cci ON cci.check_id = at.check_id
         JOIN checks ch ON ch.id = at.check_id
         WHERE at.audit_id = a.id AND cci.checklist_item_id = i.id
         ORDER BY ch.id LIMIT 1) AS test_name,
