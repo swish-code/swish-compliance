@@ -40,6 +40,52 @@ export type Capa = {
   reviewer_id: number | null;
   reviewer_name: string | null;
   assignment_note: string | null;
+  // Migration 041 — execution fields written by the OWNER while
+  // working the CAPA + rejection reason set by the reviewer.
+  root_cause: string | null;
+  corrective_action_taken: string | null;
+  preventive_action_taken: string | null;
+  completion_note: string | null;
+  rejection_reason: string | null;
+};
+
+/** One CAPA-side evidence file (migration 041). */
+export type CapaEvidence = {
+  id: number;
+  capa_id: number;
+  file_url: string;
+  file_name: string;
+  file_mime: string | null;
+  file_size: number | null;
+  uploaded_by: number | null;
+  uploaded_by_name: string | null;
+  uploaded_at: string;
+};
+
+/**
+ * The auditor-side context for a CAPA: the audit + control + test +
+ * question + auditor's fail note + auditor's evidence. Read-only for
+ * the CAPA owner; shown alongside the execution fields so they know
+ * WHAT they're fixing.
+ */
+export type CapaAuditorContext = {
+  audit_id: number;
+  audit_date: string;
+  brand_name: string | null;
+  department_name: string | null;
+  location: string | null;
+  framework_code: string | null;
+  framework_name: string | null;
+  control_code: string | null;
+  control_name: string | null;
+  test_code: string | null;
+  test_name: string | null;
+  question: string;
+  auditor_response: string | null;
+  auditor_note: string | null;
+  auditor_evidence_url: string | null;
+  auditor_evidence_name: string | null;
+  auditor_evidence_mime: string | null;
 };
 
 /**

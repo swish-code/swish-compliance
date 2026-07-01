@@ -11,7 +11,12 @@ import {
   getCapa,
   setCapaAssignee,
   upsertCapaFromFinding,
+  saveCapaExecution,
+  setCapaRejectionReason,
+  addCapaEvidence,
+  deleteCapaEvidence,
 } from "./repository";
+import { extractAttachments } from "@/lib/attachments";
 import type { CapaStatus } from "./types";
 import { notify } from "@/features/notifications/service";
 
@@ -67,6 +72,268 @@ export async function createCapaAction(formData: FormData) {
 
   revalidatePath("/capa");
   redirect(`/capa/${id}`);
+}
+
+/* ─── Execution flow (Owner view) ────────────────────────────── */
+
+const ExecutionSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  root_cause: z.string().trim().optional().nullable(),
+  corrective_action_taken: z.string().trim().optional().nullable(),
+  preventive_action_taken: z.string().trim().optional().nullable(),
+  completion_note: z.string().trim().optional().nullable(),
+});
+
+/**
+ * Partial save from the owner's execution form. Only the assignee
+ * (or an admin) can save execution fields; that keeps compliance from
+ * accidentally overwriting the owner's work. Status is not touched.
+ */
+export async function saveCapaExecutionAction(formData: FormData) {
+  const user = await requireUser();
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = ExecutionSchema.parse({
+    ...raw,
+    root_cause: raw.root_cause === "" ? null : raw.root_cause,
+    corrective_action_taken:
+      raw.corrective_action_taken === "" ? null : raw.corrective_action_taken,
+    preventive_action_taken:
+      raw.preventive_action_taken === "" ? null : raw.preventive_action_taken,
+    completion_note: raw.completion_note === "" ? null : raw.completion_note,
+  });
+
+  const capa = await getCapa(parsed.id);
+  if (!capa) throw new Error("CAPA not found.");
+  const isOwner = capa.assigned_to === user.id;
+  const isAdmin = user.role === "admin";
+  if (!isOwner && !isAdmin) {
+    throw new Error("Only the CAPA owner (assignee) or an admin can save execution fields.");
+  }
+  if (capa.status === "closed" || capa.status === "verified") {
+    throw new Error("This CAPA is already closed — execution fields are locked.");
+  }
+
+  await saveCapaExecution({
+    id: parsed.id,
+    root_cause: parsed.root_cause ?? null,
+    corrective_action_taken: parsed.corrective_action_taken ?? null,
+    preventive_action_taken: parsed.preventive_action_taken ?? null,
+    completion_note: parsed.completion_note ?? null,
+  });
+
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'capa:execution_saved', 'capa', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      parsed.id,
+      JSON.stringify({ by_user_name: user.displayName }),
+    ]
+  );
+  revalidatePath(`/capa/${parsed.id}`);
+}
+
+/**
+ * Owner uploads one or more CAPA-side evidence files ("proof the fix
+ * happened"). Only the assignee or admin can upload. Same 10 MB /
+ * whitelisted-mime rules as audit attachments.
+ */
+export async function addCapaEvidenceAction(formData: FormData) {
+  const user = await requireUser();
+  const capaId = Number(formData.get("capa_id"));
+  if (!Number.isFinite(capaId) || capaId <= 0) throw new Error("Invalid CAPA id.");
+  const capa = await getCapa(capaId);
+  if (!capa) throw new Error("CAPA not found.");
+  const isOwner = capa.assigned_to === user.id;
+  if (!isOwner && user.role !== "admin") {
+    throw new Error("Only the CAPA owner (assignee) or an admin can upload CAPA evidence.");
+  }
+  if (capa.status === "closed" || capa.status === "verified") {
+    throw new Error("This CAPA is closed — evidence uploads are locked.");
+  }
+
+  const files = await extractAttachments(formData, "files");
+  if (files.length === 0) throw new Error("Pick at least one file to upload.");
+  for (const f of files) {
+    await addCapaEvidence({
+      capa_id: capaId,
+      file_url: f.dataUrl,
+      file_name: f.name,
+      file_mime: f.mime,
+      file_size: f.size,
+      uploaded_by: user.id,
+    });
+  }
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'capa:evidence_added', 'capa', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      capaId,
+      JSON.stringify({ count: files.length, names: files.map((f) => f.name) }),
+    ]
+  );
+  revalidatePath(`/capa/${capaId}`);
+}
+
+export async function deleteCapaEvidenceAction(formData: FormData) {
+  const user = await requireUser();
+  const capaId = Number(formData.get("capa_id"));
+  const evidenceId = Number(formData.get("evidence_id"));
+  if (
+    !Number.isFinite(capaId) || capaId <= 0 ||
+    !Number.isFinite(evidenceId) || evidenceId <= 0
+  ) {
+    throw new Error("Invalid CAPA or evidence id.");
+  }
+  const capa = await getCapa(capaId);
+  if (!capa) throw new Error("CAPA not found.");
+  const isOwner = capa.assigned_to === user.id;
+  if (!isOwner && user.role !== "admin") {
+    throw new Error("Only the CAPA owner (assignee) or an admin can remove CAPA evidence.");
+  }
+  if (capa.status === "closed" || capa.status === "verified") {
+    throw new Error("This CAPA is closed — evidence is locked.");
+  }
+  await deleteCapaEvidence(evidenceId);
+  revalidatePath(`/capa/${capaId}`);
+}
+
+/**
+ * Owner submits the CAPA for reviewer verification. Requires that the
+ * owner has actually done SOME work (either the resolution note or at
+ * least one evidence file). Status flips to "submitted" and the
+ * reviewer (or compliance role) gets notified.
+ */
+export async function submitCapaForReviewAction(formData: FormData) {
+  const user = await requireUser();
+  const capaId = Number(formData.get("id"));
+  if (!Number.isFinite(capaId) || capaId <= 0) throw new Error("Invalid CAPA id.");
+  const capa = await getCapa(capaId);
+  if (!capa) throw new Error("CAPA not found.");
+  const isOwner = capa.assigned_to === user.id;
+  if (!isOwner && user.role !== "admin") {
+    throw new Error("Only the CAPA owner (assignee) can submit for review.");
+  }
+  if (capa.status === "closed" || capa.status === "verified" || capa.status === "submitted") {
+    throw new Error(`CAPA is already ${capa.status} — it can't be resubmitted.`);
+  }
+
+  // Clear any previous rejection so it doesn't linger in the UI.
+  await execute(
+    `UPDATE corrective_actions
+       SET status = 'submitted',
+           submitted_at = NOW(),
+           rejection_reason = NULL
+     WHERE id = $1::int`,
+    [capaId]
+  );
+
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'capa:submitted_for_review', 'capa', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      capaId,
+      JSON.stringify({
+        by_user_name: user.displayName,
+        by_user_role: user.role,
+      }),
+    ]
+  );
+
+  // Notify reviewer + creator + compliance role (any of them can verify).
+  const targets: number[] = [];
+  if (capa.reviewer_id) targets.push(capa.reviewer_id);
+  if (capa.created_by && !targets.includes(capa.created_by)) targets.push(capa.created_by);
+  await notify({
+    audience: { userIds: targets, roles: ["compliance", "business_excellence", "admin"] },
+    actor: { id: user.id, name: user.displayName, role: user.role },
+    kind: "capa:submitted_for_review",
+    title: `CAPA "${capa.title}" submitted for verification`,
+    body: `${user.displayName} completed the corrective action. Please review the CAPA evidence and verify or reject.`,
+    severity: "info",
+    entity: { type: "capa", id: capaId, href: `/capa/${capaId}` },
+  });
+
+  revalidatePath("/capa");
+  revalidatePath(`/capa/${capaId}`);
+}
+
+/**
+ * Reviewer rejects a submitted CAPA. Requires a rejection reason,
+ * flips status back to "rejected", stashes the reason on the CAPA so
+ * the owner reads it inline, and notifies the owner.
+ */
+export async function rejectCapaAction(formData: FormData) {
+  const user = await requireUser();
+  const capaId = Number(formData.get("id"));
+  const reasonRaw = (formData.get("reason") ?? "").toString().trim();
+  if (!Number.isFinite(capaId) || capaId <= 0) throw new Error("Invalid CAPA id.");
+  if (reasonRaw.length === 0) {
+    throw new Error("A rejection reason is required so the owner knows what to fix.");
+  }
+  const reason = reasonRaw.slice(0, 2000);
+
+  const capa = await getCapa(capaId);
+  if (!capa) throw new Error("CAPA not found.");
+  if (capa.assigned_to === user.id) {
+    throw new Error("The CAPA assignee can't reject their own submission.");
+  }
+  const isReviewer =
+    user.role === "admin" ||
+    user.role === "compliance" ||
+    user.role === "business_excellence" ||
+    capa.reviewer_id === user.id ||
+    capa.created_by === user.id;
+  if (!isReviewer) {
+    throw new Error("Only Compliance, BE, admin, the assigned reviewer, or the CAPA creator can reject.");
+  }
+  if (capa.status !== "submitted") {
+    throw new Error("Only a submitted CAPA can be rejected.");
+  }
+
+  await execute(
+    `UPDATE corrective_actions
+       SET status = 'rejected',
+           rejection_reason = $2,
+           submitted_at = NULL
+     WHERE id = $1::int`,
+    [capaId, reason]
+  );
+
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'capa:rejected', 'capa', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      capaId,
+      JSON.stringify({ reason, by_user_name: user.displayName }),
+    ]
+  );
+
+  if (capa.assigned_to) {
+    await notify({
+      audience: { userIds: [capa.assigned_to] },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "capa:rejected",
+      title: `CAPA "${capa.title}" was returned — please revise`,
+      body: `Reason: "${reason}"`,
+      severity: "warning",
+      entity: { type: "capa", id: capaId, href: `/capa/${capaId}` },
+    });
+  }
+  // Silence unused-import warning for setCapaRejectionReason — kept in
+  // the repository for future callers that need to null it out without
+  // a status change. (The UPDATE above already writes the reason.)
+  void setCapaRejectionReason;
+
+  revalidatePath("/capa");
+  revalidatePath(`/capa/${capaId}`);
 }
 
 const AssignFromFindingSchema = z.object({

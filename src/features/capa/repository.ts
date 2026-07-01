@@ -5,6 +5,8 @@ import type {
   CapaSeverity,
   CapaStatus,
   AuditFinding,
+  CapaEvidence,
+  CapaAuditorContext,
 } from "./types";
 
 const CAPA_SELECT = `
@@ -19,7 +21,9 @@ const CAPA_SELECT = `
   c.submitted_at, c.verified_at, c.closed_at,
   c.created_at, c.updated_at,
   c.start_date, c.assignment_note,
-  c.reviewer_id, u_r.display_name AS reviewer_name
+  c.reviewer_id, u_r.display_name AS reviewer_name,
+  c.root_cause, c.corrective_action_taken, c.preventive_action_taken,
+  c.completion_note, c.rejection_reason
 FROM corrective_actions c
 LEFT JOIN brands       b   ON b.id = c.brand_id
 LEFT JOIN departments  d   ON d.id = c.department_id
@@ -73,6 +77,155 @@ export async function listCapas(filters: {
      LIMIT 200`,
     params
   );
+}
+
+/**
+ * Fetches the FINDING context for a CAPA — the audit + control + test
+ * + question + auditor answer/note/evidence that spawned it. Read-only
+ * on the CAPA page so the owner knows exactly what they're fixing.
+ * Returns undefined when the CAPA wasn't spawned from an audit
+ * (standalone CAPAs).
+ */
+export async function getCapaAuditorContext(
+  capaId: number
+): Promise<CapaAuditorContext | undefined> {
+  return queryOne<CapaAuditorContext>(
+    `SELECT
+       a.id            AS audit_id,
+       a.audit_date,
+       br.name         AS brand_name,
+       d.name          AS department_name,
+       a.location,
+       f.code          AS framework_code, f.name AS framework_name,
+       ctrl.code       AS control_code,   ctrl.name AS control_name,
+       -- Pick the FIRST test that surfaced this item for this audit
+       (SELECT ch.code FROM audit_tests at
+        JOIN check_checklist_items cci ON cci.check_id = at.check_id
+        JOIN checks ch ON ch.id = at.check_id
+        WHERE at.audit_id = a.id AND cci.checklist_item_id = i.id
+        ORDER BY ch.id LIMIT 1) AS test_code,
+       (SELECT ch.name FROM audit_tests at
+        JOIN check_checklist_items cci ON cci.check_id = at.check_id
+        JOIN checks ch ON ch.id = at.check_id
+        WHERE at.audit_id = a.id AND cci.checklist_item_id = i.id
+        ORDER BY ch.id LIMIT 1) AS test_name,
+       i.question,
+       r.response      AS auditor_response,
+       r.notes         AS auditor_note,
+       r.evidence_url  AS auditor_evidence_url,
+       r.evidence_name AS auditor_evidence_name,
+       r.evidence_mime AS auditor_evidence_mime
+     FROM corrective_actions c
+     JOIN audits             a    ON a.id  = c.source_audit_id
+     JOIN checklist_items    i    ON i.id  = c.source_item_id
+     LEFT JOIN audit_responses r
+       ON r.audit_id = c.source_audit_id AND r.item_id = c.source_item_id
+     LEFT JOIN brands        br   ON br.id = a.brand_id
+     LEFT JOIN departments   d    ON d.id  = a.department_id
+     LEFT JOIN frameworks    f    ON f.id  = a.framework_id
+     LEFT JOIN controls      ctrl ON ctrl.id = a.control_id
+     WHERE c.id = $1`,
+    [capaId]
+  );
+}
+
+/**
+ * Update the owner's execution fields on a CAPA. Doesn't touch status
+ * — status transitions live in their own action so we can log them
+ * separately. Called by the "Save progress" button on the owner view.
+ */
+export async function saveCapaExecution(input: {
+  id: number;
+  root_cause: string | null;
+  corrective_action_taken: string | null;
+  preventive_action_taken: string | null;
+  completion_note: string | null;
+}): Promise<void> {
+  await execute(
+    `UPDATE corrective_actions SET
+       root_cause              = $2,
+       corrective_action_taken = $3,
+       preventive_action_taken = $4,
+       completion_note         = $5
+     WHERE id = $1::int`,
+    [
+      input.id,
+      input.root_cause,
+      input.corrective_action_taken,
+      input.preventive_action_taken,
+      input.completion_note,
+    ]
+  );
+}
+
+/**
+ * Set the rejection reason when a reviewer sends the CAPA back to the
+ * owner. Written alongside the status transition (rejected) so the
+ * owner sees the reason without opening the audit log.
+ */
+export async function setCapaRejectionReason(
+  id: number,
+  reason: string | null
+): Promise<void> {
+  await execute(
+    `UPDATE corrective_actions SET rejection_reason = $2 WHERE id = $1::int`,
+    [id, reason]
+  );
+}
+
+/* ─── CAPA evidences (migration 041) ─────────────────────────── */
+
+export async function listCapaEvidences(
+  capaId: number
+): Promise<CapaEvidence[]> {
+  return queryAll<CapaEvidence>(
+    `SELECT
+       ev.id, ev.capa_id, ev.file_url, ev.file_name, ev.file_mime,
+       ev.file_size, ev.uploaded_by, u.display_name AS uploaded_by_name,
+       ev.uploaded_at
+     FROM capa_evidences ev
+     LEFT JOIN users u ON u.id = ev.uploaded_by
+     WHERE ev.capa_id = $1
+     ORDER BY ev.uploaded_at DESC, ev.id DESC`,
+    [capaId]
+  );
+}
+
+export async function addCapaEvidence(input: {
+  capa_id: number;
+  file_url: string;
+  file_name: string;
+  file_mime: string | null;
+  file_size: number | null;
+  uploaded_by: number;
+}): Promise<number> {
+  const row = await queryOne<{ id: number }>(
+    `INSERT INTO capa_evidences
+       (capa_id, file_url, file_name, file_mime, file_size, uploaded_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [
+      input.capa_id,
+      input.file_url,
+      input.file_name,
+      input.file_mime,
+      input.file_size,
+      input.uploaded_by,
+    ]
+  );
+  return row!.id;
+}
+
+/** Delete a single CAPA evidence file. Returns the parent capa_id so */
+/** the action layer can revalidate the right page. */
+export async function deleteCapaEvidence(
+  evidenceId: number
+): Promise<number | null> {
+  const row = await queryOne<{ capa_id: number }>(
+    `DELETE FROM capa_evidences WHERE id = $1 RETURNING capa_id`,
+    [evidenceId]
+  );
+  return row?.capa_id ?? null;
 }
 
 /** Change who a CAPA is assigned to. The notify on the action layer */
