@@ -240,22 +240,24 @@ export async function upsertCapaFromFinding(input: {
   );
 
   if (existing) {
+    // Two-step update to avoid Postgres 42P08 "inconsistent types
+    // deduced for parameter" (same class of bug we hit earlier in
+    // transitionCapa). $6 was appearing in "assigned_to = $6" AND in
+    // "$6 IS NOT NULL" inside a CASE — the parser couldn't reconcile
+    // int vs unknown. Splitting into two simple UPDATEs sidesteps
+    // parameter-reuse entirely and is trivial cost-wise.
     await execute(
       `UPDATE corrective_actions SET
          title           = $2,
-         severity        = $3,
-         brand_id        = COALESCE($4, brand_id),
-         department_id   = COALESCE($5, department_id),
-         assigned_to     = $6,
-         reviewer_id     = $7,
-         start_date      = $8,
-         due_date        = $9,
-         assignment_note = $10,
-         status          = CASE
-                             WHEN status = 'open' AND $6 IS NOT NULL THEN 'in_progress'
-                             ELSE status
-                           END
-       WHERE id = $1`,
+         severity        = $3::text,
+         brand_id        = COALESCE($4::int, brand_id),
+         department_id   = COALESCE($5::int, department_id),
+         assigned_to     = $6::int,
+         reviewer_id     = $7::int,
+         start_date      = $8::date,
+         due_date        = $9::date,
+         assignment_note = $10
+       WHERE id = $1::int`,
       [
         existing.id,
         input.title,
@@ -268,6 +270,16 @@ export async function upsertCapaFromFinding(input: {
         input.due_date ?? null,
         input.assignment_note ?? null,
       ]
+    );
+    // Auto-transition open → in_progress once someone is on it. Done
+    // as a separate statement so it can't reintroduce the type clash.
+    await execute(
+      `UPDATE corrective_actions
+         SET status = 'in_progress'
+       WHERE id = $1::int
+         AND status = 'open'
+         AND assigned_to IS NOT NULL`,
+      [existing.id]
     );
     return {
       id: existing.id,
@@ -287,11 +299,16 @@ export async function upsertCapaFromFinding(input: {
   const code = `CAPA-AUD${input.audit_id}-${seq}`;
 
   const row = await queryOne<{ id: number }>(
+    // Explicit casts match the UPDATE branch above — belt and braces
+    // against the same 42P08 class of bug (Postgres deducing the
+    // wrong type for a parameter that's used in multiple contexts).
     `INSERT INTO corrective_actions
        (code, title, description, severity, source_audit_id, source_item_id,
         brand_id, department_id, assigned_to, reviewer_id,
         start_date, due_date, assignment_note, created_by, status)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'in_progress')
+     VALUES ($1, $2, NULL, $3::text, $4::int, $5::int,
+             $6::int, $7::int, $8::int, $9::int,
+             $10::date, $11::date, $12, $13::int, 'in_progress')
      RETURNING id`,
     [
       code,
