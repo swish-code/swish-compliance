@@ -230,16 +230,24 @@ export default async function CapaPage({
               (f) => f.capa_id && f.capa_status && f.capa_status !== "closed"
             ).length;
           return (
-            <div
+            // <details> is native browser collapse — no client JS needed.
+            // Header sits in <summary>, everything below (controls, tests,
+            // findings) is hidden until the user clicks. Empty findings are
+            // implicit — you wouldn't be here without at least one fail.
+            <details
               key={audit.audit_id}
-              className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+              className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
             >
-              {/* Audit header */}
-              <Link
-                href={`/audits/${audit.audit_id}`}
-                className="block px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-brand-50 to-white hover:from-brand-100"
-              >
+              {/* Summary is the green audit header. Clicking it toggles
+                  the whole block. A separate "Open audit →" chip lives
+                  inside so the user can still jump to /audits/[id]
+                  without expanding first. */}
+              <summary className="cursor-pointer list-none px-5 py-3 border-b border-transparent group-open:border-gray-100 bg-gradient-to-r from-brand-50 to-white hover:from-brand-100">
                 <div className="flex items-center gap-3 flex-wrap">
+                  {/* Rotating caret — HTML details toggle indicator */}
+                  <span className="text-gray-400 transition-transform group-open:rotate-90 select-none">
+                    ▶
+                  </span>
                   <span className="font-mono text-xs bg-white border border-brand-200 text-brand-700 px-2 py-0.5 rounded">
                     Audit #{audit.audit_id}
                   </span>
@@ -283,10 +291,22 @@ export default async function CapaPage({
                     {openHere} open CAPA{openHere === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className="text-[11px] text-gray-500 mt-1">
-                  {new Date(audit.audit_date).toLocaleDateString()}
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="text-[11px] text-gray-500">
+                    {new Date(audit.audit_date).toLocaleDateString()}
+                  </div>
+                  {/* Second-level action — jumps to the audit page.
+                      No stopPropagation() (Server Components can't pass
+                      event handlers). Clicking will BOTH toggle the
+                      details AND navigate; the navigation wins visually. */}
+                  <Link
+                    href={`/audits/${audit.audit_id}`}
+                    className="text-[11px] text-brand-700 hover:underline ml-auto"
+                  >
+                    Open audit →
+                  </Link>
                 </div>
-              </Link>
+              </summary>
 
               {/* Controls */}
               <div className="divide-y divide-gray-100">
@@ -339,7 +359,7 @@ export default async function CapaPage({
                   </div>
                 ))}
               </div>
-            </div>
+            </details>
           );
         })}
       </div>
