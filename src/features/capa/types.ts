@@ -35,6 +35,54 @@ export type Capa = {
   closed_at: string | null;
   created_at: string;
   updated_at: string;
+  // Migration 040 — the "planned" review + assignment metadata.
+  start_date: string | null;
+  reviewer_id: number | null;
+  reviewer_name: string | null;
+  assignment_note: string | null;
+};
+
+/**
+ * One failed audit finding — a row in audit_responses with
+ * response = 'fail', joined back to its full lineage plus the CAPA
+ * currently linked to it (if any). Powers the hierarchical /capa page.
+ */
+export type AuditFinding = {
+  audit_id: number;
+  audit_status: string;
+  audit_score: string | null;
+  audit_date: string;
+  audit_brand_name: string | null;
+  audit_department_id: number | null;
+  audit_department_name: string | null;
+  audit_location: string | null;
+  framework_code: string | null;
+  framework_name: string | null;
+  control_id: number | null;
+  control_code: string | null;
+  control_name: string | null;
+  // The test that surfaced this item. Null when the item comes from a
+  // legacy template-only audit with no linked tests.
+  test_id: number | null;
+  test_code: string | null;
+  test_name: string | null;
+  item_id: number;
+  item_code: string | null;
+  question: string;
+  is_critical: boolean;
+  auditor_note: string | null;
+  evidence_url: string | null;
+  evidence_name: string | null;
+  evidence_mime: string | null;
+  // CAPA (may not exist yet — findings without a CAPA get an
+  // "Assign CAPA" button that CREATES one on submit).
+  capa_id: number | null;
+  capa_code: string | null;
+  capa_status: CapaStatus | null;
+  capa_severity: CapaSeverity | null;
+  capa_assigned_to: number | null;
+  capa_assigned_to_name: string | null;
+  capa_due_date: string | null;
 };
 
 export const CAPA_STATUS_LABEL: Record<CapaStatus, string> = {

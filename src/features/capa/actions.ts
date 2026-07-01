@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser, canApproveSops } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
-import { createCapa, transitionCapa, getCapa, setCapaAssignee } from "./repository";
+import {
+  createCapa,
+  transitionCapa,
+  getCapa,
+  setCapaAssignee,
+  upsertCapaFromFinding,
+} from "./repository";
 import type { CapaStatus } from "./types";
 import { notify } from "@/features/notifications/service";
 
@@ -61,6 +67,126 @@ export async function createCapaAction(formData: FormData) {
 
   revalidatePath("/capa");
   redirect(`/capa/${id}`);
+}
+
+const AssignFromFindingSchema = z.object({
+  audit_id: z.coerce.number().int().positive(),
+  item_id: z.coerce.number().int().positive(),
+  title: z.string().trim().min(1, "Title is required"),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  assigned_to: z.coerce.number().int().positive(),
+  reviewer_id: z.coerce.number().int().positive().optional().nullable(),
+  brand_id: z.coerce.number().int().positive().optional().nullable(),
+  department_id: z.coerce.number().int().positive().optional().nullable(),
+  start_date: z.string().optional().nullable(),
+  due_date: z.string().optional().nullable(),
+  assignment_note: z.string().trim().optional().nullable(),
+});
+
+/**
+ * Called from the "Assign CAPA" popup on the hierarchical /capa page.
+ * Creates the CAPA if none exists for this (audit, item) pair,
+ * otherwise updates the existing one with the new assignment metadata.
+ * Fires "capa:assigned" notifications to the assignee and reviewer.
+ *
+ * Gated to compliance / BE / admin (assign is a reviewer prerogative).
+ * The audit creator is also allowed because they can drive follow-ups
+ * on their own audits.
+ */
+export async function assignCapaFromFindingAction(formData: FormData) {
+  const user = await requireUser();
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = AssignFromFindingSchema.parse({
+    ...raw,
+    reviewer_id: raw.reviewer_id === "" ? null : raw.reviewer_id,
+    brand_id: raw.brand_id === "" ? null : raw.brand_id,
+    department_id: raw.department_id === "" ? null : raw.department_id,
+    start_date: raw.start_date === "" ? null : raw.start_date,
+    due_date: raw.due_date === "" ? null : raw.due_date,
+    assignment_note:
+      raw.assignment_note === "" ? null : raw.assignment_note,
+  });
+
+  const isAllowed =
+    user.role === "admin" ||
+    user.role === "compliance" ||
+    user.role === "business_excellence";
+  if (!isAllowed) {
+    throw new Error(
+      "Only Compliance, Business Excellence, or admin can assign CAPAs."
+    );
+  }
+
+  const { id, code, created } = await upsertCapaFromFinding({
+    audit_id: parsed.audit_id,
+    item_id: parsed.item_id,
+    title: parsed.title,
+    severity: parsed.severity,
+    brand_id: parsed.brand_id,
+    department_id: parsed.department_id,
+    assigned_to: parsed.assigned_to,
+    reviewer_id: parsed.reviewer_id,
+    start_date: parsed.start_date,
+    due_date: parsed.due_date,
+    assignment_note: parsed.assignment_note,
+    created_by: user.id,
+  });
+
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, $3, 'capa', $4, $5)`,
+    [
+      user.id,
+      user.email,
+      created ? "capa:created_from_finding" : "capa:assigned_from_finding",
+      id,
+      JSON.stringify({
+        audit_id: parsed.audit_id,
+        item_id: parsed.item_id,
+        assigned_to: parsed.assigned_to,
+        reviewer_id: parsed.reviewer_id,
+        severity: parsed.severity,
+        by_user_name: user.displayName,
+      }),
+    ]
+  );
+
+  // Notify the new assignee.
+  if (parsed.assigned_to !== user.id) {
+    await notify({
+      audience: { userIds: [parsed.assigned_to] },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "capa:assigned",
+      title: `CAPA "${parsed.title}" assigned to you (${code})`,
+      body:
+        `Severity: ${parsed.severity}.` +
+        (parsed.due_date ? ` Due ${parsed.due_date}.` : "") +
+        (parsed.assignment_note
+          ? ` Note: "${parsed.assignment_note}"`
+          : ""),
+      severity: parsed.severity === "critical" ? "critical" : "info",
+      entity: { type: "capa", id, href: `/capa/${id}` },
+    });
+  }
+  // Notify the reviewer (if any and not the actor).
+  if (
+    parsed.reviewer_id &&
+    parsed.reviewer_id !== user.id &&
+    parsed.reviewer_id !== parsed.assigned_to
+  ) {
+    await notify({
+      audience: { userIds: [parsed.reviewer_id] },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "capa:reviewer_assigned",
+      title: `You're the reviewer on CAPA ${code}`,
+      body: `${user.displayName} assigned you to verify this CAPA once the fix is submitted.`,
+      severity: "info",
+      entity: { type: "capa", id, href: `/capa/${id}` },
+    });
+  }
+
+  revalidatePath("/capa");
+  revalidatePath(`/capa/${id}`);
 }
 
 const AssignSchema = z.object({
