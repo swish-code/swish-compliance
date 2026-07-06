@@ -17,6 +17,7 @@ import {
   setCapaRejectionReason,
   addCapaEvidence,
   deleteCapaEvidence,
+  listCapaEvidences,
 } from "./repository";
 import { extractAttachments } from "@/lib/attachments";
 import type { CapaStatus } from "./types";
@@ -87,9 +88,24 @@ const ExecutionSchema = z.object({
 });
 
 /**
- * Partial save from the owner's execution form. Only the assignee
- * (or an admin) can save execution fields; that keeps compliance from
+ * The four owner completion fields, in display order. Used to enforce
+ * that all of them are answered — both when the owner saves and again
+ * (against the STORED row) before submit-for-review, so a CAPA can
+ * never reach the reviewer with an unanswered question.
+ */
+const EXECUTION_REQUIRED_FIELDS = [
+  { key: "root_cause", label: "Root cause" },
+  { key: "corrective_action_taken", label: "Corrective action taken" },
+  { key: "preventive_action_taken", label: "Preventive action taken" },
+  { key: "completion_note", label: "Completion note" },
+] as const;
+
+/**
+ * Save from the owner's execution form. Only the assignee (or an
+ * admin) can save execution fields; that keeps compliance from
  * accidentally overwriting the owner's work. Status is not touched.
+ * ALL four completion questions are mandatory — the form marks them
+ * required, and this re-checks server-side.
  */
 export async function saveCapaExecutionAction(formData: FormData) {
   const user = await requireUser();
@@ -103,6 +119,15 @@ export async function saveCapaExecutionAction(formData: FormData) {
       raw.preventive_action_taken === "" ? null : raw.preventive_action_taken,
     completion_note: raw.completion_note === "" ? null : raw.completion_note,
   });
+
+  const missing = EXECUTION_REQUIRED_FIELDS.filter(
+    (f) => !(parsed[f.key] ?? "").trim()
+  ).map((f) => f.label);
+  if (missing.length > 0) {
+    throw new Error(
+      `All completion questions must be answered. Missing: ${missing.join(", ")}.`
+    );
+  }
 
   const capa = await getCapa(parsed.id);
   if (!capa) throw new Error("CAPA not found.");
@@ -204,10 +229,11 @@ export async function deleteCapaEvidenceAction(formData: FormData) {
 }
 
 /**
- * Owner submits the CAPA for reviewer verification. Requires that the
- * owner has actually done SOME work (either the resolution note or at
- * least one evidence file). Status flips to "submitted" and the
- * reviewer (or compliance role) gets notified.
+ * Owner submits the CAPA for reviewer verification. HARD requirements
+ * (validated against the stored row, not the form, so they can't be
+ * bypassed by skipping "Save progress"): all four completion questions
+ * answered AND at least one CAPA evidence file uploaded. Status flips
+ * to "submitted" and the reviewer (or compliance role) gets notified.
  */
 export async function submitCapaForReviewAction(formData: FormData) {
   const user = await requireUser();
@@ -221,6 +247,19 @@ export async function submitCapaForReviewAction(formData: FormData) {
   }
   if (capa.status === "closed" || capa.status === "verified" || capa.status === "submitted") {
     throw new Error(`CAPA is already ${capa.status} — it can't be resubmitted.`);
+  }
+
+  const missing: string[] = EXECUTION_REQUIRED_FIELDS.filter(
+    (f) => !(capa[f.key] ?? "").trim()
+  ).map((f) => f.label);
+  const evidences = await listCapaEvidences(capaId);
+  if (evidences.length === 0) {
+    missing.push("At least one CAPA evidence file");
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `This CAPA isn't ready for review yet. Still missing: ${missing.join(", ")}.`
+    );
   }
 
   // Clear any previous rejection so it doesn't linger in the UI.

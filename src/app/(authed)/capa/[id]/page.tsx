@@ -257,53 +257,57 @@ export default async function CapaDetailPage({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Root cause
+                Root cause <span className="text-red-500">*</span>
               </label>
               <textarea
                 name="root_cause"
                 defaultValue={capa.root_cause ?? ""}
                 disabled={!canEditExecution}
+                required
                 rows={3}
-                placeholder="Why did the failure happen?"
+                placeholder="Explain why this failure happened — the underlying reason, not just the symptom."
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Corrective action taken
+                Corrective action taken <span className="text-red-500">*</span>
               </label>
               <textarea
                 name="corrective_action_taken"
                 defaultValue={capa.corrective_action_taken ?? ""}
                 disabled={!canEditExecution}
+                required
                 rows={3}
-                placeholder="What did you do to fix this specific finding?"
+                placeholder="Describe exactly what was done to fix this specific finding."
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Preventive action taken
+                Preventive action taken <span className="text-red-500">*</span>
               </label>
               <textarea
                 name="preventive_action_taken"
                 defaultValue={capa.preventive_action_taken ?? ""}
                 disabled={!canEditExecution}
+                required
                 rows={3}
-                placeholder="What did you do to prevent recurrence?"
+                placeholder="Describe what was changed so this failure cannot happen again."
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Completion note
+                Completion note <span className="text-red-500">*</span>
               </label>
               <textarea
                 name="completion_note"
                 defaultValue={capa.completion_note ?? ""}
                 disabled={!canEditExecution}
+                required
                 rows={3}
-                placeholder="Anything else the reviewer should know."
+                placeholder="Summarize the outcome and anything else the reviewer should know."
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
               />
             </div>
@@ -318,7 +322,8 @@ export default async function CapaDetailPage({
                 Save progress
               </button>
               <p className="text-[11px] text-gray-500">
-                Progress is saved without changing the CAPA status.
+                All questions marked <span className="text-red-500">*</span>{" "}
+                are required. Saving does not change the CAPA status.
               </p>
             </div>
           )}
@@ -351,27 +356,63 @@ export default async function CapaDetailPage({
       </div>
 
       {/* ─── Owner: submit for review ─── */}
-      {canSubmit && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 mb-4">
-          <h3 className="text-sm font-semibold text-emerald-800 uppercase tracking-wider mb-2">
-            Ready to hand it off?
-          </h3>
-          <p className="text-xs text-emerald-800 mb-4">
-            Submit for review when the corrective action is complete and the
-            evidence is uploaded. The reviewer will get a notification and
-            can approve or reject with feedback.
-          </p>
-          <form action={submitCapaForReviewAction}>
-            <input type="hidden" name="id" value={capa.id} />
-            <button
-              type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium"
-            >
-              Submit for review
-            </button>
-          </form>
-        </div>
-      )}
+      {canSubmit &&
+        (() => {
+          // Mirror of the server-side gate in submitCapaForReviewAction:
+          // all four completion questions answered on the STORED row, and
+          // at least one CAPA evidence file. The action re-checks anyway;
+          // this just tells the owner what's left before they try.
+          const missing: string[] = [];
+          if (!capa.root_cause?.trim()) missing.push("Root cause");
+          if (!capa.corrective_action_taken?.trim())
+            missing.push("Corrective action taken");
+          if (!capa.preventive_action_taken?.trim())
+            missing.push("Preventive action taken");
+          if (!capa.completion_note?.trim()) missing.push("Completion note");
+          if (evidences.length === 0)
+            missing.push("At least one CAPA evidence file");
+
+          if (missing.length > 0) {
+            return (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-4">
+                <h3 className="text-sm font-semibold text-amber-800 uppercase tracking-wider mb-2">
+                  Not ready for review yet
+                </h3>
+                <p className="text-xs text-amber-800 mb-2">
+                  Submitting for review unlocks once every required question
+                  is answered (and saved) and the evidence is uploaded. Still
+                  missing:
+                </p>
+                <ul className="text-xs text-amber-900 list-disc list-inside space-y-0.5">
+                  {missing.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          }
+          return (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 mb-4">
+              <h3 className="text-sm font-semibold text-emerald-800 uppercase tracking-wider mb-2">
+                Ready to hand it off?
+              </h3>
+              <p className="text-xs text-emerald-800 mb-4">
+                All required questions are answered and the evidence is
+                uploaded. The reviewer will get a notification and can
+                approve or reject with feedback.
+              </p>
+              <form action={submitCapaForReviewAction}>
+                <input type="hidden" name="id" value={capa.id} />
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium"
+                >
+                  Submit for review
+                </button>
+              </form>
+            </div>
+          );
+        })()}
 
       {/* ─── Reviewer: Verify / Close / Reject ─── */}
       {canReview && (
