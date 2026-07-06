@@ -383,23 +383,22 @@ export default async function AuditDetailPage({
               rows={3}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
-            <label className="flex items-start gap-3 p-3 border border-amber-200 bg-amber-50 rounded-lg cursor-pointer text-sm">
-              <input
-                type="checkbox"
-                name="spawn_capa"
-                defaultChecked
-                className="accent-amber-600 mt-0.5"
-              />
+            {/* No longer a choice — every failed question ALWAYS becomes a
+                CAPA on submit (compliance-score rule). Kept as an info box
+                so the auditor knows what will happen. */}
+            <div className="flex items-start gap-3 p-3 border border-amber-200 bg-amber-50 rounded-lg text-sm">
+              <span className="mt-0.5">⚠️</span>
               <div>
                 <div className="font-medium text-amber-900">
-                  Auto-create CAPAs for failed items
+                  Every failed question becomes a CAPA automatically
                 </div>
                 <div className="text-xs text-amber-700">
-                  Each fail (especially critical ones) gets a corrective action
-                  with a 7-day default due date.
+                  On submit, each fail opens an unassigned corrective action
+                  (critical questions → critical severity). They count
+                  against the compliance score until resolved.
                 </div>
               </div>
-            </label>
+            </div>
             <div className="flex gap-3">
               <button
                 type="submit"

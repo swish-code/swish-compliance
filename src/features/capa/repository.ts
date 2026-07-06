@@ -395,6 +395,46 @@ export async function listBulkAssignableFindings(
   );
 }
 
+/**
+ * Auto-create an 'open' unassigned CAPA for every failed finding of an
+ * audit that doesn't have one yet (per user spec: "any failed question
+ * must become a CAPA"). Called right after audit submit. Set-based and
+ * idempotent — the NOT EXISTS anti-join makes re-runs no-ops, and the
+ * per-audit code sequence continues from the existing count.
+ *
+ * Severity defaults: critical questions → 'critical', the rest →
+ * 'medium'. Whoever later assigns the CAPA picks the real severity in
+ * the assignment modal (upsert overwrites it).
+ */
+export async function autoCreateCapasForAudit(
+  auditId: number,
+  createdBy: number | null
+): Promise<number> {
+  const rows = await queryAll<{ id: number }>(
+    `INSERT INTO corrective_actions
+       (code, title, severity, source_audit_id, source_item_id,
+        brand_id, department_id, created_by, status)
+     SELECT
+       'CAPA-AUD' || a.id || '-' ||
+         LPAD((base.n + ROW_NUMBER() OVER (ORDER BY i.sort_order, i.id))::text, 3, '0'),
+       LEFT(i.question, 250),
+       CASE WHEN i.is_critical THEN 'critical' ELSE 'medium' END,
+       a.id, i.id, a.brand_id, a.department_id, $2::int, 'open'
+     FROM audits a
+     JOIN audit_responses r ON r.audit_id = a.id AND r.response = 'fail'
+     JOIN checklist_items i ON i.id = r.item_id
+     CROSS JOIN (SELECT COUNT(*)::int AS n
+                 FROM corrective_actions WHERE source_audit_id = $1) base
+     WHERE a.id = $1
+       AND NOT EXISTS (SELECT 1 FROM corrective_actions ca
+                       WHERE ca.source_audit_id = a.id
+                         AND ca.source_item_id = i.id)
+     RETURNING id`,
+    [auditId, createdBy]
+  );
+  return rows.length;
+}
+
 /** Brand/department scope of an audit — copied onto bulk-created CAPAs. */
 export async function getAuditScope(
   auditId: number

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/guard";
-import { execute, queryOne } from "@/lib/db";
+import { execute } from "@/lib/db";
 import {
   createAudit,
   upsertResponse,
@@ -16,7 +16,7 @@ import {
   addAuditAttachment,
   deleteAuditAttachment,
 } from "./repository";
-import { createCapa } from "../capa/repository";
+import { autoCreateCapasForAudit } from "../capa/repository";
 import { notify } from "@/features/notifications/service";
 import { extractAttachment, extractAttachments } from "@/lib/attachments";
 
@@ -352,25 +352,24 @@ export async function submitAuditAction(formData: FormData) {
     ]
   );
 
-  // Auto-spawn CAPAs for failed items if requested
-  if (parsed.spawn_capa === "on" && failedItemIds.length > 0) {
-    for (const itemId of failedItemIds) {
-      const item = await queryOne<{ question: string; is_critical: boolean }>(
-        `SELECT question, is_critical FROM checklist_items WHERE id = $1`,
-        [itemId]
+  // Every failed question becomes a CAPA — ALWAYS (user spec), no
+  // longer behind the spawn_capa checkbox. Idempotent set-based insert;
+  // findings that already have a CAPA are skipped. The CAPAs land as
+  // 'open' / unassigned so they surface on /capa and in the compliance
+  // score until someone assigns and resolves them.
+  if (failedItemIds.length > 0) {
+    const spawned = await autoCreateCapasForAudit(parsed.id, user.id);
+    if (spawned > 0) {
+      await execute(
+        `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+         VALUES ($1, $2, 'capa:auto_created_from_audit', 'audit', $3, $4)`,
+        [
+          user.id,
+          user.email,
+          parsed.id,
+          JSON.stringify({ capa_count: spawned }),
+        ]
       );
-      if (!item) continue;
-      await createCapa({
-        title: `Audit finding: ${item.question}`,
-        description: `Auto-generated from audit #${parsed.id}.`,
-        severity: item.is_critical ? "critical" : "medium",
-        source_audit_id: parsed.id,
-        source_item_id: itemId,
-        brand_id: audit.brand_id,
-        department_id: audit.department_id,
-        created_by: user.id,
-        due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      });
     }
   }
 

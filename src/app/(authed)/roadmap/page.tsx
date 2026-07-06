@@ -25,6 +25,16 @@ type FrameworkRow = {
   draft_sops: number;
 };
 
+type FrameworkAuditScore = {
+  framework_id: number;
+  total_w: number;
+  passed_w: number;
+  remediated_w: number;
+  passed_n: number;
+  remediated_n: number;
+  open_failed_n: number;
+};
+
 type OpenFindingRow = {
   audit_id: number;
   framework_code: string | null;
@@ -107,6 +117,41 @@ export default async function RoadmapPage({
      LEFT JOIN controls c ON c.framework_id = f.id
      GROUP BY f.id
      ORDER BY f.is_active DESC, f.name`
+  );
+
+  // Per-framework COMPLIANCE SCORE from actual audit answers (user
+  // spec: failed questions deduct their weight; the weight comes back
+  // once the finding's CAPA is verified/closed). Only the LATEST audit
+  // per (framework, control) counts — a fresh audit resets the slate.
+  // Same weight semantics as computeAuditScore: pass+fail only, N/A
+  // excluded.
+  const auditScores = await queryAll<FrameworkAuditScore>(
+    `WITH latest AS (
+       SELECT DISTINCT ON (a.framework_id, a.control_id) a.id, a.framework_id
+       FROM audits a
+       WHERE a.status IN ('submitted','closed') AND a.framework_id IS NOT NULL
+       ORDER BY a.framework_id, a.control_id, a.audit_date DESC, a.id DESC
+     )
+     SELECT l.framework_id,
+       COALESCE(SUM(CASE WHEN r.response IN ('pass','fail') THEN i.weight ELSE 0 END),0)::int AS total_w,
+       COALESCE(SUM(CASE WHEN r.response = 'pass' THEN i.weight ELSE 0 END),0)::int           AS passed_w,
+       COALESCE(SUM(CASE WHEN r.response = 'fail'
+                          AND ca.status IN ('verified','closed')
+                         THEN i.weight ELSE 0 END),0)::int                                    AS remediated_w,
+       (COUNT(*) FILTER (WHERE r.response = 'pass'))::int                                     AS passed_n,
+       (COUNT(*) FILTER (WHERE r.response = 'fail'
+                          AND ca.status IN ('verified','closed')))::int                       AS remediated_n,
+       (COUNT(*) FILTER (WHERE r.response = 'fail'
+                          AND (ca.id IS NULL OR ca.status NOT IN ('verified','closed'))))::int AS open_failed_n
+     FROM latest l
+     JOIN audit_responses r ON r.audit_id = l.id
+     JOIN checklist_items i ON i.id = r.item_id
+     LEFT JOIN corrective_actions ca
+       ON ca.source_audit_id = l.id AND ca.source_item_id = r.item_id
+     GROUP BY l.framework_id`
+  );
+  const scoreByFramework = new Map(
+    auditScores.map((s) => [s.framework_id, s])
   );
 
   // Cross-program blockers
@@ -226,9 +271,14 @@ export default async function RoadmapPage({
           </div>
         )}
         {frameworks.map((f) => {
-          const total = f.healthy + f.at_risk + f.failing + f.unknown;
-          const measured = f.healthy + f.at_risk + f.failing;
-          const readinessPct = measured > 0 ? Math.round((f.healthy / measured) * 100) : 0;
+          // Compliance score from the latest audits: failed questions
+          // deduct their weight; verified/closed CAPAs give it back.
+          const s = scoreByFramework.get(f.id);
+          const audited = !!s && s.total_w > 0;
+          const scorePct = audited
+            ? Math.round(((s.passed_w + s.remediated_w) / s.total_w) * 100)
+            : null;
+          const openW = audited ? s.total_w - s.passed_w - s.remediated_w : 0;
           return (
             <Link
               key={f.id}
@@ -245,34 +295,38 @@ export default async function RoadmapPage({
                 </div>
                 <div className="text-right">
                   <div className={`text-2xl font-bold ${
-                    readinessPct >= 80 ? "text-emerald-600" :
-                    readinessPct >= 50 ? "text-amber-600" :
+                    scorePct == null ? "text-gray-300" :
+                    scorePct >= 80 ? "text-emerald-600" :
+                    scorePct >= 50 ? "text-amber-600" :
                     "text-red-600"
-                  }`}>{readinessPct}%</div>
-                  <div className="text-[10px] uppercase tracking-wider text-gray-500">Healthy controls</div>
+                  }`}>{scorePct == null ? "—" : `${scorePct}%`}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-gray-500">Compliance score</div>
                 </div>
               </div>
 
-              {/* Stacked progress bar */}
-              {total > 0 ? (
+              {/* Stacked progress bar over question WEIGHTS: green =
+                  passed, blue = failed but remediated (CAPA closed),
+                  red = failed and still open. */}
+              {audited ? (
                 <>
                   <div className="flex h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
-                    {f.healthy > 0 && <div className="bg-emerald-500" style={{ width: `${(f.healthy / total) * 100}%` }} />}
-                    {f.at_risk > 0 && <div className="bg-amber-500" style={{ width: `${(f.at_risk / total) * 100}%` }} />}
-                    {f.failing > 0 && <div className="bg-red-500" style={{ width: `${(f.failing / total) * 100}%` }} />}
-                    {f.unknown > 0 && <div className="bg-gray-300" style={{ width: `${(f.unknown / total) * 100}%` }} />}
+                    {s.passed_w > 0 && <div className="bg-emerald-500" style={{ width: `${(s.passed_w / s.total_w) * 100}%` }} />}
+                    {s.remediated_w > 0 && <div className="bg-sky-500" style={{ width: `${(s.remediated_w / s.total_w) * 100}%` }} />}
+                    {openW > 0 && <div className="bg-red-500" style={{ width: `${(openW / s.total_w) * 100}%` }} />}
                   </div>
                   <div className="flex gap-3 text-xs text-gray-600 flex-wrap">
-                    <span><span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1" />{f.healthy} healthy</span>
-                    <span><span className="inline-block w-2 h-2 rounded-full bg-amber-500 mr-1" />{f.at_risk} at risk</span>
-                    <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1" />{f.failing} failing</span>
-                    <span><span className="inline-block w-2 h-2 rounded-full bg-gray-300 mr-1" />{f.unknown} not measured</span>
+                    <span><span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1" />{s.passed_n} passed</span>
+                    <span><span className="inline-block w-2 h-2 rounded-full bg-sky-500 mr-1" />{s.remediated_n} remediated</span>
+                    <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1" />{s.open_failed_n} open finding{s.open_failed_n === 1 ? "" : "s"}</span>
                     {f.open_capas > 0 && <span className="text-red-700 font-medium">· {f.open_capas} open CAPAs</span>}
                     {f.draft_sops > 0 && <span className="text-amber-700">· {f.draft_sops} draft SOPs</span>}
                   </div>
                 </>
               ) : (
-                <div className="text-xs text-gray-400">No controls under this framework yet.</div>
+                <div className="text-xs text-gray-400">
+                  Not audited yet — the score appears after the first audit is
+                  submitted.
+                </div>
               )}
             </Link>
           );
