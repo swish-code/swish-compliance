@@ -11,6 +11,8 @@ import {
   getCapa,
   setCapaAssignee,
   upsertCapaFromFinding,
+  listBulkAssignableFindings,
+  getAuditScope,
   saveCapaExecution,
   setCapaRejectionReason,
   addCapaEvidence,
@@ -454,6 +456,141 @@ export async function assignCapaFromFindingAction(formData: FormData) {
 
   revalidatePath("/capa");
   revalidatePath(`/capa/${id}`);
+}
+
+const AssignControlSchema = z.object({
+  audit_id: z.coerce.number().int().positive(),
+  control_id: z.coerce.number().int().positive().optional().nullable(),
+  control_label: z.string().trim().optional().nullable(),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  assigned_to: z.coerce.number().int().positive(),
+  reviewer_id: z.coerce.number().int().positive().optional().nullable(),
+  start_date: z.string().optional().nullable(),
+  due_date: z.string().optional().nullable(),
+  assignment_note: z.string().trim().optional().nullable(),
+});
+
+/**
+ * "Assign control" button on the /capa page: one form, applied to every
+ * failed finding under the control that has NO assignee yet. Findings
+ * whose CAPA is already assigned to someone are left untouched — the
+ * query in listBulkAssignableFindings filters them out, so a re-run
+ * after a partial manual pass only fills the gaps.
+ *
+ * Each finding still goes through upsertCapaFromFinding, so codes,
+ * status transitions and upsert semantics stay identical to the
+ * per-finding flow. Notifications are collapsed into ONE summary per
+ * recipient instead of one per CAPA.
+ */
+export async function assignControlCapasAction(formData: FormData) {
+  const user = await requireUser();
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = AssignControlSchema.parse({
+    ...raw,
+    control_id: raw.control_id === "" ? null : raw.control_id,
+    reviewer_id: raw.reviewer_id === "" ? null : raw.reviewer_id,
+    start_date: raw.start_date === "" ? null : raw.start_date,
+    due_date: raw.due_date === "" ? null : raw.due_date,
+    assignment_note: raw.assignment_note === "" ? null : raw.assignment_note,
+  });
+
+  const isAllowed =
+    user.role === "admin" ||
+    user.role === "compliance" ||
+    user.role === "business_excellence";
+  if (!isAllowed) {
+    throw new Error(
+      "Only Compliance, Business Excellence, or admin can assign CAPAs."
+    );
+  }
+
+  const findings = await listBulkAssignableFindings(
+    parsed.audit_id,
+    parsed.control_id ?? null
+  );
+  if (findings.length === 0) {
+    throw new Error(
+      "Nothing to assign — every finding under this control already has an assignee."
+    );
+  }
+
+  const scope = await getAuditScope(parsed.audit_id);
+
+  const capas: { id: number; code: string }[] = [];
+  for (const f of findings) {
+    const { id, code } = await upsertCapaFromFinding({
+      audit_id: parsed.audit_id,
+      item_id: f.item_id,
+      title: f.question.slice(0, 250),
+      severity: parsed.severity,
+      brand_id: scope?.brand_id ?? null,
+      department_id: scope?.department_id ?? null,
+      assigned_to: parsed.assigned_to,
+      reviewer_id: parsed.reviewer_id,
+      start_date: parsed.start_date,
+      due_date: parsed.due_date,
+      assignment_note: parsed.assignment_note,
+      created_by: user.id,
+    });
+    capas.push({ id, code });
+  }
+
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'capa:bulk_assigned_from_control', 'audit', $3, $4)`,
+    [
+      user.id,
+      user.email,
+      parsed.audit_id,
+      JSON.stringify({
+        control_id: parsed.control_id,
+        control_label: parsed.control_label,
+        assigned_to: parsed.assigned_to,
+        reviewer_id: parsed.reviewer_id,
+        severity: parsed.severity,
+        capa_count: capas.length,
+        capa_ids: capas.map((c) => c.id),
+        by_user_name: user.displayName,
+      }),
+    ]
+  );
+
+  const controlLabel = parsed.control_label || `Audit #${parsed.audit_id}`;
+  const capaListHref = `/capa?audit_id=${parsed.audit_id}`;
+
+  if (parsed.assigned_to !== user.id) {
+    await notify({
+      audience: { userIds: [parsed.assigned_to] },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "capa:assigned",
+      title: `${capas.length} CAPA${capas.length === 1 ? "" : "s"} assigned to you — ${controlLabel}`,
+      body:
+        `Severity: ${parsed.severity}.` +
+        (parsed.due_date ? ` Due ${parsed.due_date}.` : "") +
+        (parsed.assignment_note ? ` Note: "${parsed.assignment_note}"` : "") +
+        ` (${capas.map((c) => c.code).join(", ")})`,
+      severity: parsed.severity === "critical" ? "critical" : "info",
+      entity: { type: "audit", id: parsed.audit_id, href: capaListHref },
+    });
+  }
+  if (
+    parsed.reviewer_id &&
+    parsed.reviewer_id !== user.id &&
+    parsed.reviewer_id !== parsed.assigned_to
+  ) {
+    await notify({
+      audience: { userIds: [parsed.reviewer_id] },
+      actor: { id: user.id, name: user.displayName, role: user.role },
+      kind: "capa:reviewer_assigned",
+      title: `You're the reviewer on ${capas.length} CAPA${capas.length === 1 ? "" : "s"} — ${controlLabel}`,
+      body: `${user.displayName} assigned you to verify these CAPAs once the fixes are submitted.`,
+      severity: "info",
+      entity: { type: "audit", id: parsed.audit_id, href: capaListHref },
+    });
+  }
+
+  revalidatePath("/capa");
+  return { assigned: capas.length };
 }
 
 const AssignSchema = z.object({

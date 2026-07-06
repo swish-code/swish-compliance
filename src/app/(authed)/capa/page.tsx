@@ -13,6 +13,7 @@ import {
 } from "@/features/capa/types";
 import { queryAll, queryOne } from "@/lib/db";
 import AssignCapaModal from "@/features/capa/AssignCapaModal";
+import AssignControlModal from "@/features/capa/AssignControlModal";
 
 /**
  * Corrective Actions page — hierarchical view driven by the audit that
@@ -310,7 +311,12 @@ export default async function CapaPage({
 
               {/* Controls */}
               <div className="divide-y divide-gray-100">
-                {audit.controls.map((control) => (
+                {audit.controls.map((control) => {
+                  const controlItems = control.tests.flatMap((t) => t.items);
+                  const unassignedHere = controlItems.filter(
+                    (f) => !f.capa_id || !f.capa_assigned_to
+                  ).length;
+                  return (
                   <div key={`${audit.audit_id}-c-${control.control_id ?? 0}`}>
                     <div className="px-5 py-2 bg-gray-50/60 flex items-center gap-2">
                       <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
@@ -323,6 +329,22 @@ export default async function CapaPage({
                       )}
                       <span className="text-sm font-medium text-gray-800">
                         {control.control_name ?? "— No control linked —"}
+                      </span>
+                      <span className="ml-auto">
+                        <AssignControlModal
+                          control={{
+                            auditId: audit.audit_id,
+                            controlId: control.control_id,
+                            controlCode: control.control_code,
+                            controlName: control.control_name,
+                            auditTitle: buildAuditTitle(audit),
+                            unassignedCount: unassignedHere,
+                            assignedCount:
+                              controlItems.length - unassignedHere,
+                          }}
+                          assignableUsers={assignableUsers}
+                          reviewers={reviewers}
+                        />
                       </span>
                     </div>
 
@@ -357,7 +379,8 @@ export default async function CapaPage({
                       </div>
                     ))}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </details>
           );

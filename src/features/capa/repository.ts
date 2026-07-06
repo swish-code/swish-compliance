@@ -365,6 +365,47 @@ export async function listAuditFindings(filters: {
 }
 
 /**
+ * The failed findings under one audit's control that can still be
+ * bulk-assigned: no CAPA row yet, or a CAPA nobody is assigned to.
+ * Findings whose CAPA already has an assignee are deliberately
+ * excluded — bulk assign must never steal work from someone.
+ *
+ * The control filter uses IS NOT DISTINCT FROM because legacy audits
+ * can have control_id NULL and the UI still shows them under a
+ * "No control linked" group that should be bulk-assignable too.
+ */
+export async function listBulkAssignableFindings(
+  auditId: number,
+  controlId: number | null
+): Promise<{ item_id: number; question: string }[]> {
+  return queryAll<{ item_id: number; question: string }>(
+    `SELECT i.id AS item_id, i.question
+     FROM audit_responses r
+     JOIN audits          a ON a.id = r.audit_id
+     JOIN checklist_items i ON i.id = r.item_id
+     LEFT JOIN corrective_actions ca
+       ON ca.source_audit_id = a.id AND ca.source_item_id = i.id
+     WHERE r.response = 'fail'
+       AND a.id = $1::int
+       AND a.control_id IS NOT DISTINCT FROM $2::int
+       AND a.status IN ('submitted','closed')
+       AND (ca.id IS NULL OR ca.assigned_to IS NULL)
+     ORDER BY i.sort_order, i.id`,
+    [auditId, controlId]
+  );
+}
+
+/** Brand/department scope of an audit — copied onto bulk-created CAPAs. */
+export async function getAuditScope(
+  auditId: number
+): Promise<{ brand_id: number | null; department_id: number | null } | undefined> {
+  return queryOne<{ brand_id: number | null; department_id: number | null }>(
+    `SELECT brand_id, department_id FROM audits WHERE id = $1`,
+    [auditId]
+  );
+}
+
+/**
  * Create OR update the CAPA linked to a specific (audit, item) pair.
  * The upsert key is (source_audit_id, source_item_id) — a finding can
  * only ever have ONE CAPA row.

@@ -2,6 +2,14 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { queryAll, queryOne } from "@/lib/db";
+import {
+  CAPA_STATUS_LABEL,
+  CAPA_STATUS_TONE,
+  SEVERITY_LABEL,
+  SEVERITY_TONE,
+  type CapaStatus,
+  type CapaSeverity,
+} from "@/features/capa/types";
 
 type FrameworkRow = {
   id: number;
@@ -15,6 +23,22 @@ type FrameworkRow = {
   unknown: number;
   open_capas: number;
   draft_sops: number;
+};
+
+type OpenFindingRow = {
+  audit_id: number;
+  framework_code: string | null;
+  control_code: string | null;
+  control_name: string | null;
+  item_id: number;
+  question: string;
+  is_critical: boolean;
+  capa_id: number | null;
+  capa_code: string | null;
+  capa_status: CapaStatus | null;
+  capa_severity: CapaSeverity | null;
+  capa_due_date: string | null;
+  assigned_to_name: string | null;
 };
 
 type TestResultEvent = {
@@ -59,10 +83,22 @@ export default async function RoadmapPage({
        COALESCE(SUM(CASE WHEN c.health_status = 'at_risk' THEN 1 ELSE 0 END), 0)::int AS at_risk,
        COALESCE(SUM(CASE WHEN c.health_status = 'failing' THEN 1 ELSE 0 END), 0)::int AS failing,
        COALESCE(SUM(CASE WHEN c.health_status = 'unknown' THEN 1 ELSE 0 END), 0)::int AS unknown,
+       -- Open CAPAs reachable from this framework two ways: manually
+       -- linked via control_links, OR born from an audit finding
+       -- (source_audit_id → audits.framework_id). Audit-born CAPAs
+       -- never get a control_links row, so without the second arm the
+       -- count reads zero for them.
        (SELECT COUNT(*)::int FROM corrective_actions ca
-        JOIN control_links cl ON cl.entity_type = 'capa' AND cl.entity_id = ca.id
-        JOIN controls cc ON cc.id = cl.control_id
-        WHERE cc.framework_id = f.id AND ca.status IN ('open','in_progress','submitted')) AS open_capas,
+        WHERE ca.status IN ('open','in_progress','submitted')
+          AND (
+            EXISTS (SELECT 1 FROM control_links cl
+                    JOIN controls cc ON cc.id = cl.control_id
+                    WHERE cl.entity_type = 'capa' AND cl.entity_id = ca.id
+                      AND cc.framework_id = f.id)
+            OR EXISTS (SELECT 1 FROM audits a
+                       WHERE a.id = ca.source_audit_id
+                         AND a.framework_id = f.id)
+          )) AS open_capas,
        (SELECT COUNT(*)::int FROM sops s
         JOIN control_links cl ON cl.entity_type = 'sop' AND cl.entity_id = s.id
         JOIN controls cc ON cc.id = cl.control_id
@@ -90,6 +126,42 @@ export default async function RoadmapPage({
          WHERE severity = 'critical' AND status IN ('open','in_progress','submitted'))      AS critical_capas,
        (SELECT COUNT(*)::int FROM sops WHERE status = 'pending_review')                     AS pending_sops,
        (SELECT COUNT(*)::int FROM checks WHERE last_status = 'failing')                     AS failing_checks`
+  );
+
+  // Open audit findings — every failed audit question whose CAPA is
+  // still unresolved (or was never assigned). This is CURRENT state,
+  // not history, so it deliberately ignores the timeline date filter.
+  // Overdue first, then by severity, then nearest due date.
+  const openFindings = await queryAll<OpenFindingRow>(
+    `SELECT
+       a.id AS audit_id,
+       fw.code AS framework_code,
+       ctrl.code AS control_code, ctrl.name AS control_name,
+       i.id AS item_id, i.question, i.is_critical,
+       ca.id AS capa_id, ca.code AS capa_code,
+       ca.status AS capa_status, ca.severity AS capa_severity,
+       ca.due_date AS capa_due_date,
+       u.display_name AS assigned_to_name
+     FROM audit_responses r
+     JOIN audits          a    ON a.id  = r.audit_id
+     JOIN checklist_items i    ON i.id  = r.item_id
+     LEFT JOIN frameworks fw   ON fw.id = a.framework_id
+     LEFT JOIN controls   ctrl ON ctrl.id = a.control_id
+     LEFT JOIN corrective_actions ca
+       ON ca.source_audit_id = a.id AND ca.source_item_id = i.id
+     LEFT JOIN users      u    ON u.id  = ca.assigned_to
+     WHERE r.response = 'fail'
+       AND a.status IN ('submitted','closed')
+       AND (ca.id IS NULL
+            OR ca.status IN ('open','in_progress','submitted','rejected'))
+     ORDER BY
+       CASE WHEN ca.due_date < CURRENT_DATE THEN 0 ELSE 1 END,
+       CASE ca.severity
+         WHEN 'critical' THEN 0 WHEN 'high' THEN 1
+         WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
+       ca.due_date ASC NULLS LAST,
+       a.id DESC, i.sort_order, i.id
+     LIMIT 100`
   );
 
   // Test results timeline — every check_result inside the chosen window,
@@ -206,6 +278,133 @@ export default async function RoadmapPage({
           );
         })}
       </div>
+
+      {/* ─── Open audit findings (failed questions + their CAPAs) ─── */}
+      <div className="flex items-center justify-between mt-10 mb-3 gap-3 flex-wrap">
+        <h3 className="text-xs uppercase tracking-widest text-gray-500">
+          Open audit findings &amp; CAPAs
+        </h3>
+        <Link
+          href="/capa"
+          className="text-xs text-brand-700 hover:underline"
+        >
+          Open Corrective Actions →
+        </Link>
+      </div>
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-2">
+        {openFindings.length === 0 ? (
+          <div className="px-6 py-10 text-center text-gray-400 text-sm">
+            No open audit findings — every failed question is resolved. 🎉
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {openFindings.map((f) => {
+              const overdue =
+                f.capa_due_date != null &&
+                new Date(f.capa_due_date) <
+                  new Date(new Date().toDateString());
+              return (
+                <li
+                  key={`${f.audit_id}-${f.item_id}`}
+                  className="px-5 py-3 hover:bg-gray-50 flex items-start gap-3 group"
+                >
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full mt-1.5 ${
+                      overdue || f.capa_severity === "critical"
+                        ? "bg-red-500"
+                        : f.capa_id && f.assigned_to_name
+                        ? "bg-amber-500"
+                        : "bg-gray-300"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                      <Link
+                        href={
+                          f.capa_id
+                            ? `/capa/${f.capa_id}`
+                            : `/capa?audit_id=${f.audit_id}`
+                        }
+                        className="text-sm font-medium text-gray-900 group-hover:text-brand-700"
+                      >
+                        {f.question}
+                      </Link>
+                      {f.is_critical && (
+                        <span className="text-[10px] font-medium bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
+                          CRITICAL
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-gray-500 flex-wrap">
+                      <span className="font-mono text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                        Audit #{f.audit_id}
+                      </span>
+                      {f.framework_code && (
+                        <span className="text-emerald-700 font-mono">
+                          {f.framework_code}
+                        </span>
+                      )}
+                      {f.control_code && (
+                        <span className="text-amber-700 font-mono">
+                          {f.control_code}
+                        </span>
+                      )}
+                      {f.capa_code && (
+                        <span className="font-mono text-gray-500">
+                          {f.capa_code}
+                        </span>
+                      )}
+                      {f.capa_status ? (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${CAPA_STATUS_TONE[f.capa_status]}`}
+                        >
+                          {CAPA_STATUS_LABEL[f.capa_status]}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                          Not Assigned
+                        </span>
+                      )}
+                      {f.capa_severity && (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${SEVERITY_TONE[f.capa_severity]}`}
+                        >
+                          {SEVERITY_LABEL[f.capa_severity]}
+                        </span>
+                      )}
+                      {f.assigned_to_name && (
+                        <span className="text-gray-600">
+                          → {f.assigned_to_name}
+                        </span>
+                      )}
+                      {f.capa_due_date && (
+                        <span
+                          className={
+                            overdue ? "text-red-600 font-semibold" : ""
+                          }
+                        >
+                          due{" "}
+                          {new Date(f.capa_due_date).toLocaleDateString()}
+                          {overdue && " · OVERDUE"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      {openFindings.length === 100 && (
+        <div className="text-[11px] text-gray-400 mb-2">
+          Showing the 100 most urgent findings —{" "}
+          <Link href="/capa" className="text-brand-700 hover:underline">
+            see all on the Corrective Actions page
+          </Link>
+          .
+        </div>
+      )}
 
       {/* ─── Test results timeline ─── */}
       <div className="flex items-center justify-between mt-10 mb-3 gap-3 flex-wrap">
