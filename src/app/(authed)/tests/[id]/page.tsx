@@ -196,95 +196,80 @@ export default async function CheckDetailPage({
             </div>
           </div>
           <div className="overflow-x-auto">
+            {/* One row per CHECKLIST — questions are deliberately NOT listed
+                here (user spec): they live on the checklist's own page,
+                reached by clicking its name. This table is just the index of
+                which checklists feed this test. */}
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
                 <tr>
                   <th className="text-left px-4 py-3 font-medium">Checklist Name</th>
                   <th className="text-left px-4 py-3 font-medium">Checklist ID</th>
                   <th className="text-left px-4 py-3 font-medium">Checklist Title</th>
-                  <th className="text-left px-4 py-3 font-medium">Item No.</th>
-                  <th className="text-left px-4 py-3 font-medium">Section</th>
-                  <th className="text-left px-4 py-3 font-medium">Checkpoint</th>
-                  <th className="text-right px-4 py-3 font-medium">Weight</th>
+                  <th className="text-right px-4 py-3 font-medium">Questions</th>
+                  <th className="text-right px-4 py-3 font-medium">Critical</th>
+                  <th className="text-right px-4 py-3 font-medium">Total Weight</th>
                 </tr>
               </thead>
               <tbody>
-                {linkedItems.map((item, idx) => {
-                  const prev = idx > 0 ? linkedItems[idx - 1] : null;
-                  const isFirstOfTemplate =
-                    !prev || prev.template_id !== item.template_id;
-                  const isFirstOfSection =
-                    isFirstOfTemplate || prev?.section !== item.section;
-                  return (
-                    <tr
-                      key={item.item_id}
-                      className={`border-t border-gray-100 ${
-                        isFirstOfTemplate ? "border-t-2 border-t-gray-200" : ""
-                      }`}
-                    >
-                      {/* Checklist name + ID + title render ONLY on the first
-                          row of each checklist group (user spec: repeating
-                          them per question read as duplicated checklists).
-                          Rows below stay blank in these columns; the thicker
-                          top border marks where the next checklist starts.
-                          The ID column shows the CHECKLIST's real code
-                          (template_code), NOT the question code. */}
-                      <td className="px-4 py-3 text-gray-700 align-top">
-                        {isFirstOfTemplate && (
+                {linkedItems
+                  .filter(
+                    (item, idx) =>
+                      idx === 0 ||
+                      linkedItems[idx - 1].template_id !== item.template_id
+                  )
+                  .map((tpl) => {
+                    const group = linkedItems.filter(
+                      (i) => i.template_id === tpl.template_id
+                    );
+                    const critical = group.filter((i) => i.is_critical).length;
+                    const totalWeight = group.reduce(
+                      (s, i) => s + Number(i.weight ?? 0),
+                      0
+                    );
+                    return (
+                      <tr
+                        key={tpl.template_id}
+                        className="border-t border-gray-100 hover:bg-gray-50"
+                      >
+                        <td className="px-4 py-3 align-top">
                           <Link
-                            href={`/checklists/templates/${item.template_id}`}
+                            href={`/checklists/templates/${tpl.template_id}`}
                             className="text-brand-700 hover:underline font-medium"
                           >
-                            {item.template_name.replace(/ checklist$/i, "")}
+                            {tpl.template_name.replace(/ checklist$/i, "")}
                           </Link>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        {isFirstOfTemplate &&
-                          (item.template_code ? (
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          {tpl.template_code ? (
                             <span className="font-mono text-xs text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded whitespace-nowrap">
-                              {item.template_code}
+                              {tpl.template_code}
                             </span>
                           ) : (
                             <span className="text-gray-300">—</span>
-                          ))}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 align-top whitespace-nowrap">
-                        {isFirstOfTemplate && item.template_name}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 align-top tabular-nums">
-                        {item.item_no}
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        {item.section ? (
-                          isFirstOfSection ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-800 border border-brand-200">
-                              {item.section}
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 align-top">
+                          {tpl.template_name}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-700 align-top tabular-nums">
+                          {group.length}
+                        </td>
+                        <td className="px-4 py-3 text-right align-top tabular-nums">
+                          {critical > 0 ? (
+                            <span className="text-red-600 font-semibold">
+                              {critical}
                             </span>
                           ) : (
-                            <span className="text-gray-300 text-xs">↑</span>
-                          )
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-900 align-top max-w-lg">
-                        <div className="flex items-start gap-2">
-                          {item.is_critical && (
-                            <span
-                              title="Critical checkpoint"
-                              className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0"
-                            />
+                            <span className="text-gray-300">0</span>
                           )}
-                          <span>{item.question}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-700 align-top tabular-nums">
-                        {item.weight}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-700 align-top tabular-nums">
+                          {totalWeight}
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
