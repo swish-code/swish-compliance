@@ -1,4 +1,3 @@
-import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
@@ -200,10 +199,13 @@ export default async function CheckDetailPage({
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium w-44">Question ID</th>
-                  <th className="text-left px-4 py-3 font-medium w-16">No.</th>
+                  <th className="text-left px-4 py-3 font-medium">Checklist Name</th>
+                  <th className="text-left px-4 py-3 font-medium">Checklist ID</th>
+                  <th className="text-left px-4 py-3 font-medium">Checklist Title</th>
+                  <th className="text-left px-4 py-3 font-medium">Item No.</th>
+                  <th className="text-left px-4 py-3 font-medium">Section</th>
                   <th className="text-left px-4 py-3 font-medium">Checkpoint</th>
-                  <th className="text-right px-4 py-3 font-medium w-20">Weight</th>
+                  <th className="text-right px-4 py-3 font-medium">Weight</th>
                 </tr>
               </thead>
               <tbody>
@@ -211,70 +213,72 @@ export default async function CheckDetailPage({
                   const prev = idx > 0 ? linkedItems[idx - 1] : null;
                   const isFirstOfTemplate =
                     !prev || prev.template_id !== item.template_id;
-                  const groupCount = linkedItems.filter(
-                    (i) => i.template_id === item.template_id
-                  ).length;
+                  const isFirstOfSection =
+                    isFirstOfTemplate || prev?.section !== item.section;
                   return (
-                    <React.Fragment key={item.item_id}>
-                      {/* One header row per CHECKLIST — its real code + name,
-                          rendered once, with its questions listed under it.
-                          (The old table repeated the checklist name on every
-                          question row and mislabeled the question code as
-                          "Checklist ID", which read as duplicated checklists.) */}
-                      {isFirstOfTemplate && (
-                        <tr className="bg-brand-50/60 border-t-2 border-t-brand-200">
-                          <td colSpan={4} className="px-4 py-2.5">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[10px] uppercase tracking-wider text-brand-700 font-semibold">
-                                Checklist
-                              </span>
-                              {item.template_code && (
-                                <span className="font-mono text-xs text-brand-800 bg-white border border-brand-200 px-2 py-0.5 rounded">
-                                  {item.template_code}
-                                </span>
-                              )}
-                              <Link
-                                href={`/checklists/templates/${item.template_id}`}
-                                className="text-sm font-semibold text-brand-800 hover:underline"
-                              >
-                                {item.template_name}
-                              </Link>
-                              <span className="text-xs text-gray-500 ml-auto">
-                                {groupCount} question{groupCount === 1 ? "" : "s"}
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                      <tr className="border-t border-gray-100">
-                        <td className="px-4 py-3 align-top">
-                          {item.item_code ? (
-                            <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
-                              {item.item_code}
+                    <tr
+                      key={item.item_id}
+                      className={`border-t border-gray-100 ${
+                        isFirstOfTemplate ? "border-t-2 border-t-gray-200" : ""
+                      }`}
+                    >
+                      {/* Checklist name + ID + title repeat on every row so a
+                          test spanning several checklists stays readable —
+                          each question carries its own checklist's identity.
+                          The ID column shows the CHECKLIST's real code
+                          (template_code), NOT the question code — that
+                          mislabel is what read as duplicated checklists. */}
+                      <td className="px-4 py-3 text-gray-700 align-top">
+                        <Link
+                          href={`/checklists/templates/${item.template_id}`}
+                          className="text-brand-700 hover:underline font-medium"
+                        >
+                          {item.template_name.replace(/ checklist$/i, "")}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {item.template_code ? (
+                          <span className="font-mono text-xs text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded whitespace-nowrap">
+                            {item.template_code}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 align-top whitespace-nowrap">
+                        {item.template_name}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 align-top tabular-nums">
+                        {item.item_no}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {item.section ? (
+                          isFirstOfSection ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-800 border border-brand-200">
+                              {item.section}
                             </span>
                           ) : (
-                            <span className="text-gray-300">—</span>
+                            <span className="text-gray-300 text-xs">↑</span>
+                          )
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-900 align-top max-w-lg">
+                        <div className="flex items-start gap-2">
+                          {item.is_critical && (
+                            <span
+                              title="Critical checkpoint"
+                              className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0"
+                            />
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 align-top tabular-nums">
-                          {item.item_no}
-                        </td>
-                        <td className="px-4 py-3 text-gray-900 align-top max-w-lg">
-                          <div className="flex items-start gap-2">
-                            {item.is_critical && (
-                              <span
-                                title="Critical checkpoint"
-                                className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0"
-                              />
-                            )}
-                            <span>{item.question}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-700 align-top tabular-nums">
-                          {item.weight}
-                        </td>
-                      </tr>
-                    </React.Fragment>
+                          <span>{item.question}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-700 align-top tabular-nums">
+                        {item.weight}
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
