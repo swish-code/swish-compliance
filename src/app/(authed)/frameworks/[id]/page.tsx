@@ -8,7 +8,7 @@ import {
   toggleFrameworkAction,
   setFrameworkOwnerAction,
 } from "@/features/frameworks/actions";
-import { queryAll } from "@/lib/db";
+import { queryAll, queryOne } from "@/lib/db";
 import { HEALTH_LABEL, HEALTH_TONE, HEALTH_DOT } from "@/features/controls/types";
 
 export default async function FrameworkDetailPage({
@@ -23,6 +23,13 @@ export default async function FrameworkDetailPage({
   if (!fw) notFound();
   const controls = await listControls({ framework_id: id });
   const isAdmin = canAccessAdmin(user.role);
+
+  // Lineage: which domain this framework belongs to.
+  const domain = await queryOne<{ id: number; name: string }>(
+    `SELECT d.id, d.name FROM domains d
+     JOIN frameworks f ON f.domain_id = d.id WHERE f.id = $1`,
+    [id]
+  );
 
   const users = isAdmin
     ? await queryAll<{ id: number; display_name: string }>(
@@ -77,6 +84,13 @@ export default async function FrameworkDetailPage({
         </div>
 
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
+          <Field label="Domain">
+            {domain ? (
+              <Link href={`/domains/${domain.id}`} className="text-brand-700 hover:underline">
+                {domain.name}
+              </Link>
+            ) : "—"}
+          </Field>
           <Field label="Controls">{fw.control_count} ({fw.active_control_count} active)</Field>
           <Field label="Owner">
             {isAdmin ? (

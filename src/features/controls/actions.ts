@@ -33,6 +33,56 @@ function nullEmpty<T extends Record<string, FormDataEntryValue>>(o: T) {
   return out;
 }
 
+const UpdateSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  name: z.string().trim().min(1, "Name is required"),
+  description: z.string().trim().optional().nullable(),
+  category: z.string().trim().optional().nullable(),
+  control_type: z.string().trim().optional().nullable(),
+  frequency: z.string().trim().optional().nullable(),
+  risk_weight: z.coerce.number().int().min(1).max(5).optional().nullable(),
+  requirement: z.string().trim().optional().nullable(),
+  clause_reference: z.string().trim().optional().nullable(),
+  evidence_required: z.string().trim().optional().nullable(),
+});
+
+/**
+ * Edit a control's details from its detail page (user request: an Edit
+ * button "from inside"). Framework and code are deliberately NOT
+ * editable here — they define the control's identity in the GRC tree;
+ * moving a control between frameworks is a restructure, not an edit.
+ */
+export async function updateControlAction(formData: FormData) {
+  const user = await requireUser();
+  if (!canEditSops(user.role) && user.role !== "compliance") {
+    throw new Error("Only admin, Business Excellence, or Compliance can edit controls.");
+  }
+  const parsed = UpdateSchema.parse(
+    nullEmpty(Object.fromEntries(formData.entries()))
+  );
+  await execute(
+    `UPDATE controls SET
+       name = $2, description = $3, category = $4, control_type = $5,
+       frequency = $6, risk_weight = $7::int, requirement = $8,
+       clause_reference = $9, evidence_required = $10
+     WHERE id = $1::int`,
+    [
+      parsed.id, parsed.name, parsed.description ?? null,
+      parsed.category ?? null, parsed.control_type ?? null,
+      parsed.frequency ?? null, parsed.risk_weight ?? null,
+      parsed.requirement ?? null, parsed.clause_reference ?? null,
+      parsed.evidence_required ?? null,
+    ]
+  );
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'control:updated', 'control', $3, $4)`,
+    [user.id, user.email, parsed.id, JSON.stringify({ name: parsed.name, by_user_name: user.displayName })]
+  );
+  revalidatePath(`/controls/${parsed.id}`);
+  revalidatePath("/controls");
+}
+
 export async function createControlAction(formData: FormData) {
   const user = await requireUser();
   if (!canEditSops(user.role)) throw new Error("Not authorized.");

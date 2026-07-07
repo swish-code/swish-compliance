@@ -9,7 +9,7 @@ import {
 } from "@/features/checks/repository";
 import { recordResultAction } from "@/features/checks/actions";
 import FilePicker from "@/features/sops/FilePicker";
-import { queryAll } from "@/lib/db";
+import { queryAll, queryOne } from "@/lib/db";
 import {
   CHECK_STATUS_LABEL,
   CHECK_STATUS_TONE,
@@ -39,6 +39,24 @@ export default async function CheckDetailPage({
      ORDER BY name`
   );
 
+  // Lineage for the header: this test's control → framework → domain.
+  const lineage = check.control_id
+    ? await queryOne<{
+        framework_id: number | null;
+        framework_name: string | null;
+        domain_id: number | null;
+        domain_name: string | null;
+      }>(
+        `SELECT f.id AS framework_id, f.name AS framework_name,
+                d.id AS domain_id, d.name AS domain_name
+         FROM controls c
+         LEFT JOIN frameworks f ON f.id = c.framework_id
+         LEFT JOIN domains d ON d.id = f.domain_id
+         WHERE c.id = $1`,
+        [check.control_id]
+      )
+    : null;
+
   return (
     <Workspace
       section="Workspace / Tests"
@@ -61,7 +79,17 @@ export default async function CheckDetailPage({
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-1">{check.name}</h2>
         {check.description && <p className="text-sm text-gray-600 mb-3">{check.description}</p>}
-        <dl className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
+        <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
+          <Field label="Domain">
+            {lineage?.domain_id ? (
+              <Link href={`/domains/${lineage.domain_id}`} className="text-brand-700 hover:underline">{lineage.domain_name}</Link>
+            ) : "—"}
+          </Field>
+          <Field label="Framework">
+            {lineage?.framework_id ? (
+              <Link href={`/frameworks/${lineage.framework_id}`} className="text-brand-700 hover:underline">{lineage.framework_name}</Link>
+            ) : "—"}
+          </Field>
           <Field label="Control">
             {check.control_id ? (
               <Link href={`/controls/${check.control_id}`} className="text-brand-700 hover:underline">{check.control_name}</Link>

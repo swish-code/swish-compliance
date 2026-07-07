@@ -9,13 +9,14 @@ import {
 import {
   linkControlAction,
   unlinkControlAction,
+  updateControlAction,
 } from "@/features/controls/actions";
 import {
   HEALTH_LABEL,
   HEALTH_TONE,
   HEALTH_DOT,
 } from "@/features/controls/types";
-import { queryAll } from "@/lib/db";
+import { queryAll, queryOne } from "@/lib/db";
 import AssignTestModal from "@/features/checks/AssignTestModal";
 import { listOrgUnitOptions } from "@/features/org-units/repository";
 
@@ -30,7 +31,17 @@ export default async function ControlDetailPage({
   const ctrl = await getControl(id);
   if (!ctrl) notFound();
   const links = await listControlLinks(id);
-  const canEdit = canEditSops(user.role);
+  const canEdit = canEditSops(user.role) || user.role === "compliance";
+
+  // Full lineage for the header — the domain comes via the framework.
+  const lineage = ctrl.framework_id
+    ? await queryOne<{ domain_id: number | null; domain_name: string | null }>(
+        `SELECT d.id AS domain_id, d.name AS domain_name
+         FROM frameworks f LEFT JOIN domains d ON d.id = f.domain_id
+         WHERE f.id = $1`,
+        [ctrl.framework_id]
+      )
+    : null;
 
   // Option C fix: also fetch checks that are linked via the DIRECT
   // foreign key checks.control_id (this is how the ECS GRC import wires
@@ -120,6 +131,20 @@ export default async function ControlDetailPage({
           </div>
         </div>
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
+          <Field label="Domain">
+            {lineage?.domain_id ? (
+              <Link href={`/domains/${lineage.domain_id}`} className="text-brand-700 hover:underline">
+                {lineage.domain_name}
+              </Link>
+            ) : "—"}
+          </Field>
+          <Field label="Framework">
+            {ctrl.framework_id ? (
+              <Link href={`/frameworks/${ctrl.framework_id}`} className="text-brand-700 hover:underline">
+                {ctrl.framework_name ?? ctrl.framework_code}
+              </Link>
+            ) : "—"}
+          </Field>
           <Field label="Owner">{ctrl.owner_name ?? "—"}</Field>
           <Field label="Category">{ctrl.category ?? "—"}</Field>
           <Field label="Control type">{ctrl.control_type ?? "—"}</Field>
@@ -137,6 +162,112 @@ export default async function ControlDetailPage({
           <Field label="Open CAPAs">{ctrl.open_capas}</Field>
         </dl>
       </div>
+
+      {/* Edit panel — native <details> collapse, no client JS. Gated to
+          the same roles that may edit SOPs, plus compliance. */}
+      {canEdit && (
+        <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
+          <summary className="cursor-pointer list-none px-6 py-4 flex items-center gap-2 hover:bg-gray-50">
+            <span className="text-gray-400 transition-transform group-open:rotate-90 select-none">▶</span>
+            <span className="text-sm font-semibold text-gray-700">✏️ Edit control details</span>
+          </summary>
+          <form action={updateControlAction} className="px-6 pb-6 pt-2 space-y-4 border-t border-gray-100">
+            <input type="hidden" name="id" value={ctrl.id} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  name="name"
+                  defaultValue={ctrl.name}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Description</label>
+                <textarea
+                  name="description"
+                  defaultValue={ctrl.description ?? ""}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Category</label>
+                <input
+                  name="category"
+                  defaultValue={ctrl.category ?? ""}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Control type</label>
+                <input
+                  name="control_type"
+                  defaultValue={ctrl.control_type ?? ""}
+                  placeholder="Preventive / Detective / Corrective…"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Frequency</label>
+                <input
+                  name="frequency"
+                  defaultValue={ctrl.frequency ?? ""}
+                  placeholder="Daily / Monthly / Per case…"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Risk weight (1–5)</label>
+                <input
+                  name="risk_weight"
+                  type="number"
+                  min={1}
+                  max={5}
+                  defaultValue={ctrl.risk_weight ?? ""}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Requirement / Checkpoint</label>
+                <textarea
+                  name="requirement"
+                  defaultValue={ctrl.requirement ?? ""}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Clause / Reference</label>
+                <input
+                  name="clause_reference"
+                  defaultValue={ctrl.clause_reference ?? ""}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Evidence required</label>
+                <input
+                  name="evidence_required"
+                  defaultValue={ctrl.evidence_required ?? ""}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                className="bg-brand-700 hover:bg-brand-800 text-white px-5 py-2 rounded-lg text-sm font-medium"
+              >
+                Save changes
+              </button>
+            </div>
+          </form>
+        </details>
+      )}
 
       {/* GRC details panel — requirement, clause, evidence */}
       {(ctrl.requirement || ctrl.clause_reference || ctrl.evidence_required) && (
