@@ -222,31 +222,35 @@ export default async function CheckDetailPage({
                         isFirstOfTemplate ? "border-t-2 border-t-gray-200" : ""
                       }`}
                     >
-                      {/* Checklist name + ID + title repeat on every row so a
-                          test spanning several checklists stays readable —
-                          each question carries its own checklist's identity.
+                      {/* Checklist name + ID + title render ONLY on the first
+                          row of each checklist group (user spec: repeating
+                          them per question read as duplicated checklists).
+                          Rows below stay blank in these columns; the thicker
+                          top border marks where the next checklist starts.
                           The ID column shows the CHECKLIST's real code
-                          (template_code), NOT the question code — that
-                          mislabel is what read as duplicated checklists. */}
+                          (template_code), NOT the question code. */}
                       <td className="px-4 py-3 text-gray-700 align-top">
-                        <Link
-                          href={`/checklists/templates/${item.template_id}`}
-                          className="text-brand-700 hover:underline font-medium"
-                        >
-                          {item.template_name.replace(/ checklist$/i, "")}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        {item.template_code ? (
-                          <span className="font-mono text-xs text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded whitespace-nowrap">
-                            {item.template_code}
-                          </span>
-                        ) : (
-                          <span className="text-gray-300">—</span>
+                        {isFirstOfTemplate && (
+                          <Link
+                            href={`/checklists/templates/${item.template_id}`}
+                            className="text-brand-700 hover:underline font-medium"
+                          >
+                            {item.template_name.replace(/ checklist$/i, "")}
+                          </Link>
                         )}
                       </td>
+                      <td className="px-4 py-3 align-top">
+                        {isFirstOfTemplate &&
+                          (item.template_code ? (
+                            <span className="font-mono text-xs text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded whitespace-nowrap">
+                              {item.template_code}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          ))}
+                      </td>
                       <td className="px-4 py-3 text-gray-600 align-top whitespace-nowrap">
-                        {item.template_name}
+                        {isFirstOfTemplate && item.template_name}
                       </td>
                       <td className="px-4 py-3 text-gray-600 align-top tabular-nums">
                         {item.item_no}
