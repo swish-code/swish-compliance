@@ -41,6 +41,7 @@ const UpdateSchema = z.object({
   control_type: z.string().trim().optional().nullable(),
   frequency: z.string().trim().optional().nullable(),
   risk_weight: z.coerce.number().int().min(1).max(5).optional().nullable(),
+  owner_user_id: z.coerce.number().int().positive().optional().nullable(),
   requirement: z.string().trim().optional().nullable(),
   clause_reference: z.string().trim().optional().nullable(),
   evidence_required: z.string().trim().optional().nullable(),
@@ -63,13 +64,14 @@ export async function updateControlAction(formData: FormData) {
   await execute(
     `UPDATE controls SET
        name = $2, description = $3, category = $4, control_type = $5,
-       frequency = $6, risk_weight = $7::int, requirement = $8,
-       clause_reference = $9, evidence_required = $10
+       frequency = $6, risk_weight = $7::int, owner_user_id = $8::int,
+       requirement = $9, clause_reference = $10, evidence_required = $11
      WHERE id = $1::int`,
     [
       parsed.id, parsed.name, parsed.description ?? null,
       parsed.category ?? null, parsed.control_type ?? null,
       parsed.frequency ?? null, parsed.risk_weight ?? null,
+      parsed.owner_user_id ?? null,
       parsed.requirement ?? null, parsed.clause_reference ?? null,
       parsed.evidence_required ?? null,
     ]

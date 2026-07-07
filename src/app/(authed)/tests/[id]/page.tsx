@@ -7,7 +7,7 @@ import {
   listCheckResults,
   listLinkedChecklistItems,
 } from "@/features/checks/repository";
-import { recordResultAction } from "@/features/checks/actions";
+import { recordResultAction, setCheckOwnerAction } from "@/features/checks/actions";
 import FilePicker from "@/features/sops/FilePicker";
 import { queryAll, queryOne } from "@/lib/db";
 import {
@@ -57,6 +57,35 @@ export default async function CheckDetailPage({
       )
     : null;
 
+  // Default owner rule (user spec): with no explicit owner, the test's
+  // owner is the department head from its control → SOP → department.
+  const defaultOwner =
+    !check.owner_user_id && check.control_id
+      ? await queryOne<{ display_name: string }>(
+          `SELECT u.display_name
+           FROM control_links cl
+           JOIN sops s ON s.id = cl.entity_id AND cl.entity_type = 'sop'
+           JOIN departments d ON d.id = s.department_id
+           JOIN users u ON u.department_id = d.id
+             AND u.role = 'department_manager' AND u.is_active
+           WHERE cl.control_id = $1
+           ORDER BY cl.id
+           LIMIT 1`,
+          [check.control_id]
+        )
+      : null;
+
+  const canEditOwner =
+    user.role === "admin" ||
+    user.role === "business_excellence" ||
+    user.role === "compliance";
+  const ownerOptions = canEditOwner
+    ? await queryAll<{ id: number; display_name: string; role: string }>(
+        `SELECT id, display_name, role FROM users
+         WHERE is_active = TRUE ORDER BY role, display_name`
+      )
+    : [];
+
   return (
     <Workspace
       section="Workspace / Tests"
@@ -105,7 +134,37 @@ export default async function CheckDetailPage({
               </Link>
             ) : "—"}
           </Field>
-          <Field label="Owner">{check.owner_name ?? "—"}</Field>
+          <Field label="Owner">
+            {canEditOwner ? (
+              <form action={setCheckOwnerAction} className="flex items-center gap-2">
+                <input type="hidden" name="id" value={check.id} />
+                <select
+                  name="owner_user_id"
+                  defaultValue={check.owner_user_id ?? ""}
+                  className="px-2 py-1 text-xs border border-gray-300 rounded-md max-w-40"
+                >
+                  <option value="">
+                    {defaultOwner
+                      ? `${defaultOwner.display_name} (dept head)`
+                      : "— Department head (default) —"}
+                  </option>
+                  {ownerOptions.map((u) => (
+                    <option key={u.id} value={u.id}>{u.display_name}</option>
+                  ))}
+                </select>
+                <button type="submit" className="text-xs text-brand-700 hover:underline">Save</button>
+              </form>
+            ) : check.owner_name ? (
+              check.owner_name
+            ) : defaultOwner ? (
+              <span>
+                {defaultOwner.display_name}
+                <span className="text-xs text-gray-400 ml-1">(Department Head — default)</span>
+              </span>
+            ) : (
+              "—"
+            )}
+          </Field>
           <Field label="Results recorded">{check.result_count}</Field>
           <Field label="Next due">{check.next_due_date ? new Date(check.next_due_date).toLocaleDateString() : "—"}</Field>
         </dl>

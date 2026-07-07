@@ -43,6 +43,40 @@ export default async function ControlDetailPage({
       )
     : null;
 
+  // Default owner rule (user spec): when no explicit owner is set, the
+  // owner is the DEPARTMENT HEAD of the department that owns this
+  // control's SOP (control → linked SOP → department → its manager).
+  const defaultOwner = !ctrl.owner_user_id
+    ? await queryOne<{ display_name: string; department_name: string }>(
+        `SELECT u.display_name, d.name AS department_name
+         FROM control_links cl
+         JOIN sops s ON s.id = cl.entity_id AND cl.entity_type = 'sop'
+         JOIN departments d ON d.id = s.department_id
+         JOIN users u ON u.department_id = d.id
+           AND u.role = 'department_manager' AND u.is_active
+         WHERE cl.control_id = $1
+         ORDER BY cl.id
+         LIMIT 1`,
+        [id]
+      )
+    : null;
+
+  // Owner dropdown options for the edit panel.
+  const allUsers = canEdit
+    ? await queryAll<{ id: number; display_name: string; role: string }>(
+        `SELECT id, display_name, role FROM users
+         WHERE is_active = TRUE ORDER BY role, display_name`
+      )
+    : [];
+
+  const STANDARD_FREQUENCIES = [
+    "Daily", "Weekly", "Monthly", "Quarterly", "Annual", "On demand",
+  ];
+  const frequencyOptions =
+    ctrl.frequency && !STANDARD_FREQUENCIES.includes(ctrl.frequency)
+      ? [ctrl.frequency, ...STANDARD_FREQUENCIES]
+      : STANDARD_FREQUENCIES;
+
   // Option C fix: also fetch checks that are linked via the DIRECT
   // foreign key checks.control_id (this is how the ECS GRC import wires
   // them up), not just the control_links junction table.
@@ -145,7 +179,20 @@ export default async function ControlDetailPage({
               </Link>
             ) : "—"}
           </Field>
-          <Field label="Owner">{ctrl.owner_name ?? "—"}</Field>
+          <Field label="Owner">
+            {ctrl.owner_name ? (
+              ctrl.owner_name
+            ) : defaultOwner ? (
+              <span>
+                {defaultOwner.display_name}
+                <span className="text-xs text-gray-400 ml-1">
+                  (Department Head — default)
+                </span>
+              </span>
+            ) : (
+              "—"
+            )}
+          </Field>
           <Field label="Category">{ctrl.category ?? "—"}</Field>
           <Field label="Control type">{ctrl.control_type ?? "—"}</Field>
           <Field label="Frequency">{ctrl.frequency ?? "—"}</Field>
@@ -213,23 +260,51 @@ export default async function ControlDetailPage({
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Frequency</label>
-                <input
+                <select
                   name="frequency"
                   defaultValue={ctrl.frequency ?? ""}
-                  placeholder="Daily / Monthly / Per case…"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
+                >
+                  <option value="">— Not set —</option>
+                  {frequencyOptions.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Risk weight (1–5)</label>
-                <input
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Risk weight</label>
+                <select
                   name="risk_weight"
-                  type="number"
-                  min={1}
-                  max={5}
                   defaultValue={ctrl.risk_weight ?? ""}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
+                >
+                  <option value="">— Not set —</option>
+                  <option value="1">1 — Very low</option>
+                  <option value="2">2 — Low</option>
+                  <option value="3">3 — Medium</option>
+                  <option value="4">4 — High</option>
+                  <option value="5">5 — Critical</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Owner
+                  <span className="ml-1 text-[10px] text-gray-400 normal-case">
+                    (empty = department head by default)
+                  </span>
+                </label>
+                <select
+                  name="owner_user_id"
+                  defaultValue={ctrl.owner_user_id ?? ""}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">— Department head (default) —</option>
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.display_name} · {u.role}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Requirement / Checkpoint</label>

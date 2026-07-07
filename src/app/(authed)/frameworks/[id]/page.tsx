@@ -31,6 +31,26 @@ export default async function FrameworkDetailPage({
     [id]
   );
 
+  // Default owner rule (user spec): with no explicit owner, the
+  // framework's owner is the department head derived from its
+  // controls' SOPs (framework → controls → SOP → department → manager).
+  const defaultOwner = !fw.owner_user_id
+    ? await queryOne<{ display_name: string }>(
+        `SELECT u.display_name
+         FROM controls c
+         JOIN control_links cl ON cl.control_id = c.id AND cl.entity_type = 'sop'
+         JOIN sops s ON s.id = cl.entity_id
+         JOIN departments d ON d.id = s.department_id
+         JOIN users u ON u.department_id = d.id
+           AND u.role = 'department_manager' AND u.is_active
+         WHERE c.framework_id = $1
+         GROUP BY u.id, u.display_name
+         ORDER BY COUNT(*) DESC
+         LIMIT 1`,
+        [id]
+      )
+    : null;
+
   const users = isAdmin
     ? await queryAll<{ id: number; display_name: string }>(
         `SELECT id, display_name FROM users WHERE is_active ORDER BY display_name`
@@ -101,15 +121,26 @@ export default async function FrameworkDetailPage({
                   defaultValue={fw.owner_user_id ?? ""}
                   className="px-2 py-1 text-xs border border-gray-300 rounded-md"
                 >
-                  <option value="">—</option>
+                  <option value="">
+                    {defaultOwner
+                      ? `${defaultOwner.display_name} (dept head)`
+                      : "— Department head (default) —"}
+                  </option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>{u.display_name}</option>
                   ))}
                 </select>
                 <button type="submit" className="text-xs text-brand-700 hover:underline">Save</button>
               </form>
+            ) : fw.owner_name ? (
+              fw.owner_name
+            ) : defaultOwner ? (
+              <span>
+                {defaultOwner.display_name}
+                <span className="text-xs text-gray-500 ml-1">(Department Head — default)</span>
+              </span>
             ) : (
-              fw.owner_name ?? "—"
+              "—"
             )}
             {/* owner_label is the role/team string from the source
                 spreadsheet ("IT Security / IT Manager"); coexists with

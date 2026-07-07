@@ -66,6 +66,32 @@ export async function createCheckAction(formData: FormData) {
   redirect(`/tests/${id}`);
 }
 
+/**
+ * Set (or clear) a test's owner from its detail page. When no explicit
+ * owner is set, the pages display the department head derived from the
+ * test's control → SOP → department chain as the DEFAULT owner; this
+ * action stores an explicit override.
+ */
+export async function setCheckOwnerAction(formData: FormData) {
+  const user = await requireUser();
+  if (!canEditSops(user.role) && user.role !== "compliance") {
+    throw new Error("Only admin, Business Excellence, or Compliance can change the test owner.");
+  }
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid test id.");
+  const raw = (formData.get("owner_user_id") ?? "").toString();
+  const ownerId = raw === "" ? null : Number(raw);
+  if (ownerId !== null && (!Number.isFinite(ownerId) || ownerId <= 0)) {
+    throw new Error("Invalid owner.");
+  }
+  await execute(
+    `UPDATE checks SET owner_user_id = $2::int WHERE id = $1::int`,
+    [id, ownerId]
+  );
+  revalidatePath(`/tests/${id}`);
+  revalidatePath("/tests");
+}
+
 export async function recordResultAction(formData: FormData) {
   const user = await requireUser();
 
