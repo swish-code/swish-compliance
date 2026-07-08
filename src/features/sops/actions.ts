@@ -474,6 +474,11 @@ export async function updateSopAction(formData: FormData) {
 
   revalidatePath("/sops");
   revalidatePath(`/sops/${parsed.id}`);
+  // Land on the SOP detail page after saving. Without this the edit
+  // form re-rendered in place with zero visible change — users clicked
+  // Save repeatedly (22 times in one prod session) believing it was
+  // broken, while every click had in fact saved successfully.
+  redirect(`/sops/${parsed.id}`);
 }
 
 export async function updateSopAttachmentAction(formData: FormData) {
