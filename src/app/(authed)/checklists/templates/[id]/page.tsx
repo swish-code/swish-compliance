@@ -39,21 +39,18 @@ export default async function ChecklistTemplateDetailPage({
   // (if they have canEditSops) add/remove items.
   const isAdmin = user.role === "admin";
 
-  // Lineage rows for the "Connected to" panel — distinct chains from this
-  // checklist's questions up through their tests to control/framework/domain.
+  // Lineage rows for the "Connected to" panel — DISTINCT Domain +
+  // Framework only (user spec: don't surface the connected controls or
+  // tests here, max the framework and its domain). A checklist can feed
+  // several tests across frameworks, so this dedupes to the distinct
+  // (domain, framework) pairs.
   const connections = await queryAll<{
-    test_id: number;
-    test_name: string;
-    control_id: number | null;
-    control_name: string | null;
     framework_id: number | null;
     framework_name: string | null;
     domain_id: number | null;
     domain_name: string | null;
   }>(
     `SELECT DISTINCT
-       ch.id AS test_id, ch.name AS test_name,
-       c.id AS control_id, c.name AS control_name,
        f.id AS framework_id, f.name AS framework_name,
        d.id AS domain_id, d.name AS domain_name
      FROM checklist_items i
@@ -63,7 +60,7 @@ export default async function ChecklistTemplateDetailPage({
      LEFT JOIN frameworks f ON f.id = c.framework_id
      LEFT JOIN domains d ON d.id = f.domain_id
      WHERE i.template_id = $1
-     ORDER BY d.name NULLS LAST, f.name NULLS LAST, c.name NULLS LAST, ch.name`,
+     ORDER BY d.name NULLS LAST, f.name NULLS LAST`,
     [id]
   );
 
@@ -174,10 +171,9 @@ export default async function ChecklistTemplateDetailPage({
         )}
       </div>
 
-      {/* Connected to — full lineage derived from this checklist's
-          questions' test links: Domain → Framework → Control → Test.
-          A checklist can feed several tests (shared checklists), so
-          this renders one row per distinct chain. */}
+      {/* Connected to — Domain + Framework only (user spec: no connected
+          controls or tests shown here). One row per distinct
+          (domain, framework) this checklist feeds into. */}
       {connections.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
           <div className="px-5 py-3 border-b border-gray-100">
@@ -190,13 +186,14 @@ export default async function ChecklistTemplateDetailPage({
               <tr>
                 <th className="text-left px-5 py-3 font-medium">Domain</th>
                 <th className="text-left px-5 py-3 font-medium">Framework</th>
-                <th className="text-left px-5 py-3 font-medium">Control</th>
-                <th className="text-left px-5 py-3 font-medium">Test</th>
               </tr>
             </thead>
             <tbody>
-              {connections.map((c) => (
-                <tr key={c.test_id} className="border-t border-gray-100 hover:bg-gray-50">
+              {connections.map((c, idx) => (
+                <tr
+                  key={`${c.domain_id}-${c.framework_id}-${idx}`}
+                  className="border-t border-gray-100 hover:bg-gray-50"
+                >
                   <td className="px-5 py-3">
                     {c.domain_id ? (
                       <Link href={`/domains/${c.domain_id}`} className="text-brand-700 hover:underline">
@@ -210,18 +207,6 @@ export default async function ChecklistTemplateDetailPage({
                         {c.framework_name}
                       </Link>
                     ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-5 py-3">
-                    {c.control_id ? (
-                      <Link href={`/controls/${c.control_id}`} className="text-brand-700 hover:underline">
-                        {c.control_name}
-                      </Link>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-5 py-3">
-                    <Link href={`/tests/${c.test_id}`} className="text-brand-700 hover:underline">
-                      {c.test_name}
-                    </Link>
                   </td>
                 </tr>
               ))}

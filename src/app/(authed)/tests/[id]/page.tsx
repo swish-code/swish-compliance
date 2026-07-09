@@ -119,11 +119,8 @@ export default async function CheckDetailPage({
               <Link href={`/frameworks/${lineage.framework_id}`} className="text-brand-700 hover:underline">{lineage.framework_name}</Link>
             ) : "—"}
           </Field>
-          <Field label="Control">
-            {check.control_id ? (
-              <Link href={`/controls/${check.control_id}`} className="text-brand-700 hover:underline">{check.control_name}</Link>
-            ) : "—"}
-          </Field>
+          {/* Control is intentionally NOT shown here (user spec: on a
+              test, max the framework and domain). */}
           <Field label="Checklist">
             {check.checklist_template_id ? (
               <Link
