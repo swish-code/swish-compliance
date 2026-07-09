@@ -80,11 +80,20 @@ export default async function ControlDetailPage({
   // Option C fix: also fetch checks that are linked via the DIRECT
   // foreign key checks.control_id (this is how the ECS GRC import wires
   // them up), not just the control_links junction table.
-  const directChecks = await queryAll<{ id: number; code: string | null; name: string; frequency: string; last_status: string | null }>(
-    `SELECT id, code, name, frequency, last_status
-     FROM checks
-     WHERE control_id = $1
-     ORDER BY code NULLS LAST, name
+  const directChecks = await queryAll<{
+    id: number;
+    code: string | null;
+    name: string;
+    description: string | null;
+    frequency: string;
+    last_status: string | null;
+    question_count: number;
+  }>(
+    `SELECT ch.id, ch.code, ch.name, ch.description, ch.frequency, ch.last_status,
+       (SELECT COUNT(*)::int FROM check_checklist_items cci WHERE cci.check_id = ch.id) AS question_count
+     FROM checks ch
+     WHERE ch.control_id = $1
+     ORDER BY ch.code NULLS LAST, ch.name
      LIMIT 100`,
     [id]
   );
@@ -374,47 +383,50 @@ export default async function ControlDetailPage({
         </div>
       )}
 
-      {/* Direct-FK tests block — shows checks linked via checks.control_id
-          (which is how the ECS GRC import wires them). Distinct from the
-          control_links junction panel further down. */}
+      {/* Tests under this control — each test is a dropdown; clicking it
+          expands its details inline (user spec: reduce page navigation).
+          checks.control_id is how the ECS GRC import wires them. */}
       {directChecks.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-3">
-          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-700">
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
               Tests under this control ({directChecks.length})
             </h3>
             <Link href={`/tests?control=${ctrl.id}`} className="text-xs text-brand-700 hover:underline">
               View all →
             </Link>
           </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-5 py-3 font-medium">Code</th>
-                <th className="text-left px-5 py-3 font-medium">Test</th>
-                <th className="text-left px-5 py-3 font-medium">Frequency</th>
-                <th className="text-left px-5 py-3 font-medium">Last status</th>
-                <th className="text-right px-5 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {directChecks.map((t) => (
-                <tr key={t.id} className="border-t border-gray-100 hover:bg-gray-50">
-                  <td className="px-5 py-3 font-mono text-xs text-gray-500">{t.code ?? "—"}</td>
-                  <td className="px-5 py-3">
-                    <Link href={`/tests/${t.id}`} className="font-medium text-brand-700 hover:underline">
-                      {t.name}
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3 text-gray-600 text-xs capitalize">{t.frequency.replace("_", " ")}</td>
-                  <td className="px-5 py-3 text-xs">
+          <div className="space-y-2">
+            {directChecks.map((t) => (
+              <details
+                key={t.id}
+                className="group bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+              >
+                <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 flex-wrap hover:bg-gray-50">
+                  <span className="transition-transform group-open:rotate-90 text-gray-400 shrink-0">▶</span>
+                  {t.code && (
+                    <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">
+                      {t.code}
+                    </span>
+                  )}
+                  <span className="text-sm font-medium text-gray-900">{t.name}</span>
+                  <span className="ml-auto flex items-center gap-3 text-xs">
+                    <span className="text-gray-500 capitalize">{t.frequency.replace("_", " ")}</span>
                     {t.last_status ? (
-                      <span className="capitalize">{t.last_status.replace("_", " ")}</span>
+                      <span className="capitalize text-gray-600">{t.last_status.replace("_", " ")}</span>
                     ) : (
                       <span className="text-gray-400">Never run</span>
                     )}
-                  </td>
-                  <td className="px-5 py-3 text-right">
+                  </span>
+                </summary>
+                <div className="border-t border-gray-100 px-4 py-3 space-y-3">
+                  {t.description && (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{t.description}</p>
+                  )}
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <span>{t.question_count} question{t.question_count === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
                     <AssignTestModal
                       checkId={t.id}
                       checkName={t.name}
@@ -424,11 +436,14 @@ export default async function ControlDetailPage({
                       departments={modalDepartments}
                       orgUnits={modalOrgUnits}
                     />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <Link href={`/tests/${t.id}`} className="text-xs text-brand-700 hover:underline">
+                      Open full test →
+                    </Link>
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
         </div>
       )}
 

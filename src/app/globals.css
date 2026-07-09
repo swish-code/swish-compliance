@@ -273,3 +273,13 @@ html.dark *::-webkit-scrollbar-thumb {
 html.dark *::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.14);
 }
+
+/* ── Desktop sidebar collapse ─────────────────────────────────────── */
+/* When the Sidebar client component mirrors its collapsed state onto
+   <html data-sidebar-collapsed="1">, drop the main column's left margin
+   so the content spans the full width. Desktop only. */
+@media (min-width: 768px) {
+  :root[data-sidebar-collapsed="1"] .app-main {
+    margin-left: 0;
+  }
+}

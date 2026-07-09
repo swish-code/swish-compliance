@@ -262,100 +262,95 @@ export default async function CheckDetailPage({
         </div>
       )}
 
-      {/* Linked Checklist Items — every item across every checklist mapped
-          to this test, grouped by template + section. Read-only for now;
-          per-item recording will come in a later iteration. */}
+      {/* Linked checklists — each checklist is a dropdown; clicking it
+          expands its questions inline (user spec: questions appear only
+          on click, no separate page navigation). */}
       {linkedItems.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-3">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-                Linked Checklist Items
-              </h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {linkedItems.length} checkpoint{linkedItems.length === 1 ? "" : "s"} across{" "}
-                {new Set(linkedItems.map((i) => i.template_id)).size} checklist
-                {new Set(linkedItems.map((i) => i.template_id)).size === 1 ? "" : "s"}
-              </p>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            {/* One row per CHECKLIST — questions are deliberately NOT listed
-                here (user spec): they live on the checklist's own page,
-                reached by clicking its name. This table is just the index of
-                which checklists feed this test. */}
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium">Checklist Name</th>
-                  <th className="text-left px-4 py-3 font-medium">Checklist ID</th>
-                  <th className="text-left px-4 py-3 font-medium">Checklist Title</th>
-                  <th className="text-right px-4 py-3 font-medium">Questions</th>
-                  <th className="text-right px-4 py-3 font-medium">Critical</th>
-                  <th className="text-right px-4 py-3 font-medium">Total Weight</th>
-                </tr>
-              </thead>
-              <tbody>
-                {linkedItems
-                  .filter(
-                    (item, idx) =>
-                      idx === 0 ||
-                      linkedItems[idx - 1].template_id !== item.template_id
-                  )
-                  .map((tpl) => {
-                    const group = linkedItems.filter(
-                      (i) => i.template_id === tpl.template_id
-                    );
-                    const critical = group.filter((i) => i.is_critical).length;
-                    const totalWeight = group.reduce(
-                      (s, i) => s + Number(i.weight ?? 0),
-                      0
-                    );
-                    return (
-                      <tr
-                        key={tpl.template_id}
-                        className="border-t border-gray-100 hover:bg-gray-50"
-                      >
-                        <td className="px-4 py-3 align-top">
-                          <Link
-                            href={`/checklists/templates/${tpl.template_id}`}
-                            className="text-brand-700 hover:underline font-medium"
-                          >
-                            {tpl.template_name.replace(/ checklist$/i, "")}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          {tpl.template_code ? (
-                            <span className="font-mono text-xs text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded whitespace-nowrap">
-                              {tpl.template_code}
-                            </span>
-                          ) : (
-                            <span className="text-gray-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 align-top">
-                          {tpl.template_name}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-700 align-top tabular-nums">
-                          {group.length}
-                        </td>
-                        <td className="px-4 py-3 text-right align-top tabular-nums">
-                          {critical > 0 ? (
-                            <span className="text-red-600 font-semibold">
-                              {critical}
-                            </span>
-                          ) : (
-                            <span className="text-gray-300">0</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-700 align-top tabular-nums">
-                          {totalWeight}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
+        <div className="mb-3">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">
+            Linked checklists (
+            {new Set(linkedItems.map((i) => i.template_id)).size})
+          </h3>
+          <div className="space-y-2">
+            {linkedItems
+              .filter(
+                (item, idx) =>
+                  idx === 0 ||
+                  linkedItems[idx - 1].template_id !== item.template_id
+              )
+              .map((tpl) => {
+                const group = linkedItems.filter(
+                  (i) => i.template_id === tpl.template_id
+                );
+                const critical = group.filter((i) => i.is_critical).length;
+                const totalWeight = group.reduce(
+                  (s, i) => s + Number(i.weight ?? 0),
+                  0
+                );
+                return (
+                  <details
+                    key={tpl.template_id}
+                    className="group bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+                  >
+                    <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 flex-wrap hover:bg-gray-50">
+                      <span className="transition-transform group-open:rotate-90 text-gray-400 shrink-0">▶</span>
+                      {tpl.template_code && (
+                        <span className="font-mono text-xs text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded whitespace-nowrap">
+                          {tpl.template_code}
+                        </span>
+                      )}
+                      <span className="text-sm font-medium text-gray-900">
+                        {tpl.template_name.replace(/ checklist$/i, "")}
+                      </span>
+                      <span className="ml-auto flex items-center gap-3 text-xs text-gray-500">
+                        <span>{group.length} question{group.length === 1 ? "" : "s"}</span>
+                        {critical > 0 && (
+                          <span className="text-red-600 font-semibold">{critical} critical</span>
+                        )}
+                        <span>weight {totalWeight}</span>
+                      </span>
+                    </summary>
+                    <div className="border-t border-gray-100">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+                          <tr>
+                            <th className="text-left px-4 py-2 font-medium w-14">#</th>
+                            <th className="text-left px-4 py-2 font-medium">Question</th>
+                            <th className="text-right px-4 py-2 font-medium w-20">Weight</th>
+                            <th className="text-right px-4 py-2 font-medium w-24">Critical?</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.map((q, idx) => (
+                            <tr key={q.item_id} className="border-t border-gray-100">
+                              <td className="px-4 py-2 text-xs text-gray-400 tabular-nums">{idx + 1}</td>
+                              <td className="px-4 py-2 text-gray-900">{q.question}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 tabular-nums">×{q.weight}</td>
+                              <td className="px-4 py-2 text-right">
+                                {q.is_critical ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded">
+                                    Critical
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-400">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="px-4 py-2 bg-gray-50/60 border-t border-gray-100 text-right">
+                        <Link
+                          href={`/checklists/templates/${tpl.template_id}`}
+                          className="text-xs text-brand-700 hover:underline"
+                        >
+                          Open full checklist →
+                        </Link>
+                      </div>
+                    </div>
+                  </details>
+                );
+              })}
           </div>
         </div>
       )}

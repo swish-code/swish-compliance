@@ -265,6 +265,7 @@ function sectionHasIndicator(section: Section): boolean {
 }
 
 const LS_KEY = "swish:sidebar:open";
+const LS_COLLAPSE_KEY = "swish:sidebar:collapsed";
 
 /* ─── Collapsible section ──────────────────────────────────────────── */
 
@@ -470,6 +471,37 @@ export default function Sidebar({
 
   const anyOpen = Object.values(openMap).some(Boolean);
 
+  // Desktop collapse — hides the whole rail so the content spans full width.
+  // Persisted, and mirrored onto <html data-sidebar-collapsed> so the CSS
+  // rule in globals.css can drop the main column's left margin.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    let stored = false;
+    try {
+      stored = localStorage.getItem(LS_COLLAPSE_KEY) === "1";
+    } catch {
+      // ignore
+    }
+    setCollapsed(stored);
+  }, []);
+  useEffect(() => {
+    document.documentElement.setAttribute(
+      "data-sidebar-collapsed",
+      collapsed ? "1" : "0"
+    );
+  }, [collapsed]);
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(LS_COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
+
   async function signOut() {
     setSigningOut(true);
     await fetch("/api/auth/logout", { method: "POST" });
@@ -517,11 +549,24 @@ export default function Sidebar({
         />
       )}
 
+      {/* ─── Desktop "show sidebar" tab — only when collapsed ───────── */}
+      {collapsed && (
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label="Show navigation"
+          className="hidden md:flex fixed top-3 left-0 z-50 items-center gap-1 pl-2 pr-3 py-2 rounded-r-lg bg-[#0d4530] dark:bg-[#141414] text-white shadow-lg hover:bg-[#10523a] border border-l-0 border-white/[0.08]"
+        >
+          <Icon name="menu" size={18} />
+          <span className="text-[11px] font-medium">Menu</span>
+        </button>
+      )}
+
       {/* ─── Sidebar / drawer ───────────────────────────────────────── */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-72 md:w-64 flex flex-col bg-gradient-to-b from-[#10523a] via-[#0d4530] to-[#0a3826] dark:from-[#141414] dark:via-[#0d0d0d] dark:to-[#070707] border-r border-white/[0.06] transform transition-transform duration-200 ease-out ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0`}
+        } ${collapsed ? "md:-translate-x-full" : "md:translate-x-0"}`}
         style={{
           boxShadow: "inset -1px 0 0 rgba(255,255,255,0.02)",
           paddingTop: "env(safe-area-inset-top)",
@@ -567,14 +612,26 @@ export default function Sidebar({
           <span className="text-[9px] uppercase tracking-[0.22em] text-white/55">
             Navigation
           </span>
-          <button
-            type="button"
-            onClick={anyOpen ? collapseAll : expandAll}
-            className="text-[10px] text-white/70 hover:text-white transition-colors uppercase tracking-wider"
-            aria-label={anyOpen ? "Collapse all sections" : "Expand all sections"}
-          >
-            {anyOpen ? "Collapse all" : "Expand all"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={anyOpen ? collapseAll : expandAll}
+              className="text-[10px] text-white/70 hover:text-white transition-colors uppercase tracking-wider"
+              aria-label={anyOpen ? "Collapse all sections" : "Expand all sections"}
+            >
+              {anyOpen ? "Collapse all" : "Expand all"}
+            </button>
+            {/* Desktop-only: hide the whole rail */}
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              className="hidden md:inline-flex text-white/60 hover:text-white transition-colors"
+              aria-label="Hide navigation"
+              title="Hide sidebar"
+            >
+              «
+            </button>
+          </div>
         </div>
       </div>
 
