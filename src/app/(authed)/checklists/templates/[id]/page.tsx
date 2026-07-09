@@ -15,7 +15,6 @@ import {
 import DeleteItemButton from "@/features/checklists/DeleteItemButton";
 import { CHECKLIST_CATEGORIES_FALLBACK } from "@/features/checklists/types";
 import { listOptions } from "@/features/config/repository";
-import { queryAll } from "@/lib/db";
 
 export default async function ChecklistTemplateDetailPage({
   params,
@@ -38,31 +37,6 @@ export default async function ChecklistTemplateDetailPage({
   // header fields to admins only — non-admins can still answer items and
   // (if they have canEditSops) add/remove items.
   const isAdmin = user.role === "admin";
-
-  // Lineage rows for the "Connected to" panel — DISTINCT Domain +
-  // Framework only (user spec: don't surface the connected controls or
-  // tests here, max the framework and its domain). A checklist can feed
-  // several tests across frameworks, so this dedupes to the distinct
-  // (domain, framework) pairs.
-  const connections = await queryAll<{
-    framework_id: number | null;
-    framework_name: string | null;
-    domain_id: number | null;
-    domain_name: string | null;
-  }>(
-    `SELECT DISTINCT
-       f.id AS framework_id, f.name AS framework_name,
-       d.id AS domain_id, d.name AS domain_name
-     FROM checklist_items i
-     JOIN check_checklist_items cci ON cci.checklist_item_id = i.id
-     JOIN checks ch ON ch.id = cci.check_id
-     LEFT JOIN controls c ON c.id = ch.control_id
-     LEFT JOIN frameworks f ON f.id = c.framework_id
-     LEFT JOIN domains d ON d.id = f.domain_id
-     WHERE i.template_id = $1
-     ORDER BY d.name NULLS LAST, f.name NULLS LAST`,
-    [id]
-  );
 
   const dbCategories = await listOptions("checklist_category", true);
   const categories =
@@ -170,50 +144,6 @@ export default async function ChecklistTemplateDetailPage({
           </div>
         )}
       </div>
-
-      {/* Connected to — Domain + Framework only (user spec: no connected
-          controls or tests shown here). One row per distinct
-          (domain, framework) this checklist feeds into. */}
-      {connections.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-700">
-              Connected to ({connections.length})
-            </h3>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-5 py-3 font-medium">Domain</th>
-                <th className="text-left px-5 py-3 font-medium">Framework</th>
-              </tr>
-            </thead>
-            <tbody>
-              {connections.map((c, idx) => (
-                <tr
-                  key={`${c.domain_id}-${c.framework_id}-${idx}`}
-                  className="border-t border-gray-100 hover:bg-gray-50"
-                >
-                  <td className="px-5 py-3">
-                    {c.domain_id ? (
-                      <Link href={`/domains/${c.domain_id}`} className="text-brand-700 hover:underline">
-                        {c.domain_name}
-                      </Link>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-5 py-3">
-                    {c.framework_id ? (
-                      <Link href={`/frameworks/${c.framework_id}`} className="text-brand-700 hover:underline">
-                        {c.framework_name}
-                      </Link>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {/* Items table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
