@@ -51,79 +51,16 @@ export default async function ChecklistTemplateDetailPage({
       sessionLabel="Session"
       userLabel={user.displayName}
     >
-      {/* Header — admin-only. Non-admin viewers see the same info as a   */}
-      {/* read-only summary; the edit form is hidden entirely so the      */}
-      {/* "Save header" button can never sit unused.                       */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
-        {isAdmin ? (
-          <form action={updateTemplateAction} className="space-y-4">
-            <input type="hidden" name="id" value={tpl.id} />
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Name</label>
-                <input
-                  name="name"
-                  defaultValue={tpl.name}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Category</label>
-                <select
-                  name="category"
-                  defaultValue={tpl.category ?? ""}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="">— None —</option>
-                  {categories.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Description</label>
-              <textarea
-                name="description"
-                defaultValue={tpl.description ?? ""}
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="is_active" defaultChecked={tpl.is_active} className="accent-brand-700" />
-                Active
-              </label>
-              <button
-                type="submit"
-                className="ml-auto bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
-              >
-                Save header
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <div className="text-xs font-medium text-gray-500 mb-0.5">Name</div>
-                <div className="text-sm text-gray-900">{tpl.name}</div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 mb-0.5">Category</div>
-                <div className="text-sm text-gray-700">{tpl.category ?? "—"}</div>
-              </div>
-            </div>
-            {tpl.description && (
-              <div>
-                <div className="text-xs font-medium text-gray-500 mb-0.5">Description</div>
-                <div className="text-sm text-gray-700 whitespace-pre-wrap">{tpl.description}</div>
-              </div>
-            )}
-            <div className="flex items-center gap-2 text-xs text-gray-500 pt-1">
+      {/* Header — compact read-only card by default. Admins get an inline
+          "Edit" toggle (native <details>, closed by default) so the form
+          isn't sitting open all the time. */}
+      {(() => {
+        const readOnlyHead = (
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-semibold text-gray-900">{tpl.name}</h2>
               <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] ${
                   tpl.is_active
                     ? "bg-emerald-50 text-emerald-700"
                     : "bg-gray-100 text-gray-600"
@@ -136,17 +73,93 @@ export default async function ChecklistTemplateDetailPage({
                 />
                 {tpl.is_active ? "Active" : "Inactive"}
               </span>
-              <span className="text-gray-300">·</span>
-              <span>
-                Only an admin can rename or edit this template&rsquo;s header.
-              </span>
+              {tpl.category && (
+                <span className="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                  {tpl.category}
+                </span>
+              )}
             </div>
+            {tpl.description && (
+              <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">
+                {tpl.description}
+              </p>
+            )}
           </div>
-        )}
-      </div>
+        );
+
+        if (!isAdmin) {
+          return (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3">
+              {readOnlyHead}
+            </div>
+          );
+        }
+
+        return (
+          <details className="group bg-white rounded-xl border border-gray-200 shadow-sm mb-3">
+            <summary className="cursor-pointer list-none p-4 flex items-start justify-between gap-3">
+              {readOnlyHead}
+              <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-brand-700 border border-brand-200 rounded-lg px-2.5 py-1 hover:bg-brand-50">
+                <span className="transition-transform group-open:rotate-90">▶</span>
+                ✏️ Edit
+              </span>
+            </summary>
+            <form
+              action={updateTemplateAction}
+              className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-100"
+            >
+              <input type="hidden" name="id" value={tpl.id} />
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                  <input
+                    name="name"
+                    defaultValue={tpl.name}
+                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                  <select
+                    name="category"
+                    defaultValue={tpl.category ?? ""}
+                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">— None —</option>
+                    {categories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                <textarea
+                  name="description"
+                  defaultValue={tpl.description ?? ""}
+                  rows={2}
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="is_active" defaultChecked={tpl.is_active} className="accent-brand-700" />
+                  Active
+                </label>
+                <button
+                  type="submit"
+                  className="ml-auto bg-brand-700 hover:bg-brand-800 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
+                >
+                  Save header
+                </button>
+              </div>
+            </form>
+          </details>
+        );
+      })()}
 
       {/* Items table */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-3">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-700">
             Items ({items.length})
@@ -293,52 +306,57 @@ export default async function ChecklistTemplateDetailPage({
         </table>
       </div>
 
-      {/* Add item */}
+      {/* Add item — collapsed by default (native <details>). The form only
+          appears once the user clicks "Add item", so the page isn't a wall
+          of open inputs. */}
       {canEdit && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Add a new item</h3>
-          <form action={addItemAction} className="space-y-3">
+        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm">
+          <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
+            ➕ Add a new item
+          </summary>
+          <form action={addItemAction} className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-100">
             <input type="hidden" name="template_id" value={tpl.id} />
             <div>
               <input
                 name="question"
                 required
                 placeholder="Question / criterion"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <div>
               <input
                 name="guidance"
                 placeholder="Optional guidance for the auditor"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <div className="flex items-end gap-3">
-              <div className="w-28">
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Weight</label>
+              <div className="w-24">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Weight</label>
                 <input
                   type="number"
                   name="weight"
                   min={1}
                   max={10}
                   defaultValue={1}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
-              <label className="flex items-center gap-2 text-sm pb-2">
+              <label className="flex items-center gap-2 text-sm pb-1.5">
                 <input type="checkbox" name="is_critical" className="accent-brand-700" />
                 Mark as critical
               </label>
               <button
                 type="submit"
-                className="ml-auto bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                className="ml-auto bg-brand-700 hover:bg-brand-800 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
               >
                 + Add item
               </button>
             </div>
           </form>
-        </div>
+        </details>
       )}
     </Workspace>
   );
