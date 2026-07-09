@@ -94,7 +94,7 @@ export default async function CheckDetailPage({
       userLabel={user.displayName}
     >
       {/* Header */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3">
         <div className="flex items-center gap-3 mb-2">
           {check.code && <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{check.code}</span>}
           {check.last_status ? (
@@ -106,9 +106,9 @@ export default async function CheckDetailPage({
           )}
           <span className="text-xs text-gray-500">{FREQUENCY_LABEL[check.frequency]}</span>
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-1">{check.name}</h2>
+        <h2 className="text-lg font-bold text-gray-900 mb-1">{check.name}</h2>
         {check.description && <p className="text-sm text-gray-600 mb-3">{check.description}</p>}
-        <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
+        <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 text-sm pt-3 border-t border-gray-100">
           <Field label="Domain">
             {lineage?.domain_id ? (
               <Link href={`/domains/${lineage.domain_id}`} className="text-brand-700 hover:underline">{lineage.domain_name}</Link>
@@ -172,7 +172,7 @@ export default async function CheckDetailPage({
           only when at least one field is filled (i.e. tests imported from
           the ECS GRC bundle or seeded from framework.xlsx). */}
       {(check.procedure_steps || check.evidence_needed || check.method || check.performer_role || check.reviewer_role || check.pass_criteria || check.fail_criteria || check.frequency_label) && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4 space-y-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3 space-y-3">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-1">
             How to perform this test
           </h3>
@@ -266,7 +266,7 @@ export default async function CheckDetailPage({
           to this test, grouped by template + section. Read-only for now;
           per-item recording will come in a later iteration. */}
       {linkedItems.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-3">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
@@ -360,10 +360,14 @@ export default async function CheckDetailPage({
         </div>
       )}
 
-      {/* Record new result */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Record a new result</h3>
-        <form action={recordResultAction} className="space-y-4">
+      {/* Record new result — collapsed by default (native <details>) so the
+          form + evidence dropzone don't sit open taking a full screen. */}
+      <details className="group bg-white rounded-xl border border-gray-200 shadow-sm mb-3">
+        <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+          <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
+          ➕ Record a new result
+        </summary>
+        <form action={recordResultAction} className="space-y-4 px-4 pb-4 pt-1 border-t border-gray-100">
           <input type="hidden" name="check_id" value={check.id} />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {(["passing", "failing", "pending_review", "accepted_risk"] as const).map((s) => (
@@ -428,10 +432,10 @@ export default async function CheckDetailPage({
           </label>
           <button type="submit" className="bg-brand-700 hover:bg-brand-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium">Record result</button>
         </form>
-      </div>
+      </details>
 
       {/* History */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-700">Result history ({results.length})</h3>
         </div>

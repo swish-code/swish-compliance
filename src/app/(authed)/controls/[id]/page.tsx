@@ -145,7 +145,7 @@ export default async function ControlDetailPage({
       userLabel={user.displayName}
     >
       {/* Header */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -160,11 +160,11 @@ export default async function ControlDetailPage({
                 </Link>
               )}
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-1">{ctrl.name}</h2>
-            {ctrl.description && <p className="text-sm text-gray-600 max-w-3xl">{ctrl.description}</p>}
+            <h2 className="text-lg font-bold text-gray-900 mb-1">{ctrl.name}</h2>
+            {ctrl.description && <p className="text-xs text-gray-600 max-w-3xl">{ctrl.description}</p>}
           </div>
         </div>
-        <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">
+        <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 text-sm pt-3 border-t border-gray-100">
           <Field label="Domain">
             {lineage?.domain_id ? (
               <Link href={`/domains/${lineage.domain_id}`} className="text-brand-700 hover:underline">
@@ -213,7 +213,7 @@ export default async function ControlDetailPage({
       {/* Edit panel — native <details> collapse, no client JS. Gated to
           the same roles that may edit SOPs, plus compliance. */}
       {canEdit && (
-        <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
+        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm mb-3 overflow-hidden">
           <summary className="cursor-pointer list-none px-6 py-4 flex items-center gap-2 hover:bg-gray-50">
             <span className="text-gray-400 transition-transform group-open:rotate-90 select-none">▶</span>
             <span className="text-sm font-semibold text-gray-700">✏️ Edit control details</span>
@@ -346,7 +346,7 @@ export default async function ControlDetailPage({
 
       {/* GRC details panel — requirement, clause, evidence */}
       {(ctrl.requirement || ctrl.clause_reference || ctrl.evidence_required) && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4 space-y-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3 space-y-4">
           {ctrl.requirement && (
             <div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
@@ -378,7 +378,7 @@ export default async function ControlDetailPage({
           (which is how the ECS GRC import wires them). Distinct from the
           control_links junction panel further down. */}
       {directChecks.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-3">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700">
               Tests under this control ({directChecks.length})
@@ -433,18 +433,22 @@ export default async function ControlDetailPage({
       )}
 
       {/* Linked things */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         <LinkPanel title="SOPs" type="sop" links={linksByType.sop} controlId={ctrl.id} canEdit={canEdit} />
         <LinkPanel title="Checks (Tests)" type="check" links={linksByType.check} controlId={ctrl.id} canEdit={canEdit} />
         <LinkPanel title="Audits" type="audit" links={linksByType.audit} controlId={ctrl.id} canEdit={false} />
         <LinkPanel title="Corrective Actions" type="capa" links={linksByType.capa} controlId={ctrl.id} canEdit={false} />
       </div>
 
-      {/* Add new links */}
+      {/* Add new links — collapsed by default (native <details>) so the
+          link forms don't sit open taking space. */}
       {canEdit && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Link new records</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm mb-3">
+          <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
+            🔗 Link new records
+          </summary>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4 pb-4 pt-1 border-t border-gray-100">
             {sops.length > 0 && (
               <form action={linkControlAction} className="flex items-end gap-2">
                 <input type="hidden" name="control_id" value={ctrl.id} />
@@ -472,7 +476,7 @@ export default async function ControlDetailPage({
               </form>
             )}
           </div>
-        </div>
+        </details>
       )}
 
       <Link href="/controls" className="inline-block mt-2 text-sm text-gray-500 hover:text-gray-700">
@@ -508,7 +512,7 @@ function LinkPanel({
     sop: "/sops", check: "/tests", audit: "/audits", capa: "/capa",
   };
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
       <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-3">{title} ({links.length})</h4>
       {links.length === 0 ? (
         <div className="text-xs text-gray-400 italic">No links yet.</div>
