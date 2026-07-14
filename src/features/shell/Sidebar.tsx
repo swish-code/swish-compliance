@@ -204,22 +204,23 @@ const WORKSPACE: Section = {
   items: [
     { href: "/my-work", label: "My Work", icon: "my-work", indicator: true },
     { href: "/roadmap", label: "Roadmap", icon: "roadmap" },
-    { href: "/tests", label: "Tests", icon: "tests" },
     { href: "/reports", label: "Reports", icon: "reports" },
   ],
 };
 
+// Order + labels per user spec (2026-07-09): Tests moved here from
+// Workspace, SOPs renamed "SOPs & Policies", standalone Policies removed.
 const COMPLIANCE: Section = {
   label: "Compliance",
   items: [
-    { href: "/sops", label: "SOPs", icon: "sops" },
+    { href: "/domains", label: "Domains", icon: "domains" },
+    { href: "/sops", label: "SOPs & Policies", icon: "sops" },
+    { href: "/frameworks", label: "Frameworks", icon: "frameworks" },
+    { href: "/controls", label: "Controls", icon: "controls" },
+    { href: "/tests", label: "Tests", icon: "tests" },
     { href: "/checklists/templates", label: "Checklists", icon: "checklists" },
     { href: "/audits", label: "Audits", icon: "audits" },
     { href: "/capa", label: "Corrective Actions", icon: "capa" },
-    { href: "/domains", label: "Domains", icon: "domains" },
-    { href: "/frameworks", label: "Frameworks", icon: "frameworks" },
-    { href: "/controls", label: "Controls", icon: "controls" },
-    { href: "/policies", label: "Policies", icon: "policies" },
   ],
 };
 

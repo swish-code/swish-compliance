@@ -5,8 +5,6 @@ import { listChecks } from "@/features/checks/repository";
 import { CHECK_STATUS_LABEL, CHECK_STATUS_TONE, FREQUENCY_LABEL, type CheckStatus } from "@/features/checks/types";
 import { queryAll } from "@/lib/db";
 import { createCheckAction } from "@/features/checks/actions";
-import AssignTestModal from "@/features/checks/AssignTestModal";
-import { listOrgUnitOptions } from "@/features/org-units/repository";
 
 export default async function TestsPage({
   searchParams,
@@ -36,31 +34,6 @@ export default async function TestsPage({
      WHERE is_active
      ORDER BY name`
   );
-
-  // Audiences + lookups for the Assign-Test modal: active Auditors,
-  // active Department Managers, active Brands and active Departments.
-  // We resolve them server-side once and pass them to every row's modal
-  // so the dropdowns don't fetch over the network.
-  const [auditors, departmentManagers, modalBrands, modalDepartments, modalOrgUnits] =
-    await Promise.all([
-      queryAll<{ id: number; display_name: string }>(
-        `SELECT id, display_name FROM users
-         WHERE is_active AND role = 'auditor'
-         ORDER BY display_name`
-      ),
-      queryAll<{ id: number; display_name: string }>(
-        `SELECT id, display_name FROM users
-         WHERE is_active AND role = 'department_manager'
-         ORDER BY display_name`
-      ),
-      queryAll<{ id: number; name: string }>(
-        `SELECT id, name FROM brands WHERE is_active ORDER BY name`
-      ),
-      queryAll<{ id: number; name: string }>(
-        `SELECT id, name FROM departments WHERE is_active ORDER BY name`
-      ),
-      listOrgUnitOptions(),
-    ]);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -147,13 +120,12 @@ export default async function TestsPage({
               <th className="text-left px-5 py-3 font-medium">Status</th>
               <th className="text-left px-5 py-3 font-medium">Last run</th>
               <th className="text-left px-5 py-3 font-medium">Due</th>
-              <th className="text-right px-5 py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {checks.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-5 py-12 text-center text-gray-400">
+                <td colSpan={7} className="px-5 py-12 text-center text-gray-400">
                   No checks yet. {canEdit && "Use the form below to create the first one."}
                 </td>
               </tr>
@@ -197,17 +169,6 @@ export default async function TestsPage({
                         {overdue && <span className="block text-[10px] uppercase tracking-wider">Overdue</span>}
                       </span>
                     ) : "—"}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <AssignTestModal
-                      checkId={ch.id}
-                      checkName={ch.name}
-                      auditors={auditors}
-                      departmentManagers={departmentManagers}
-                      brands={modalBrands}
-                      departments={modalDepartments}
-                      orgUnits={modalOrgUnits}
-                    />
                   </td>
                 </tr>
               );

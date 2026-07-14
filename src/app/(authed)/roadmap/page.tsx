@@ -262,8 +262,12 @@ export default async function RoadmapPage({
         <Block href="/sops?status=pending_review" label="SOPs awaiting approval" value={blockers?.pending_sops ?? 0} tone="amber" />
       </div>
 
-      {/* Per-framework readiness */}
-      <h3 className="text-xs uppercase tracking-widest text-gray-500 mb-3">Framework readiness</h3>
+      {/* Per-framework readiness — collapsed by default (user spec) */}
+      <details className="group mb-4">
+        <summary className="cursor-pointer list-none flex items-center gap-2 mb-3">
+          <span className="transition-transform group-open:rotate-90 text-gray-400 text-xs">▶</span>
+          <span className="text-xs uppercase tracking-widest text-gray-500">Framework readiness ({frameworks.length})</span>
+        </summary>
       <div className="space-y-3">
         {frameworks.length === 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center text-gray-400 text-sm">
@@ -332,10 +336,21 @@ export default async function RoadmapPage({
           );
         })}
       </div>
+      </details>
 
-      {/* ─── Open audit findings (failed questions + their CAPAs) ─── */}
-      <div className="flex items-center justify-between mt-10 mb-3 gap-3 flex-wrap">
-        <h3 className="text-xs uppercase tracking-widest text-gray-500">
+      {/* ─── Open audit findings (failed questions + their CAPAs) —
+          collapsed by default (user spec) ─── */}
+      <details className="group mt-6">
+        <summary className="cursor-pointer list-none flex items-center justify-between gap-3 flex-wrap mb-3">
+          <span className="flex items-center gap-2">
+            <span className="transition-transform group-open:rotate-90 text-gray-400 text-xs">▶</span>
+            <span className="text-xs uppercase tracking-widest text-gray-500">
+              Open audit findings &amp; CAPAs ({openFindings.length})
+            </span>
+          </span>
+        </summary>
+      <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+        <h3 className="text-xs uppercase tracking-widest text-gray-500 sr-only">
           Open audit findings &amp; CAPAs
         </h3>
         <Link
@@ -459,10 +474,18 @@ export default async function RoadmapPage({
           .
         </div>
       )}
+      </details>
 
-      {/* ─── Test results timeline ─── */}
-      <div className="flex items-center justify-between mt-10 mb-3 gap-3 flex-wrap">
-        <h3 className="text-xs uppercase tracking-widest text-gray-500">
+      {/* ─── Test results timeline — collapsed by default (user spec) ─── */}
+      <details className="group mt-6">
+        <summary className="cursor-pointer list-none flex items-center gap-2 mb-3">
+          <span className="transition-transform group-open:rotate-90 text-gray-400 text-xs">▶</span>
+          <span className="text-xs uppercase tracking-widest text-gray-500">
+            Test results timeline ({testEvents.length})
+          </span>
+        </summary>
+      <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+        <h3 className="text-xs uppercase tracking-widest text-gray-500 sr-only">
           Test results timeline
         </h3>
         <form method="get" className="flex items-end gap-2">
@@ -624,6 +647,7 @@ export default async function RoadmapPage({
           </div>
         )}
       </div>
+      </details>
     </Workspace>
   );
 }
