@@ -28,6 +28,10 @@ export default async function EditUserPage({
     `SELECT id, name FROM departments WHERE is_active OR id = ANY($1) ORDER BY name`,
     [u.department_ids]
   );
+  const domains = await queryAll<{ id: number; name: string }>(
+    `SELECT id, name FROM domains WHERE is_active OR id = ANY($1) ORDER BY name`,
+    [u.domain_ids]
+  );
 
   const isSelf = u.id === me.id;
 
@@ -104,6 +108,13 @@ export default async function EditUserPage({
               options={departments}
               defaultSelected={u.department_ids}
               placeholder="Select departments…"
+            />
+            <MultiSelect
+              name="domain_ids"
+              label="Domains (multi-select)"
+              options={domains}
+              defaultSelected={u.domain_ids}
+              placeholder="Select domains…"
             />
           </div>
 

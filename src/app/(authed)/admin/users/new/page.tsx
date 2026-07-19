@@ -13,6 +13,9 @@ export default async function NewUserPage() {
   const departments = await queryAll<{ id: number; name: string }>(
     `SELECT id, name FROM departments WHERE is_active ORDER BY name`
   );
+  const domains = await queryAll<{ id: number; name: string }>(
+    `SELECT id, name FROM domains WHERE is_active ORDER BY name`
+  );
 
   return (
     <Workspace
@@ -107,10 +110,16 @@ export default async function NewUserPage() {
               options={departments}
               placeholder="Select one or more departments…"
             />
+            <MultiSelect
+              name="domain_ids"
+              label="Domains (multi-select)"
+              options={domains}
+              placeholder="Select one or more domains…"
+            />
           </div>
           <p className="text-xs text-gray-500 -mt-2">
-            Leave both empty to grant no specific brand or department scope (admin / viewer roles
-            typically don&apos;t need scope).
+            Department + Domain define what a non-privileged user can see. Leave empty for
+            admin / compliance / viewer roles that don&apos;t need scoping.
           </p>
 
           <div className="flex items-center gap-3 pt-2">

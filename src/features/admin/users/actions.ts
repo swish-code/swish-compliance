@@ -74,8 +74,9 @@ export async function createUserAction(formData: FormData) {
 
   const brand_ids = getAllNumeric(formData, "brand_ids");
   const department_ids = getAllNumeric(formData, "department_ids");
+  const domain_ids = getAllNumeric(formData, "domain_ids");
 
-  const newId = await createUser({ ...parsed, brand_ids, department_ids });
+  const newId = await createUser({ ...parsed, brand_ids, department_ids, domain_ids });
 
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
@@ -89,6 +90,7 @@ export async function createUserAction(formData: FormData) {
         role: parsed.role,
         brand_ids,
         department_ids,
+        domain_ids,
       }),
     ]
   );
@@ -130,8 +132,9 @@ export async function updateUserAction(formData: FormData) {
 
   const brand_ids = getAllNumeric(formData, "brand_ids");
   const department_ids = getAllNumeric(formData, "department_ids");
+  const domain_ids = getAllNumeric(formData, "domain_ids");
 
-  await updateUser({ ...parsed, brand_ids, department_ids });
+  await updateUser({ ...parsed, brand_ids, department_ids, domain_ids });
 
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
@@ -146,12 +149,14 @@ export async function updateUserAction(formData: FormData) {
           is_active: before.is_active,
           brand_ids: before.brand_ids,
           department_ids: before.department_ids,
+          domain_ids: before.domain_ids,
         },
         after: {
           role: parsed.role,
           is_active: parsed.is_active,
           brand_ids,
           department_ids,
+          domain_ids,
         },
       }),
     ]

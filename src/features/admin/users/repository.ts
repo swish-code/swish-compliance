@@ -14,6 +14,8 @@ export type UserRow = {
   brand_names: string[];
   department_ids: number[];
   department_names: string[];
+  domain_ids: number[];
+  domain_names: string[];
 };
 
 // Aggregates the user's brand + department scope from the junction tables.
@@ -42,7 +44,19 @@ const USER_SELECT = `
        FROM user_departments ud JOIN departments d ON d.id = ud.department_id
        WHERE ud.user_id = u.id),
     ARRAY[]::text[]
-  ) AS department_names
+  ) AS department_names,
+  COALESCE(
+    (SELECT array_agg(dm.id ORDER BY dm.name)
+       FROM user_domains udm JOIN domains dm ON dm.id = udm.domain_id
+       WHERE udm.user_id = u.id),
+    ARRAY[]::int[]
+  ) AS domain_ids,
+  COALESCE(
+    (SELECT array_agg(dm.name ORDER BY dm.name)
+       FROM user_domains udm JOIN domains dm ON dm.id = udm.domain_id
+       WHERE udm.user_id = u.id),
+    ARRAY[]::text[]
+  ) AS domain_names
 FROM users u
 `;
 
@@ -69,6 +83,7 @@ export type CreateUserInput = {
   role: string;
   brand_ids?: number[];
   department_ids?: number[];
+  domain_ids?: number[];
 };
 
 export async function createUser(input: CreateUserInput): Promise<number> {
@@ -95,6 +110,7 @@ export async function createUser(input: CreateUserInput): Promise<number> {
 
   await replaceUserBrands(newId, input.brand_ids ?? []);
   await replaceUserDepartments(newId, input.department_ids ?? []);
+  await replaceUserDomains(newId, input.domain_ids ?? []);
 
   return newId;
 }
@@ -106,6 +122,7 @@ export type UpdateUserInput = {
   is_active?: boolean;
   brand_ids?: number[];
   department_ids?: number[];
+  domain_ids?: number[];
 };
 
 export async function updateUser(input: UpdateUserInput): Promise<void> {
@@ -135,6 +152,9 @@ export async function updateUser(input: UpdateUserInput): Promise<void> {
   }
   if (input.department_ids !== undefined) {
     await replaceUserDepartments(input.id, input.department_ids);
+  }
+  if (input.domain_ids !== undefined) {
+    await replaceUserDomains(input.id, input.domain_ids);
   }
 }
 
@@ -167,6 +187,26 @@ async function replaceUserDepartments(userId: number, deptIds: number[]): Promis
       await client.query(
         `INSERT INTO user_departments (user_id, department_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
         [userId, did]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+async function replaceUserDomains(userId: number, domainIds: number[]): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM user_domains WHERE user_id = $1`, [userId]);
+    for (const dmid of domainIds) {
+      await client.query(
+        `INSERT INTO user_domains (user_id, domain_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, dmid]
       );
     }
     await client.query("COMMIT");
