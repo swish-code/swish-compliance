@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { queryAll } from "@/lib/db";
+import { getUserScope, getScopedIds } from "@/lib/auth/access";
 import { createAuditAction } from "@/features/audits/actions";
 import AuditScopePicker from "@/features/audits/AuditScopePicker";
 
@@ -11,12 +12,24 @@ export default async function NewAuditPage() {
   // not a single pre-picked template. The auditor sees the merged
   // checklist automatically once the audit opens.
   const user = await requireUser();
-  const brands = await queryAll<{ id: number; name: string }>(
+  // Access scoping (user spec): whoever assigns audits only sees the
+  // brands / departments / domains (and their frameworks/controls/tests)
+  // they have access to. Full-visibility roles see everything.
+  const scope = await getUserScope(user.id, user.role);
+  const scopedIds = await getScopedIds(scope);
+
+  const allBrands = await queryAll<{ id: number; name: string }>(
     `SELECT id, name FROM brands WHERE is_active ORDER BY name`
   );
-  const departments = await queryAll<{ id: number; name: string }>(
+  const brands = scope.full
+    ? allBrands
+    : allBrands.filter((b) => scope.brandIds.includes(b.id));
+  const allDepartments = await queryAll<{ id: number; name: string }>(
     `SELECT id, name FROM departments WHERE is_active ORDER BY name`
   );
+  const departments = scope.full
+    ? allDepartments
+    : allDepartments.filter((d) => scope.departmentIds.includes(d.id));
 
   // Policies = approved SOPs in this system (the Policies page is just a
   // filtered view over `sops`). We only show approved ones because an audit
@@ -39,10 +52,13 @@ export default async function NewAuditPage() {
   // Pre-load all four lists once and let the client component filter the
   // cascade in memory. The volumes are small enough (<2k rows total) that
   // a per-change API round-trip would only hurt UX.
-  const scopeDomains = await queryAll<{ id: number; code: string; name: string }>(
+  const allScopeDomains = await queryAll<{ id: number; code: string; name: string }>(
     `SELECT id, code, name FROM domains WHERE is_active ORDER BY sort_order, name`
   );
-  const scopeFrameworks = await queryAll<{
+  const scopeDomains = scopedIds
+    ? allScopeDomains.filter((d) => scopedIds.domainIds.includes(d.id))
+    : allScopeDomains;
+  const allScopeFrameworks = await queryAll<{
     id: number;
     code: string;
     name: string;
@@ -53,7 +69,10 @@ export default async function NewAuditPage() {
      WHERE is_active
      ORDER BY code, name`
   );
-  const scopeControls = await queryAll<{
+  const scopeFrameworks = scopedIds
+    ? allScopeFrameworks.filter((f) => scopedIds.frameworkIds.includes(f.id))
+    : allScopeFrameworks;
+  const allScopeControls = await queryAll<{
     id: number;
     code: string | null;
     name: string;
@@ -65,7 +84,12 @@ export default async function NewAuditPage() {
      ORDER BY code NULLS LAST, name
      LIMIT 1000`
   );
-  const scopeTests = await queryAll<{
+  const scopeControls = scopedIds
+    ? allScopeControls.filter(
+        (c) => c.framework_id != null && scopedIds.frameworkIds.includes(c.framework_id)
+      )
+    : allScopeControls;
+  const allScopeTests = await queryAll<{
     id: number;
     code: string | null;
     name: string;
@@ -77,6 +101,11 @@ export default async function NewAuditPage() {
      ORDER BY code NULLS LAST, name
      LIMIT 2000`
   );
+  const scopeTests = scopedIds
+    ? allScopeTests.filter(
+        (t) => t.control_id != null && scopedIds.controlIds.includes(t.control_id)
+      )
+    : allScopeTests;
 
   // Assignee dropdown — every active user, grouped by role so picking
   // the right person is easier in larger orgs.
