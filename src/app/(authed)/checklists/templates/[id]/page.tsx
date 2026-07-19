@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser, canEditSops } from "@/lib/auth/guard";
+import { requireUser, canEditSops, canDeleteOrArchive } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import {
   getTemplate,
@@ -32,11 +32,11 @@ export default async function ChecklistTemplateDetailPage({
   ]);
   const answerByItem = new Map(latestAnswers.map((a) => [a.item_id, a]));
   const canEdit = canEditSops(user.role);
-  // Renaming a template, rewording its description, switching category, or
-  // deactivating it cascades to every audit that ever used it. Lock those
-  // header fields to admins only — non-admins can still answer items and
-  // (if they have canEditSops) add/remove items.
-  const isAdmin = user.role === "admin";
+  const canDelete = canDeleteOrArchive(user.role);
+  // Header edits (rename / category / deactivate=archive) and deleting a
+  // question cascade into every audit that used this template, so they're
+  // gated to admin + compliance. `isAdmin` here means "can edit header".
+  const isAdmin = canDeleteOrArchive(user.role);
 
   const dbCategories = await listOptions("checklist_category", true);
   const categories =
@@ -179,13 +179,13 @@ export default async function ChecklistTemplateDetailPage({
               <th className="text-left px-5 py-3 font-medium w-20">Weight</th>
               <th className="text-left px-5 py-3 font-medium w-24">Critical?</th>
               <th className="text-left px-5 py-3 font-medium">Answer</th>
-              {canEdit && <th className="text-right px-5 py-3 font-medium w-20"></th>}
+              {canDelete && <th className="text-right px-5 py-3 font-medium w-20"></th>}
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 6 : 5} className="px-5 py-8 text-center text-gray-400">
+                <td colSpan={canDelete ? 6 : 5} className="px-5 py-8 text-center text-gray-400">
                   No items yet. Add the first question below.
                 </td>
               </tr>
@@ -290,7 +290,7 @@ export default async function ChecklistTemplateDetailPage({
                       </button>
                     </form>
                   </td>
-                  {canEdit && (
+                  {canDelete && (
                     <td className="px-5 py-3 text-right">
                       <DeleteItemButton
                         itemId={item.id}

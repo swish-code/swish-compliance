@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireUser, canApproveSops } from "@/lib/auth/guard";
+import { requireUser, canApproveSops, canDeleteOrArchive } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import {
   createCapa,
@@ -218,8 +218,8 @@ export async function deleteCapaEvidenceAction(formData: FormData) {
   const capa = await getCapa(capaId);
   if (!capa) throw new Error("CAPA not found.");
   const isOwner = capa.assigned_to === user.id;
-  if (!isOwner && user.role !== "admin") {
-    throw new Error("Only the CAPA owner (assignee) or an admin can remove CAPA evidence.");
+  if (!isOwner && !canDeleteOrArchive(user.role)) {
+    throw new Error("Only the CAPA owner (assignee), compliance, or an admin can remove CAPA evidence.");
   }
   if (capa.status === "closed" || capa.status === "verified") {
     throw new Error("This CAPA is closed — evidence is locked.");

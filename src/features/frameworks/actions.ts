@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth/guard";
+import { requireAdmin, requireUser, canDeleteOrArchive } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import { setFrameworkActive, setFrameworkOwner, getFramework } from "./repository";
 import { notify } from "@/features/notifications/service";
@@ -18,7 +18,11 @@ const OwnerSchema = z.object({
 });
 
 export async function toggleFrameworkAction(formData: FormData) {
-  const admin = await requireAdmin();
+  // Deactivate = archive; gated to admin + compliance (user spec).
+  const admin = await requireUser();
+  if (!canDeleteOrArchive(admin.role)) {
+    throw new Error("Only admin or compliance can activate/deactivate frameworks.");
+  }
   const raw = Object.fromEntries(formData.entries());
   const parsed = ToggleSchema.parse(raw);
   const before = await getFramework(parsed.id);

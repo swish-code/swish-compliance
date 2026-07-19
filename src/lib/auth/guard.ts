@@ -65,6 +65,16 @@ export function canAccessAdmin(role: string): boolean {
   return role === "admin";
 }
 
+/**
+ * Delete / archive of governed records (SOPs, frameworks, controls,
+ * tests, checklists, questions, audits, CAPAs and their evidence) is
+ * restricted to admin + compliance only (user spec 2026-07-09).
+ * Deliberately NARROWER than canEditSops (which also allows BE/opex).
+ */
+export function canDeleteOrArchive(role: string): boolean {
+  return role === "admin" || role === "compliance";
+}
+
 /** All available user roles in the system. */
 export const USER_ROLES = [
   { value: "admin",                label: "Administrator",         desc: "Full access including user management and system configuration" },

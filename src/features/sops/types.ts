@@ -287,11 +287,11 @@ export const SOP_TRANSITIONS: SopTransition[] = [
     tone: "bg-red-600 hover:bg-red-700",
   },
 
-  // ------------------------------------------------------------ Admin archive
+  // ------------------------------------------ Archive (admin + compliance)
   {
     from: "approved",
     to: "archived",
-    allowedRoles: ["admin"],
+    allowedRoles: ["admin", "compliance"],
     commentRequired: false,
     label: "Archive",
     description: "Move an approved SOP to the archive. History is preserved.",

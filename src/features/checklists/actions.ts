@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireUser, canEditSops } from "@/lib/auth/guard";
+import { requireUser, canEditSops, canDeleteOrArchive } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import {
   createTemplate,
@@ -60,11 +60,10 @@ export async function createTemplateAction(formData: FormData) {
 
 export async function updateTemplateAction(formData: FormData) {
   const user = await requireUser();
-  // Header edits (name / description / category / active) ripple into
-  // every audit that's ever used this template. Lock the action to admin
-  // so the UI gate (isAdmin only) and the server gate stay in sync —
-  // otherwise a non-admin could craft a POST and bypass the hidden form.
-  if (user.role !== "admin") throw new Error("Only an admin can edit a template's header.");
+  // Header edits (name / description / category / active=archive) ripple
+  // into every audit that's ever used this template. Gated to admin +
+  // compliance (user spec).
+  if (!canDeleteOrArchive(user.role)) throw new Error("Only admin or compliance can edit a template's header.");
   const raw = Object.fromEntries(formData.entries());
   const parsed = UpdateTplSchema.parse({
     ...raw,
@@ -120,9 +119,15 @@ export async function recordChecklistItemAnswerAction(formData: FormData) {
 
 export async function deleteItemAction(formData: FormData) {
   const user = await requireUser();
-  if (!canEditSops(user.role)) throw new Error("Not authorized.");
+  // Hard-deletes a question — gated to admin + compliance (user spec).
+  if (!canDeleteOrArchive(user.role)) throw new Error("Only admin or compliance can delete a question.");
   const id = Number(formData.get("id"));
   const templateId = Number(formData.get("template_id"));
   await deleteItem(id);
+  await execute(
+    `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
+     VALUES ($1, $2, 'checklist_item:deleted', 'checklist_item', $3, $4)`,
+    [user.id, user.email, id, JSON.stringify({ template_id: templateId, by_user_name: user.displayName })]
+  );
   revalidatePath(`/checklists/templates/${templateId}`);
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireUser, canEditSops } from "@/lib/auth/guard";
+import { requireUser, canEditSops, canDeleteOrArchive } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import {
   createControl,
@@ -111,7 +111,8 @@ export async function linkControlAction(formData: FormData) {
 
 export async function unlinkControlAction(formData: FormData) {
   const user = await requireUser();
-  if (!canEditSops(user.role)) throw new Error("Not authorized.");
+  // Removing a control link is destructive — admin + compliance only.
+  if (!canDeleteOrArchive(user.role)) throw new Error("Only admin or compliance can remove links.");
   const linkId = Number(formData.get("link_id"));
   const controlId = Number(formData.get("control_id"));
   await unlinkControl(linkId);

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth/guard";
+import { requireUser, canDeleteOrArchive } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import {
   createAudit,
@@ -272,7 +272,9 @@ export async function deleteAuditAttachmentAction(formData: FormData) {
   }
   const audit = await getAudit(auditId);
   if (!audit) throw new Error("Audit not found.");
-  assertCanEditAudit(audit, user);
+  // Owner/assignee/admin may manage their audit's evidence; compliance
+  // may also remove it (governance). Others blocked.
+  if (!canDeleteOrArchive(user.role)) assertCanEditAudit(audit, user);
 
   await deleteAuditAttachment(attachmentId);
   await execute(
@@ -463,16 +465,9 @@ export async function cancelAuditAction(formData: FormData) {
     throw new Error("This audit is already cancelled.");
   }
 
-  const isCreator = audit.auditor_id === user.id;
-  const isAllowed =
-    isCreator ||
-    user.role === "admin" ||
-    user.role === "compliance" ||
-    user.role === "business_excellence";
-  if (!isAllowed) {
-    throw new Error(
-      "Only the audit creator, compliance, business excellence, or admin can cancel an audit."
-    );
+  // Cancel = archive of an audit; gated to admin + compliance (user spec).
+  if (!canDeleteOrArchive(user.role)) {
+    throw new Error("Only admin or compliance can cancel an audit.");
   }
 
   await cancelAudit(id);
