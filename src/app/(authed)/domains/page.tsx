@@ -2,10 +2,16 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { listDomains } from "@/features/domains/repository";
+import { getUserScope } from "@/lib/auth/access";
 
 export default async function DomainsPage() {
   const user = await requireUser();
-  const domains = await listDomains();
+  const allDomains = await listDomains();
+  // Access scoping: non-privileged users only see their mapped domains.
+  const scope = await getUserScope(user.id, user.role);
+  const domains = scope.full
+    ? allDomains
+    : allDomains.filter((d) => scope.domainIds.includes(d.id));
 
   return (
     <Workspace

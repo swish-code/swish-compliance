@@ -62,6 +62,43 @@ export async function getUserScope(
   };
 }
 
+export type ScopedIds = {
+  departmentIds: number[];
+  domainIds: number[];
+  frameworkIds: number[];
+  controlIds: number[];
+};
+
+/**
+ * Resolve the concrete id sets a scoped user may see across the GRC tree:
+ * frameworks whose domain is in scope, and controls under those frameworks.
+ * Returns null for full-visibility users (no filtering). Lets list pages
+ * filter their already-fetched rows in memory by id / framework_id /
+ * control_id / department_id without editing every repository select.
+ */
+export async function getScopedIds(scope: UserScope): Promise<ScopedIds | null> {
+  if (scope.full) return null;
+  const frameworks = scope.domainIds.length
+    ? await queryAll<{ id: number }>(
+        `SELECT id FROM frameworks WHERE domain_id = ANY($1)`,
+        [scope.domainIds]
+      )
+    : [];
+  const frameworkIds = frameworks.map((r) => r.id);
+  const controls = frameworkIds.length
+    ? await queryAll<{ id: number }>(
+        `SELECT id FROM controls WHERE framework_id = ANY($1)`,
+        [frameworkIds]
+      )
+    : [];
+  return {
+    departmentIds: scope.departmentIds,
+    domainIds: scope.domainIds,
+    frameworkIds,
+    controlIds: controls.map((r) => r.id),
+  };
+}
+
 /**
  * Build a SQL "IN (...)" fragment for a scoped id list, or a guaranteed-empty
  * predicate when the user has no ids of that kind. Returns null when access

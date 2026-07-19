@@ -4,6 +4,7 @@ import Workspace from "@/features/shell/Workspace";
 import { listChecks } from "@/features/checks/repository";
 import { CHECK_STATUS_LABEL, CHECK_STATUS_TONE, FREQUENCY_LABEL, type CheckStatus } from "@/features/checks/types";
 import { queryAll } from "@/lib/db";
+import { getUserScope, getScopedIds } from "@/lib/auth/access";
 import { createCheckAction } from "@/features/checks/actions";
 
 export default async function TestsPage({
@@ -14,11 +15,20 @@ export default async function TestsPage({
   const user = await requireUser();
   const sp = await searchParams;
   const checklistFilter = sp.checklist ? Number(sp.checklist) : undefined;
-  const checks = await listChecks({
+  const allChecks = await listChecks({
     status: sp.status,
     checklistTemplateId:
       Number.isFinite(checklistFilter) && checklistFilter ? checklistFilter : undefined,
   });
+  // Access scoping: non-privileged users only see tests whose control is
+  // under a framework in their mapped domains.
+  const scope = await getUserScope(user.id, user.role);
+  const scopedIds = await getScopedIds(scope);
+  const checks = scopedIds
+    ? allChecks.filter(
+        (ch) => ch.control_id != null && scopedIds.controlIds.includes(ch.control_id)
+      )
+    : allChecks;
   const canEdit = canEditSops(user.role);
   const controls = canEdit
     ? await queryAll<{ id: number; name: string }>(

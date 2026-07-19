@@ -11,7 +11,8 @@ import {
   type CapaSeverity,
   type AuditFinding,
 } from "@/features/capa/types";
-import { queryAll, queryOne } from "@/lib/db";
+import { queryAll } from "@/lib/db";
+import { getUserScope } from "@/lib/auth/access";
 import AssignCapaModal from "@/features/capa/AssignCapaModal";
 import AssignControlModal from "@/features/capa/AssignControlModal";
 
@@ -47,25 +48,14 @@ export default async function CapaPage({
   const user = await requireUser();
   const sp = await searchParams;
 
-  // Role-based visibility (same rules as elsewhere)
-  const fullVisibility =
-    user.role === "admin" ||
-    user.role === "compliance" ||
-    user.role === "business_excellence";
-  let scopedDepartmentId: number | undefined;
-  if (!fullVisibility && user.role === "department_manager") {
-    const me = await queryOne<{ department_id: number | null }>(
-      `SELECT department_id FROM users WHERE id = $1`,
-      [user.id]
-    );
-    scopedDepartmentId = me?.department_id ?? -1;
-  }
+  // Access scoping: admin/compliance/BE see everything; everyone else
+  // (incl. department managers) is scoped to their mapped department(s)
+  // from the junction. Filtered in-memory to support multi-department.
+  const scope = await getUserScope(user.id, user.role);
 
-  const findings = await listAuditFindings({
+  const findingsAll = await listAuditFindings({
     audit_id: sp.audit_id ? Number(sp.audit_id) : undefined,
-    department_id:
-      scopedDepartmentId ??
-      (sp.department_id ? Number(sp.department_id) : undefined),
+    department_id: sp.department_id ? Number(sp.department_id) : undefined,
     brand_id: sp.brand_id ? Number(sp.brand_id) : undefined,
     severity: (sp.severity as CapaSeverity) || undefined,
     status: (sp.status as CapaStatus | "unassigned") || undefined,
@@ -73,6 +63,15 @@ export default async function CapaPage({
     due_date_before: sp.due_before || undefined,
     location: sp.location || undefined,
   });
+  const findings = scope.full
+    ? findingsAll
+    : findingsAll.filter(
+        (f) =>
+          f.audit_department_id != null &&
+          scope.departmentIds.includes(f.audit_department_id)
+      );
+  const fullVisibility = scope.full;
+  const scopedDepartmentId = fullVisibility ? undefined : -1; // hides dept filter dropdown
 
   // Lookup lists for the filters + modal
   const [brands, departments, assignableUsers, reviewers] = await Promise.all([

@@ -2,10 +2,18 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { listFrameworks } from "@/features/frameworks/repository";
+import { getUserScope, getScopedIds } from "@/lib/auth/access";
 
 export default async function FrameworksPage() {
   const user = await requireUser();
-  const frameworks = await listFrameworks();
+  const allFrameworks = await listFrameworks();
+  // Access scoping: non-privileged users only see frameworks in their
+  // mapped domains.
+  const scope = await getUserScope(user.id, user.role);
+  const scopedIds = await getScopedIds(scope);
+  const frameworks = scopedIds
+    ? allFrameworks.filter((f) => scopedIds.frameworkIds.includes(f.id))
+    : allFrameworks;
   const active = frameworks.filter((f) => f.is_active);
   const available = frameworks.filter((f) => !f.is_active);
 

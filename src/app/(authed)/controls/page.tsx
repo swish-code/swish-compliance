@@ -3,6 +3,7 @@ import { requireUser, canEditSops } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { listControls } from "@/features/controls/repository";
 import { listFrameworks } from "@/features/frameworks/repository";
+import { getUserScope, getScopedIds } from "@/lib/auth/access";
 import { recomputeAllControlsAction } from "@/features/controls/actions";
 import {
   HEALTH_LABEL,
@@ -18,11 +19,20 @@ export default async function ControlsPage({
 }) {
   const user = await requireUser();
   const sp = await searchParams;
-  const controls = await listControls({
+  const allControls = await listControls({
     search: sp.search,
     health: sp.health,
     framework_id: sp.framework ? Number(sp.framework) : undefined,
   });
+  // Access scoping: non-privileged users only see controls under
+  // frameworks in their mapped domains.
+  const scope = await getUserScope(user.id, user.role);
+  const scopedIds = await getScopedIds(scope);
+  const controls = scopedIds
+    ? allControls.filter(
+        (c) => c.framework_id != null && scopedIds.frameworkIds.includes(c.framework_id)
+      )
+    : allControls;
   const frameworks = await listFrameworks();
 
   return (

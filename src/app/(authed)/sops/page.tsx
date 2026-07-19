@@ -4,6 +4,7 @@ import Workspace from "@/features/shell/Workspace";
 import { listSops } from "@/features/sops/repository";
 import { SOP_STATUS_LABEL, SOP_STATUS_TONE, type SopStatus } from "@/features/sops/types";
 import { queryOne } from "@/lib/db";
+import { getUserScope } from "@/lib/auth/access";
 import { importRecruitmentSopAction } from "@/features/admin/seeds/actions";
 
 type Search = { search?: string; status?: SopStatus };
@@ -15,10 +16,21 @@ export default async function SopsPage({
 }) {
   const user = await requireUser();
   const sp = await searchParams;
-  const { rows, total } = await listSops({
+  const listed = await listSops({
     search: sp.search,
     status: sp.status,
   });
+  // Access scoping (user spec): non-privileged users only see SOPs in
+  // their department scope. is_all_departments SOPs stay visible to all.
+  const scope = await getUserScope(user.id, user.role);
+  const rows = scope.full
+    ? listed.rows
+    : listed.rows.filter(
+        (r) =>
+          r.is_all_departments ||
+          (r.department_id != null && scope.departmentIds.includes(r.department_id))
+      );
+  const total = rows.length;
 
   // Admin-only: surface the one-click Recruitment SOP importer right on
   // this page (in addition to Admin Home), so it's findable where SOPs
