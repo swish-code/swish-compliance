@@ -8,7 +8,17 @@ import {
 } from "@/features/admin/reference/actions";
 import { seedPlaybookDepartmentsAction } from "@/features/admin/seeds/actions";
 
-type Row = { id: number; name: string; is_active: boolean; created_at: string };
+type Row = {
+  id: number;
+  name: string;
+  code: string | null;
+  is_active: boolean;
+  created_at: string;
+  division_name: string | null;
+  division_code: string | null;
+  parent_name: string | null;
+};
+type Staff = { department_id: number; id: number; display_name: string; role: string };
 
 // Departments referenced by the Wave 1 & 2 Playbook (June 2026). We surface
 // a one-click seed button below when any of these are still missing.
@@ -27,8 +37,27 @@ const PLAYBOOK_DEPARTMENTS = [
 export default async function DepartmentsAdminPage() {
   const me = await requireAdmin();
   const rows = await queryAll<Row>(
-    `SELECT id, name, is_active, created_at FROM departments ORDER BY name`
+    `SELECT d.id, d.name, d.code, d.is_active, d.created_at,
+            dv.name AS division_name, dv.code AS division_code,
+            pd.name AS parent_name
+     FROM departments d
+     LEFT JOIN divisions dv ON dv.id = d.division_id
+     LEFT JOIN departments pd ON pd.id = d.parent_department_id
+     ORDER BY dv.sort_order NULLS LAST, d.name`
   );
+  // Staff mapped to each department (from the user_departments junction).
+  const staff = await queryAll<Staff>(
+    `SELECT ud.department_id, u.id, u.display_name, u.role
+     FROM user_departments ud JOIN users u ON u.id = ud.user_id
+     WHERE u.is_active
+     ORDER BY u.display_name`
+  );
+  const staffByDept = new Map<number, Staff[]>();
+  for (const s of staff) {
+    const list = staffByDept.get(s.department_id) ?? [];
+    list.push(s);
+    staffByDept.set(s.department_id, list);
+  }
 
   // Which playbook departments are still missing? (case-insensitive match)
   const existingLower = new Set(rows.map((r) => r.name.toLowerCase()));
@@ -102,8 +131,9 @@ export default async function DepartmentsAdminPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
-              <th className="text-left px-5 py-3 font-medium w-16">ID</th>
+              <th className="text-left px-5 py-3 font-medium">Division</th>
               <th className="text-left px-5 py-3 font-medium">Name</th>
+              <th className="text-left px-5 py-3 font-medium">Staff</th>
               <th className="text-left px-5 py-3 font-medium">Status</th>
               <th className="text-right px-5 py-3 font-medium w-48">Actions</th>
             </tr>
@@ -111,14 +141,27 @@ export default async function DepartmentsAdminPage() {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-5 py-12 text-center text-gray-400">
+                <td colSpan={5} className="px-5 py-12 text-center text-gray-400">
                   No departments yet — add the first one above.
                 </td>
               </tr>
             )}
-            {rows.map((row) => (
-              <tr key={row.id} className="border-t border-gray-100">
-                <td className="px-5 py-3 font-mono text-xs text-gray-400">{row.id}</td>
+            {rows.map((row) => {
+              const deptStaff = staffByDept.get(row.id) ?? [];
+              return (
+              <tr key={row.id} className="border-t border-gray-100 align-top">
+                <td className="px-5 py-3 text-xs text-gray-600">
+                  {row.division_name ? (
+                    <span>
+                      {row.division_code && (
+                        <span className="font-mono text-[10px] text-gray-400 mr-1">{row.division_code}</span>
+                      )}
+                      {row.division_name}
+                    </span>
+                  ) : (
+                    <span className="text-gray-300">— unassigned —</span>
+                  )}
+                </td>
                 <td className="px-5 py-3">
                   <form action={renameDepartmentAction} className="flex items-center gap-2">
                     <input type="hidden" name="id" value={row.id} />
@@ -132,6 +175,28 @@ export default async function DepartmentsAdminPage() {
                       Save
                     </button>
                   </form>
+                  {row.parent_name && (
+                    <div className="text-[10px] text-gray-400 mt-0.5 px-2">↳ under {row.parent_name}</div>
+                  )}
+                </td>
+                <td className="px-5 py-3">
+                  {deptStaff.length === 0 ? (
+                    <span className="text-xs text-gray-300">No staff</span>
+                  ) : (
+                    <details className="group">
+                      <summary className="cursor-pointer list-none text-xs text-brand-700 hover:underline">
+                        {deptStaff.length} staff
+                      </summary>
+                      <ul className="mt-1 space-y-0.5">
+                        {deptStaff.map((s) => (
+                          <li key={s.id} className="text-xs text-gray-600">
+                            {s.display_name}
+                            <span className="text-gray-400"> · {s.role.replace("_", " ")}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
                 </td>
                 <td className="px-5 py-3">
                   {row.is_active ? (
@@ -163,7 +228,8 @@ export default async function DepartmentsAdminPage() {
                   </form>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
