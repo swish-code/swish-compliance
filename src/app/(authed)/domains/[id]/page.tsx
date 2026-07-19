@@ -6,6 +6,7 @@ import {
   getDomain,
   listFrameworksForDomain,
 } from "@/features/domains/repository";
+import { queryAll } from "@/lib/db";
 
 export default async function DomainDetailPage({
   params,
@@ -18,6 +19,30 @@ export default async function DomainDetailPage({
   const domain = await getDomain(id);
   if (!domain) notFound();
   const frameworks = await listFrameworksForDomain(id);
+
+  // Cross-references (user spec): SOPs + Departments reached from this
+  // domain through its frameworks → controls → linked SOPs.
+  const sops = await queryAll<{ id: number; code: string | null; title: string }>(
+    `SELECT DISTINCT s.id, s.code, s.title
+     FROM frameworks f
+     JOIN controls c ON c.framework_id = f.id
+     JOIN control_links cl ON cl.control_id = c.id AND cl.entity_type = 'sop'
+     JOIN sops s ON s.id = cl.entity_id
+     WHERE f.domain_id = $1
+     ORDER BY s.code NULLS LAST, s.title`,
+    [id]
+  );
+  const departments = await queryAll<{ id: number; name: string }>(
+    `SELECT DISTINCT d.id, d.name
+     FROM frameworks f
+     JOIN controls c ON c.framework_id = f.id
+     JOIN control_links cl ON cl.control_id = c.id AND cl.entity_type = 'sop'
+     JOIN sops s ON s.id = cl.entity_id
+     JOIN departments d ON d.id = s.department_id
+     WHERE f.domain_id = $1
+     ORDER BY d.name`,
+    [id]
+  );
 
   return (
     <Workspace
@@ -121,6 +146,38 @@ export default async function DomainDetailPage({
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Cross-reference panels — SOPs + Departments in this domain */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm">
+          <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
+            SOPs ({sops.length})
+          </summary>
+          <ul className="border-t border-gray-100 divide-y divide-gray-100">
+            {sops.length === 0 && <li className="px-4 py-3 text-xs text-gray-400">No linked SOPs.</li>}
+            {sops.map((s) => (
+              <li key={s.id} className="px-4 py-2 text-sm">
+                <Link href={`/sops/${s.id}`} className="text-brand-700 hover:underline">
+                  {s.code ? `${s.code} · ` : ""}{s.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm">
+          <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
+            Departments ({departments.length})
+          </summary>
+          <ul className="border-t border-gray-100 divide-y divide-gray-100">
+            {departments.length === 0 && <li className="px-4 py-3 text-xs text-gray-400">No linked departments.</li>}
+            {departments.map((d) => (
+              <li key={d.id} className="px-4 py-2 text-sm text-gray-800">{d.name}</li>
+            ))}
+          </ul>
+        </details>
       </div>
     </Workspace>
   );

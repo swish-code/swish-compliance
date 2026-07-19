@@ -399,8 +399,20 @@ export default function Sidebar({
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileOpen]);
 
-  const sections: Section[] = [WORKSPACE, COMPLIANCE];
+  let sections: Section[] = [WORKSPACE, COMPLIANCE];
   if (role === "admin") sections.push(ADMINISTRATION);
+
+  // Department managers get a trimmed nav (user spec): their workspace +
+  // Corrective Actions only — no authoring/GRC sections.
+  if (role === "department_manager") {
+    sections = [
+      WORKSPACE,
+      {
+        label: "Compliance",
+        items: COMPLIANCE.items.filter((it) => it.href === "/capa"),
+      },
+    ];
+  }
 
   // Open / closed state per section. Initialized empty for SSR; the effect
   // below opens the section that contains the active page (or restores the

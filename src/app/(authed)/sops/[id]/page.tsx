@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { getSopById, listSopEvents } from "@/features/sops/repository";
+import { queryAll } from "@/lib/db";
 import {
   SOP_STATUS_LABEL,
   SOP_STATUS_TONE,
@@ -50,6 +51,28 @@ export default async function SopDetailPage({
   const locked = isSopLocked(sop.status);
   const transitions = availableTransitions(user.role, sop.status);
   const events = await listSopEvents(id);
+
+  // Cross-references (user spec): the domains + frameworks this SOP is
+  // governed by, via its control links.
+  const sopFrameworks = await queryAll<{ id: number; code: string | null; name: string }>(
+    `SELECT DISTINCT f.id, f.code, f.name
+     FROM control_links cl
+     JOIN controls c ON c.id = cl.control_id
+     JOIN frameworks f ON f.id = c.framework_id
+     WHERE cl.entity_type = 'sop' AND cl.entity_id = $1
+     ORDER BY f.code NULLS LAST, f.name`,
+    [id]
+  );
+  const sopDomains = await queryAll<{ id: number; name: string }>(
+    `SELECT DISTINCT dm.id, dm.name
+     FROM control_links cl
+     JOIN controls c ON c.id = cl.control_id
+     JOIN frameworks f ON f.id = c.framework_id
+     JOIN domains dm ON dm.id = f.domain_id
+     WHERE cl.entity_type = 'sop' AND cl.entity_id = $1
+     ORDER BY dm.name`,
+    [id]
+  );
 
   // Acknowledgments — only relevant once the SOP is approved.
   const isApproved = sop.status === "approved";
@@ -516,6 +539,40 @@ export default async function SopDetailPage({
             </>
           )}
         </dl>
+      </div>
+
+      {/* Cross-reference panels — Domains + Frameworks governing this SOP */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm">
+          <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
+            Domains ({sopDomains.length})
+          </summary>
+          <ul className="border-t border-gray-100 divide-y divide-gray-100">
+            {sopDomains.length === 0 && <li className="px-4 py-3 text-xs text-gray-400">No linked domains.</li>}
+            {sopDomains.map((d) => (
+              <li key={d.id} className="px-4 py-2 text-sm">
+                <Link href={`/domains/${d.id}`} className="text-brand-700 hover:underline">{d.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm">
+          <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
+            Frameworks ({sopFrameworks.length})
+          </summary>
+          <ul className="border-t border-gray-100 divide-y divide-gray-100">
+            {sopFrameworks.length === 0 && <li className="px-4 py-3 text-xs text-gray-400">No linked frameworks.</li>}
+            {sopFrameworks.map((f) => (
+              <li key={f.id} className="px-4 py-2 text-sm">
+                <Link href={`/frameworks/${f.id}`} className="text-brand-700 hover:underline">
+                  {f.code ? `${f.code} · ` : ""}{f.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
     </Workspace>
   );
