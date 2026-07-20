@@ -57,24 +57,19 @@ export default async function FrameworkDetailPage({
       )
     : [];
 
-  // Cross-references (user spec): SOPs + Departments reached via this
-  // framework's controls → linked SOPs.
+  // Cross-references (user spec): SOPs whose home domain is this
+  // framework's domain (one-home-domain-per-SOP model) + their departments.
   const fwSops = await queryAll<{ id: number; code: string | null; title: string }>(
-    `SELECT DISTINCT s.id, s.code, s.title
-     FROM controls c
-     JOIN control_links cl ON cl.control_id = c.id AND cl.entity_type = 'sop'
-     JOIN sops s ON s.id = cl.entity_id
-     WHERE c.framework_id = $1
+    `SELECT s.id, s.code, s.title
+     FROM sops s
+     WHERE s.home_domain_id = (SELECT domain_id FROM frameworks WHERE id = $1)
      ORDER BY s.code NULLS LAST, s.title`,
     [id]
   );
   const fwDepartments = await queryAll<{ id: number; name: string }>(
     `SELECT DISTINCT d.id, d.name
-     FROM controls c
-     JOIN control_links cl ON cl.control_id = c.id AND cl.entity_type = 'sop'
-     JOIN sops s ON s.id = cl.entity_id
-     JOIN departments d ON d.id = s.department_id
-     WHERE c.framework_id = $1
+     FROM sops s JOIN departments d ON d.id = s.department_id
+     WHERE s.home_domain_id = (SELECT domain_id FROM frameworks WHERE id = $1)
      ORDER BY d.name`,
     [id]
   );

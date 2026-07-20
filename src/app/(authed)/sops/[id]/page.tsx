@@ -52,25 +52,20 @@ export default async function SopDetailPage({
   const transitions = availableTransitions(user.role, sop.status);
   const events = await listSopEvents(id);
 
-  // Cross-references (user spec): the domains + frameworks this SOP is
-  // governed by, via its control links.
-  const sopFrameworks = await queryAll<{ id: number; code: string | null; name: string }>(
-    `SELECT DISTINCT f.id, f.code, f.name
-     FROM control_links cl
-     JOIN controls c ON c.id = cl.control_id
-     JOIN frameworks f ON f.id = c.framework_id
-     WHERE cl.entity_type = 'sop' AND cl.entity_id = $1
-     ORDER BY f.code NULLS LAST, f.name`,
+  // Cross-references (user spec): each SOP has ONE home domain (from its
+  // department); its frameworks are the ones under that home domain.
+  const sopDomains = await queryAll<{ id: number; name: string }>(
+    `SELECT dm.id, dm.name FROM domains dm
+     JOIN sops s ON s.home_domain_id = dm.id
+     WHERE s.id = $1`,
     [id]
   );
-  const sopDomains = await queryAll<{ id: number; name: string }>(
-    `SELECT DISTINCT dm.id, dm.name
-     FROM control_links cl
-     JOIN controls c ON c.id = cl.control_id
-     JOIN frameworks f ON f.id = c.framework_id
-     JOIN domains dm ON dm.id = f.domain_id
-     WHERE cl.entity_type = 'sop' AND cl.entity_id = $1
-     ORDER BY dm.name`,
+  const sopFrameworks = await queryAll<{ id: number; code: string | null; name: string }>(
+    `SELECT f.id, f.code, f.name
+     FROM frameworks f
+     JOIN sops s ON s.home_domain_id = f.domain_id
+     WHERE s.id = $1
+     ORDER BY f.code NULLS LAST, f.name`,
     [id]
   );
 

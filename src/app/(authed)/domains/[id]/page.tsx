@@ -20,26 +20,18 @@ export default async function DomainDetailPage({
   if (!domain) notFound();
   const frameworks = await listFrameworksForDomain(id);
 
-  // Cross-references (user spec): SOPs + Departments reached from this
-  // domain through its frameworks → controls → linked SOPs.
+  // Cross-references (user spec): each SOP has ONE home domain (derived
+  // from its owning department), so a domain shows only its own SOPs +
+  // their departments — not every SOP loosely linked via controls.
   const sops = await queryAll<{ id: number; code: string | null; title: string }>(
-    `SELECT DISTINCT s.id, s.code, s.title
-     FROM frameworks f
-     JOIN controls c ON c.framework_id = f.id
-     JOIN control_links cl ON cl.control_id = c.id AND cl.entity_type = 'sop'
-     JOIN sops s ON s.id = cl.entity_id
-     WHERE f.domain_id = $1
-     ORDER BY s.code NULLS LAST, s.title`,
+    `SELECT id, code, title FROM sops WHERE home_domain_id = $1
+     ORDER BY code NULLS LAST, title`,
     [id]
   );
   const departments = await queryAll<{ id: number; name: string }>(
     `SELECT DISTINCT d.id, d.name
-     FROM frameworks f
-     JOIN controls c ON c.framework_id = f.id
-     JOIN control_links cl ON cl.control_id = c.id AND cl.entity_type = 'sop'
-     JOIN sops s ON s.id = cl.entity_id
-     JOIN departments d ON d.id = s.department_id
-     WHERE f.domain_id = $1
+     FROM sops s JOIN departments d ON d.id = s.department_id
+     WHERE s.home_domain_id = $1
      ORDER BY d.name`,
     [id]
   );
