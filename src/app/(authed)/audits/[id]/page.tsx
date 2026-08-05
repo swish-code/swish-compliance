@@ -21,6 +21,13 @@ import {
 } from "@/features/audits/types";
 import type { AuditScopeRow } from "@/features/audits/types";
 
+/** How the audit was scoped (migration 042). Legacy audits have no value. */
+const SCOPE_TYPE_LABEL: Record<string, string> = {
+  full_sop: "Full SOP Audit",
+  framework: "Framework Audit",
+  domain: "Domain Audit",
+};
+
 export default async function AuditDetailPage({
   params,
 }: {
@@ -108,7 +115,21 @@ export default async function AuditDetailPage({
             <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-2">
               Audit scope
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <Field label="Policy / SOP">
+                {audit.policy_id ? (
+                  <Link
+                    href={`/sops/${audit.policy_id}`}
+                    className="text-brand-700 hover:underline"
+                  >
+                    {audit.policy_code ? `${audit.policy_code} · ` : ""}
+                    {audit.policy_title}
+                  </Link>
+                ) : "—"}
+              </Field>
+              <Field label="Scope type">
+                {audit.scope_type ? SCOPE_TYPE_LABEL[audit.scope_type] ?? audit.scope_type : "—"}
+              </Field>
               <Field label="Domain">
                 {audit.domain_id ? (
                   <Link
@@ -169,18 +190,22 @@ export default async function AuditDetailPage({
               <Field label="End at">
                 {audit.end_at ? new Date(audit.end_at).toLocaleString() : "—"}
               </Field>
-              <Field label="Policy">
-                {audit.policy_id ? (
-                  <Link
-                    href={`/sops/${audit.policy_id}`}
-                    className="text-brand-700 hover:underline"
-                  >
-                    {audit.policy_code ? `${audit.policy_code} · ` : ""}
-                    {audit.policy_title}
-                  </Link>
-                ) : "—"}
+              <Field label="Auditee (dept. rep)">
+                {audit.auditee_name ?? "—"}
+              </Field>
+              <Field label="Reviewer / approver">
+                {audit.reviewer_name ?? "—"}
               </Field>
             </div>
+
+            {(audit.objective || audit.notes) && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {audit.objective && (
+                  <Field label="Objective">{audit.objective}</Field>
+                )}
+                {audit.notes && <Field label="Notes">{audit.notes}</Field>}
+              </div>
+            )}
           </div>
 
           {audit.score !== null && (

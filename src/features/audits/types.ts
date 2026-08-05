@@ -47,6 +47,14 @@ export type Audit = {
   assigned_to_name: string | null;
   start_at: string | null;
   end_at: string | null;
+  /** SOP-first scoping + the wider cast (migration 042). */
+  scope_type: string | null;
+  objective: string | null;
+  notes: string | null;
+  auditee_id: number | null;
+  auditee_name: string | null;
+  reviewer_id: number | null;
+  reviewer_name: string | null;
   /** Count of audit_tests rows (migration 028) — how many tests were
    *  pinned at creation. 0 for legacy audits driven by template_id. */
   test_count: number;

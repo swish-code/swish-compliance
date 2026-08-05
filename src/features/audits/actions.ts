@@ -17,6 +17,7 @@ import {
   deleteAuditAttachment,
 } from "./repository";
 import { autoCreateCapasForAudit } from "../capa/repository";
+import { resolveScope } from "./scope";
 import { notify } from "@/features/notifications/service";
 import { extractAttachment, extractAttachments } from "@/lib/attachments";
 
@@ -27,30 +28,32 @@ const CreateSchema = z.object({
   // detail page falls back to the template when no tests are linked.
   template_id: z.coerce.number().int().positive().optional().nullable(),
   brand_id: z.coerce.number().int().positive().optional().nullable(),
-  department_id: z.coerce.number().int().positive().optional().nullable(),
+  // The audited department drives the whole scope walk, so it is required
+  // (migration 042): a SOP can span departments and each gets its own audit.
+  department_id: z.coerce.number().int().positive({
+    message: "Audited department is required.",
+  }),
   location: z.string().trim().optional().nullable(),
   audit_date: z.string().optional().nullable(),
-  policy_id: z.coerce.number().int().positive().optional().nullable(),
-  // Audit scope — domain → framework → control → tests. All required by
-  // the form; the schema mirrors that so the action throws if any are
-  // missing instead of silently creating a half-scoped audit.
-  domain_id: z.coerce.number().int().positive({
-    message: "Domain is required.",
+  policy_id: z.coerce.number().int().positive({
+    message: "Policy / SOP is required.",
   }),
-  framework_id: z.coerce.number().int().positive({
-    message: "Framework is required.",
-  }),
-  control_id: z.coerce.number().int().positive({
-    message: "Control is required.",
-  }),
-  test_ids: z
-    .array(z.coerce.number().int().positive())
-    .min(1, "Pick at least one test."),
-  // Audit window + assignee — all optional. datetime-local inputs send
-  // ISO-ish strings ("2026-06-22T09:00") that Postgres can cast directly.
+  // Scope selection. Controls and tests are NOT accepted from the client —
+  // resolveScope() derives them from these three fields so a tampered form
+  // can't widen an audit beyond what its scope covers.
+  scope_type: z.enum(["full_sop", "framework", "domain"]),
+  domain_id: z.coerce.number().int().positive().optional().nullable(),
+  framework_id: z.coerce.number().int().positive().optional().nullable(),
+  // Audit window + people.
   start_at: z.string().optional().nullable(),
   end_at: z.string().optional().nullable(),
-  assigned_to: z.coerce.number().int().positive().optional().nullable(),
+  assigned_to: z.coerce.number().int().positive({
+    message: "Assigned auditor is required.",
+  }),
+  auditee_id: z.coerce.number().int().positive().optional().nullable(),
+  reviewer_id: z.coerce.number().int().positive().optional().nullable(),
+  objective: z.string().trim().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
 });
 
 const ResponseSchema = z.object({
@@ -119,13 +122,6 @@ function assertCanEditAudit(audit: AuditGuardSubject, actor: AuditGuardActor): v
 export async function createAuditAction(formData: FormData) {
   const user = await requireUser();
   const raw = Object.fromEntries(formData.entries());
-  // test_ids comes through as repeated `<input name="test_ids">` entries,
-  // one per checkbox. Object.fromEntries collapses repeats to the last
-  // value, so we have to pull the array from FormData directly.
-  const testIds = formData
-    .getAll("test_ids")
-    .map((v) => Number(v))
-    .filter((n) => Number.isFinite(n) && n > 0);
 
   const blank = (v: FormDataEntryValue | undefined) =>
     v === "" || v === undefined ? null : v;
@@ -133,15 +129,43 @@ export async function createAuditAction(formData: FormData) {
     ...raw,
     template_id: blank(raw.template_id),
     brand_id: blank(raw.brand_id),
-    department_id: blank(raw.department_id),
     location: blank(raw.location),
     audit_date: blank(raw.audit_date),
-    policy_id: blank(raw.policy_id),
+    domain_id: blank(raw.domain_id),
+    framework_id: blank(raw.framework_id),
     start_at: blank(raw.start_at),
     end_at: blank(raw.end_at),
-    assigned_to: blank(raw.assigned_to),
-    test_ids: testIds,
+    auditee_id: blank(raw.auditee_id),
+    reviewer_id: blank(raw.reviewer_id),
+    objective: blank(raw.objective),
+    notes: blank(raw.notes),
   });
+
+  // Derive the scope server-side. This is the authoritative walk — the
+  // form only ever sends the *selection*, never the resulting rows.
+  const scope = await resolveScope({
+    sopId: parsed.policy_id,
+    departmentId: parsed.department_id,
+    scopeType: parsed.scope_type,
+    domainId: parsed.domain_id,
+    frameworkId: parsed.framework_id,
+  });
+
+  if (scope.tests.length === 0) {
+    throw new Error(
+      "This scope has no tests linked to it yet, so there would be nothing to audit. " +
+        "Pick a different scope, or link tests to the controls underneath it first."
+    );
+  }
+
+  // A Framework Audit pins one framework; the broader types cover many, so
+  // only record framework_id when it's genuinely singular.
+  const frameworkId =
+    parsed.scope_type === "framework"
+      ? parsed.framework_id
+      : scope.frameworkIds.length === 1
+      ? scope.frameworkIds[0]
+      : null;
 
   const id = await createAudit({
     template_id: parsed.template_id ?? null,
@@ -150,24 +174,31 @@ export async function createAuditAction(formData: FormData) {
     location: parsed.location,
     audit_date: parsed.audit_date,
     policy_id: parsed.policy_id,
-    framework_id: parsed.framework_id,
+    framework_id: frameworkId,
     domain_id: parsed.domain_id,
-    control_id: parsed.control_id,
+    // control_id stays single-valued for backwards compatibility: it only
+    // means something when the scope resolved to exactly one control.
+    control_id: scope.controls.length === 1 ? scope.controls[0].id : null,
     start_at: parsed.start_at,
     end_at: parsed.end_at,
     assigned_to: parsed.assigned_to,
     auditor_id: user.id,
+    scope_type: parsed.scope_type,
+    auditee_id: parsed.auditee_id,
+    reviewer_id: parsed.reviewer_id,
+    objective: parsed.objective,
+    notes: parsed.notes,
   });
 
-  // Populate the audit_tests junction. Bulk-insert via a single VALUES
-  // list so we don't fire N round-trips on the happy path.
-  const placeholders = parsed.test_ids
-    .map((_, i) => `($1, $${i + 2})`)
-    .join(", ");
+  // Populate the audit_tests junction — this is what the audit detail page
+  // reads to build the question list. Bulk-insert via a single VALUES list
+  // so we don't fire N round-trips on the happy path.
+  const testIds = scope.tests.map((t) => t.id);
+  const placeholders = testIds.map((_, i) => `($1, $${i + 2})`).join(", ");
   await execute(
     `INSERT INTO audit_tests (audit_id, check_id) VALUES ${placeholders}
      ON CONFLICT DO NOTHING`,
-    [id, ...parsed.test_ids]
+    [id, ...testIds]
   );
 
   await execute(
@@ -178,15 +209,19 @@ export async function createAuditAction(formData: FormData) {
       user.email,
       id,
       JSON.stringify({
-        template_id: parsed.template_id ?? null,
-        policy_id: parsed.policy_id ?? null,
-        domain_id: parsed.domain_id,
-        framework_id: parsed.framework_id,
-        control_id: parsed.control_id,
-        test_count: parsed.test_ids.length,
+        policy_id: parsed.policy_id,
+        scope_type: parsed.scope_type,
+        domain_id: parsed.domain_id ?? null,
+        framework_id: frameworkId,
+        framework_count: scope.frameworkIds.length,
+        control_count: scope.controls.length,
+        test_count: testIds.length,
+        question_count: scope.questionCount,
         start_at: parsed.start_at ?? null,
         end_at: parsed.end_at ?? null,
-        assigned_to: parsed.assigned_to ?? null,
+        assigned_to: parsed.assigned_to,
+        auditee_id: parsed.auditee_id ?? null,
+        reviewer_id: parsed.reviewer_id ?? null,
       }),
     ]
   );
