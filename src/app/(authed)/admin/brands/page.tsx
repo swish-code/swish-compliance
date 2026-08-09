@@ -6,6 +6,7 @@ import {
   renameBrandAction,
   toggleBrandAction,
 } from "@/features/admin/reference/actions";
+import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 
 type Row = { id: number; name: string; is_active: boolean; created_at: string };
 
@@ -98,21 +99,24 @@ export default async function BrandsAdminPage() {
                     </span>
                   )}
                 </td>
-                <td className="px-5 py-3 text-right">
-                  <form action={toggleBrandAction} className="inline-block">
-                    <input type="hidden" name="id" value={row.id} />
-                    <input type="hidden" name="is_active" value={row.is_active ? "" : "on"} />
-                    <button
-                      type="submit"
-                      className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
-                        row.is_active
-                          ? "border-gray-300 text-gray-600 hover:bg-gray-100"
-                          : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                      }`}
-                    >
-                      {row.is_active ? "Deactivate" : "Activate"}
-                    </button>
-                  </form>
+                <td className="px-5 py-3">
+                  <div className="flex items-center justify-end gap-2">
+                    <form action={toggleBrandAction}>
+                      <input type="hidden" name="id" value={row.id} />
+                      <input type="hidden" name="is_active" value={row.is_active ? "" : "on"} />
+                      <button
+                        type="submit"
+                        className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
+                          row.is_active
+                            ? "border-gray-300 text-gray-600 hover:bg-gray-100"
+                            : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        }`}
+                      >
+                        {row.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                    </form>
+                    <DeleteEntityButton entityType="brand" entityId={row.id} label="Brand" />
+                  </div>
                 </td>
               </tr>
             ))}

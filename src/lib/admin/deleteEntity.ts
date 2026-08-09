@@ -23,7 +23,8 @@ export type EntityType =
   | "control"
   | "checklist_template"
   | "audit"
-  | "capa";
+  | "capa"
+  | "brand";
 
 const ENTITY_TABLE: Record<EntityType, string> = {
   sop: "sops",
@@ -33,6 +34,7 @@ const ENTITY_TABLE: Record<EntityType, string> = {
   checklist_template: "checklist_templates",
   audit: "audits",
   capa: "corrective_actions",
+  brand: "brands",
 };
 
 export const ENTITY_LABEL: Record<EntityType, string> = {
@@ -43,6 +45,7 @@ export const ENTITY_LABEL: Record<EntityType, string> = {
   checklist_template: "Checklist template",
   audit: "Audit",
   capa: "Corrective action",
+  brand: "Brand",
 };
 
 export const ENTITY_LIST_PATH: Record<EntityType, string> = {
@@ -53,6 +56,7 @@ export const ENTITY_LIST_PATH: Record<EntityType, string> = {
   checklist_template: "/checklists/templates",
   audit: "/audits",
   capa: "/capa",
+  brand: "/admin/brands",
 };
 
 export type ImpactRow = {
@@ -277,6 +281,42 @@ export async function getDeleteImpact(
             id
           ),
           cascaded: true,
+        },
+      ];
+      break;
+    }
+    case "brand": {
+      rows = [
+        {
+          label: "User access grants for this brand",
+          count: await impactCount(
+            `SELECT COUNT(*) n FROM user_brands WHERE brand_id = $1`,
+            id
+          ),
+          cascaded: true,
+        },
+        {
+          label: "Users with this as their home brand (will be unlinked, kept)",
+          count: await impactCount(`SELECT COUNT(*) n FROM users WHERE brand_id = $1`, id),
+          cascaded: false,
+        },
+        {
+          label: "SOPs scoped to this brand (will be unlinked, kept)",
+          count: await impactCount(`SELECT COUNT(*) n FROM sops WHERE brand_id = $1`, id),
+          cascaded: false,
+        },
+        {
+          label: "Audits scoped to this brand (will be unlinked, kept)",
+          count: await impactCount(`SELECT COUNT(*) n FROM audits WHERE brand_id = $1`, id),
+          cascaded: false,
+        },
+        {
+          label: "Corrective actions scoped to this brand (will be unlinked, kept)",
+          count: await impactCount(
+            `SELECT COUNT(*) n FROM corrective_actions WHERE brand_id = $1`,
+            id
+          ),
+          cascaded: false,
         },
       ];
       break;
