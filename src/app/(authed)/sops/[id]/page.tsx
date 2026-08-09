@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth/guard";
+import { requireUser, canDeleteOrArchive } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { getSopById, listSopEvents } from "@/features/sops/repository";
 import { queryAll } from "@/lib/db";
@@ -25,6 +25,7 @@ import {
 import FilePicker from "@/features/sops/FilePicker";
 import AttachmentDisplay from "@/features/sops/AttachmentDisplay";
 import ApprovalActions from "@/features/sops/ApprovalActions";
+import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Administrator",
@@ -172,14 +173,19 @@ export default async function SopDetailPage({
           {/* Edit button — visible only when the current role + status combo
               allows content edits (matches the canEditSopFields gate in
               the action). Locked statuses (approved / archived) hide it. */}
-          {canEditSopFields(user.role, sop.status) && (
-            <Link
-              href={`/sops/${sop.id}/edit`}
-              className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100"
-            >
-              ✏️ Edit SOP
-            </Link>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {canEditSopFields(user.role, sop.status) && (
+              <Link
+                href={`/sops/${sop.id}/edit`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100"
+              >
+                ✏️ Edit SOP
+              </Link>
+            )}
+            {canDeleteOrArchive(user.role) && (
+              <DeleteEntityButton entityType="sop" entityId={sop.id} label="SOP" />
+            )}
+          </div>
         </div>
       </div>
 

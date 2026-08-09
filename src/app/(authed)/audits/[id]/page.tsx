@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth/guard";
+import { requireUser, canDeleteOrArchive } from "@/lib/auth/guard";
+import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 import Workspace from "@/features/shell/Workspace";
 import {
   getAudit,
@@ -208,8 +209,12 @@ export default async function AuditDetailPage({
             )}
           </div>
 
-          {audit.score !== null && (
-            <div className="text-right shrink-0">
+          <div className="flex flex-col items-end gap-3 shrink-0">
+            {canDeleteOrArchive(user.role) && (
+              <DeleteEntityButton entityType="audit" entityId={audit.id} label="Audit" />
+            )}
+            {audit.score !== null && (
+              <div className="text-right">
               <div
                 className={`text-4xl font-bold ${
                   Number(audit.score) >= 90
@@ -230,8 +235,9 @@ export default async function AuditDetailPage({
                   {audit.critical_failed > 1 ? "s" : ""}
                 </div>
               )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="text-xs text-gray-500 pt-3 border-t border-gray-100">

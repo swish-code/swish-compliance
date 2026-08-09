@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser, canEditSops } from "@/lib/auth/guard";
+import { requireUser, canEditSops, canDeleteOrArchive } from "@/lib/auth/guard";
+import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 import Workspace from "@/features/shell/Workspace";
 import {
   getControl,
@@ -172,6 +173,9 @@ export default async function ControlDetailPage({
             <h2 className="text-lg font-bold text-gray-900 mb-1">{ctrl.name}</h2>
             {ctrl.description && <p className="text-xs text-gray-600 max-w-3xl">{ctrl.description}</p>}
           </div>
+          {canDeleteOrArchive(user.role) && (
+            <DeleteEntityButton entityType="control" entityId={ctrl.id} label="Control" />
+          )}
         </div>
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 text-sm pt-3 border-t border-gray-100">
           <Field label="Domain">

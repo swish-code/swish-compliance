@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth/guard";
+import { requireUser, canDeleteOrArchive } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import {
   getDomain,
   listFrameworksForDomain,
 } from "@/features/domains/repository";
 import { queryAll } from "@/lib/db";
+import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 
 export default async function DomainDetailPage({
   params,
@@ -59,12 +60,17 @@ export default async function DomainDetailPage({
               </p>
             )}
           </div>
-          <Link
-            href="/domains"
-            className="shrink-0 text-sm text-gray-500 hover:text-gray-700"
-          >
-            ← All domains
-          </Link>
+          <div className="shrink-0 flex items-center gap-3">
+            <Link
+              href="/domains"
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              ← All domains
+            </Link>
+            {canDeleteOrArchive(user.role) && (
+              <DeleteEntityButton entityType="domain" entityId={domain.id} label="Domain" />
+            )}
+          </div>
         </div>
       </div>
 

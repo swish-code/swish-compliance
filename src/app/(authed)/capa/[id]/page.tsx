@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth/guard";
+import { requireUser, canDeleteOrArchive } from "@/lib/auth/guard";
+import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 import Workspace from "@/features/shell/Workspace";
 import {
   getCapa,
@@ -89,6 +90,11 @@ export default async function CapaDetailPage({
           {isOwner && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
               Assigned to you
+            </span>
+          )}
+          {canDeleteOrArchive(user.role) && (
+            <span className="ml-auto">
+              <DeleteEntityButton entityType="capa" entityId={capa.id} label="Corrective action" />
             </span>
           )}
         </div>

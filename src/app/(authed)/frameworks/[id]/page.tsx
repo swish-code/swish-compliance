@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser, canAccessAdmin } from "@/lib/auth/guard";
+import { requireUser, canAccessAdmin, canDeleteOrArchive } from "@/lib/auth/guard";
+import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 import Workspace from "@/features/shell/Workspace";
 import { getFramework } from "@/features/frameworks/repository";
 import { listControls } from "@/features/controls/repository";
@@ -102,22 +103,27 @@ export default async function FrameworkDetailPage({
             {fw.description && <p className="text-sm text-gray-600 max-w-3xl">{fw.description}</p>}
           </div>
 
-          {isAdmin && (
-            <form action={toggleFrameworkAction}>
-              <input type="hidden" name="id" value={fw.id} />
-              <input type="hidden" name="activate" value={fw.is_active ? "" : "true"} />
-              <button
-                type="submit"
-                className={`px-4 py-2 text-sm font-medium rounded-lg ${
-                  fw.is_active
-                    ? "bg-gray-100 hover:bg-gray-200 text-gray-700"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                }`}
-              >
-                {fw.is_active ? "Deactivate" : "Activate"}
-              </button>
-            </form>
-          )}
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <form action={toggleFrameworkAction}>
+                <input type="hidden" name="id" value={fw.id} />
+                <input type="hidden" name="activate" value={fw.is_active ? "" : "true"} />
+                <button
+                  type="submit"
+                  className={`px-4 py-2 text-sm font-medium rounded-lg ${
+                    fw.is_active
+                      ? "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  }`}
+                >
+                  {fw.is_active ? "Deactivate" : "Activate"}
+                </button>
+              </form>
+            )}
+            {canDeleteOrArchive(user.role) && (
+              <DeleteEntityButton entityType="framework" entityId={fw.id} label="Framework" />
+            )}
+          </div>
         </div>
 
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm pt-3 border-t border-gray-100">

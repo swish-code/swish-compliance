@@ -1,4 +1,4 @@
-import { Pool, type QueryResultRow } from "pg";
+import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import { env } from "@/lib/env";
 
 const isLocal = /@(localhost|127\.0\.0\.1)(:|\/|$)/.test(env.DATABASE_URL);
@@ -43,4 +43,28 @@ export async function execute(
 ): Promise<number> {
   const res = await pool.query(sql, params);
   return res.rowCount ?? 0;
+}
+
+/**
+ * Run a callback inside a BEGIN/COMMIT block on a single dedicated
+ * connection, rolling back on any error. Needed whenever a caller has to
+ * make several writes that must all succeed or all be undone together —
+ * queryAll/queryOne/execute each grab a connection from the pool
+ * independently, so they can't share one transaction.
+ */
+export async function withTransaction<T>(
+  fn: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }

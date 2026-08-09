@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import NotificationBell from "@/features/notifications/NotificationBell";
+import BackButton from "./BackButton";
 
 /**
  * Page shell used by every (authed) page. On desktop the sidebar sits in
@@ -24,7 +25,8 @@ export default function Workspace({
     <main className="app-main md:ml-64 min-h-screen pt-14 md:pt-0">
       <header className="flex justify-between items-start px-4 sm:px-8 md:px-12 pt-5 md:pt-8 pb-4 md:pb-6 gap-4 md:gap-6">
         <div className="flex-1 min-w-0">
-          <div className="text-[10px] md:text-xs uppercase tracking-widest text-gray-500 mb-1.5 md:mb-2 truncate">
+          <BackButton />
+          <div className="text-[10px] md:text-xs uppercase tracking-widest text-gray-500 mb-1.5 md:mb-2 mt-1.5 truncate">
             {section}
           </div>
           <h1 className="text-lg md:text-xl font-semibold text-gray-900 truncate">

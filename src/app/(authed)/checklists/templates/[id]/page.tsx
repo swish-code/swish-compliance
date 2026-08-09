@@ -13,6 +13,7 @@ import {
   recordChecklistItemAnswerAction,
 } from "@/features/checklists/actions";
 import DeleteItemButton from "@/features/checklists/DeleteItemButton";
+import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 import { CHECKLIST_CATEGORIES_FALLBACK } from "@/features/checklists/types";
 import { listOptions } from "@/features/config/repository";
 
@@ -51,6 +52,16 @@ export default async function ChecklistTemplateDetailPage({
       sessionLabel="Session"
       userLabel={user.displayName}
     >
+      {canDelete && (
+        <div className="flex justify-end mb-3">
+          <DeleteEntityButton
+            entityType="checklist_template"
+            entityId={tpl.id}
+            label="Checklist template"
+          />
+        </div>
+      )}
+
       {/* Header — compact read-only card by default. Admins get an inline
           "Edit" toggle (native <details>, closed by default) so the form
           isn't sitting open all the time. */}
