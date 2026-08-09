@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth/guard";
+import { requireUser, canEditSops } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { listDomains } from "@/features/domains/repository";
 import { getUserScope } from "@/lib/auth/access";
@@ -20,15 +20,25 @@ export default async function DomainsPage() {
       sessionLabel="Session"
       userLabel={user.displayName}
     >
-      <p className="text-sm text-gray-600 mb-4">
-        Domains group frameworks by responsibility area. Click a domain to see
-        every framework that belongs to it.
-      </p>
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <p className="text-sm text-gray-600 max-w-2xl">
+          Domains group frameworks by responsibility area. Click a domain to
+          see every framework that belongs to it.
+        </p>
+        {canEditSops(user.role) && (
+          <Link
+            href="/domains/new"
+            className="shrink-0 inline-flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            + New Domain
+          </Link>
+        )}
+      </div>
 
       {domains.length === 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center text-gray-400">
-          No domains seeded yet. Once the database migration runs, the three
-          base domains (IT / Cybersecurity, HR, ECS Compliance) appear here.
+          No domains yet. Create the first one to start grouping frameworks by
+          responsibility area.
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth/guard";
+import { requireUser, canEditSops } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
 import { listFrameworks } from "@/features/frameworks/repository";
 import { getUserScope, getScopedIds } from "@/lib/auth/access";
@@ -32,6 +32,17 @@ export default async function FrameworksPage() {
       sessionLabel="Session"
       userLabel={user.displayName}
     >
+      {canEditSops(user.role) && (
+        <div className="flex justify-end mb-4">
+          <Link
+            href="/frameworks/new"
+            className="inline-flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            + New Framework
+          </Link>
+        </div>
+      )}
+
       {/* Active frameworks */}
       <h3 className="text-xs uppercase tracking-widest text-gray-500 mb-3">
         Active frameworks

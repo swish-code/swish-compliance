@@ -76,10 +76,16 @@ export default async function DomainDetailPage({
 
       {/* Frameworks table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-700">
             Frameworks ({frameworks.length})
           </h3>
+          <Link
+            href={`/frameworks/new?domain=${domain.id}`}
+            className="text-sm text-brand-700 hover:underline"
+          >
+            + New Framework
+          </Link>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">

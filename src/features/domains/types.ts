@@ -11,6 +11,8 @@ export type Domain = {
   framework_count: number;
 };
 
+export type DomainOption = { id: number; code: string; name: string };
+
 export type DomainFramework = {
   id: number;
   code: string;
