@@ -104,21 +104,46 @@ async function main() {
     for (const [i, r] of rows.domains.entries()) {
       const code = txt(r['DOMAIN ID']);
       const res = await client.query(
-        `INSERT INTO domains (code, name, description, sort_order, is_active, department_id)
-         VALUES ($1, $2, $3, $4, TRUE, $5)
+        `INSERT INTO domains (code, name, description, sort_order, is_active, department_id,
+                              review_scope_method, evidence_to_obtain, review_focus, how_to_verify)
+         VALUES ($1, $2, $3, $4, TRUE, $5, $6, $7, $8, $9)
          ON CONFLICT (code) DO UPDATE SET
            name = EXCLUDED.name, description = EXCLUDED.description,
            sort_order = EXCLUDED.sort_order, is_active = TRUE,
-           department_id = EXCLUDED.department_id
+           department_id = EXCLUDED.department_id,
+           review_scope_method = EXCLUDED.review_scope_method,
+           evidence_to_obtain = EXCLUDED.evidence_to_obtain,
+           review_focus = EXCLUDED.review_focus,
+           how_to_verify = EXCLUDED.how_to_verify
          RETURNING id`,
         [
           code, txt(r['DOMAIN NAME']), txt(r['DOMAIN DESCRIPTION']), i + 1,
           deptByCode.get(txt(r['DEPARTMENT ID'])) ?? null,
+          txt(r['DOMAIN REVIEW SCOPE & METHOD']),
+          txt(r['GO TO / OBTAIN']),
+          txt(r['REVIEW']),
+          txt(r['HOW TO VERIFY']),
         ],
       );
       domainIdByCode.set(code, res.rows[0].id);
     }
     log.push(`domains: ${domainIdByCode.size}`);
+
+    // The SOPs sheet carries no DEPARTMENT ID of its own (it only has CODE,
+    // TITLE and the 10 structured sections), so derive each SOP's owning
+    // department from the FIRST domain that names it. A SOP can span
+    // several departments — CC-SOP-004 covers a Customer Care domain and an
+    // Operations one — and sops.department_id is singular, so "first domain
+    // listed" is the deliberate tie-break. The full multi-department
+    // picture lives in domains.department_id, which is what audit scoping
+    // actually walks.
+    const sopDeptByCode = new Map();
+    for (const r of rows.domains) {
+      const sopCode = txt(r['RELATED SOP CODE']);
+      if (!sopCode || sopDeptByCode.has(sopCode)) continue;
+      const deptId = deptByCode.get(txt(r['DEPARTMENT ID']));
+      if (deptId) sopDeptByCode.set(sopCode, deptId);
+    }
 
     // SOPs ---------------------------------------------------------------
     const sopIdByCode = new Map();
@@ -165,8 +190,11 @@ async function main() {
            appendices = EXCLUDED.appendices, signatures_approval = EXCLUDED.signatures_approval
          RETURNING id`,
         [
-          code, txt(r.TITLE), txt(r.DESCRIPTION), versionOf(r.VERSION),
-          deptByCode.get(txt(r['DEPARTMENT ID'])),
+          // DESCRIPTION isn't a column in this workbook revision; PURPOSE is
+          // the closest thing to a one-line summary, and it's what the SOP
+          // list/cards need to show something meaningful.
+          code, txt(r.TITLE), txt(r.DESCRIPTION) ?? txt(r.PURPOSE), versionOf(r.VERSION),
+          sopDeptByCode.get(code) ?? deptByCode.get(txt(r['DEPARTMENT ID'])) ?? null,
           IMPORT_USER_ID,
           effective, review,
           txt(r.PURPOSE), txt(r.SCOPE), txt(r['PROCESS FLOW']),
@@ -284,13 +312,25 @@ async function main() {
     // Checklist items (Questions) -----------------------------------------
     const itemIdByCode = new Map();
     const sortByTemplate = new Map();
+    const questionItemIds = [];
     for (const r of rows.questions) {
-      const code = txt(r['QUESTION ID']);
       const tplCode = txt(r['CHECKLIST ID']);
       const templateId = tplIdByCode.get(tplCode);
-      if (!templateId) throw new Error(`Question ${code} references unknown checklist ${tplCode}`);
+      if (!templateId) {
+        throw new Error(`Question references unknown checklist ${tplCode}`);
+      }
       const sort = (sortByTemplate.get(tplCode) ?? 0) + 1;
       sortByTemplate.set(tplCode, sort);
+
+      // QUESTION ID is optional in the workbook (this revision leaves the
+      // whole column blank). checklist_items.code is UNIQUE and is the
+      // natural key everything else joins on, so synthesise a stable one
+      // from the checklist code + position: same row order in, same code
+      // out, which keeps the import idempotent. Blank codes would instead
+      // make every re-run insert a fresh duplicate row, because Postgres
+      // treats each NULL as distinct for uniqueness.
+      const code = txt(r['QUESTION ID'])
+        ?? `${tplCode}-Q${String(sort).padStart(2, '0')}`;
 
       const guidance = joinLines(
         txt(r['ANSWER TYPE']) ? `Answer type: ${txt(r['ANSWER TYPE'])}` : null,
@@ -315,6 +355,9 @@ async function main() {
         ],
       );
       itemIdByCode.set(code, res.rows[0].id);
+      // Remember which item this row produced so the test↔item links below
+      // don't have to re-derive the (possibly synthesised) code.
+      questionItemIds.push({ testCode: txt(r['TEST ID']), itemId: res.rows[0].id });
     }
     log.push(`checklist_items: ${itemIdByCode.size}`);
 
@@ -369,9 +412,8 @@ async function main() {
 
     // Test <-> checklist item links ---------------------------------------
     let links = 0;
-    for (const r of rows.questions) {
-      const checkId = checkIdByCode.get(txt(r['TEST ID']));
-      const itemId = itemIdByCode.get(txt(r['QUESTION ID']));
+    for (const { testCode, itemId } of questionItemIds) {
+      const checkId = checkIdByCode.get(testCode);
       if (!checkId || !itemId) continue;
       await client.query(
         `INSERT INTO check_checklist_items (check_id, checklist_item_id)

@@ -74,6 +74,44 @@ export default async function DomainDetailPage({
         </div>
       </div>
 
+      {/* How to audit this domain — the workbook's review guidance
+          (migration 049). Only rendered for domains that carry it; hand-
+          created domains have none. */}
+      {(domain.review_scope_method ||
+        domain.evidence_to_obtain ||
+        domain.review_focus ||
+        domain.how_to_verify) && (
+        <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm mb-4">
+          <summary className="cursor-pointer list-none px-6 py-4 flex items-center gap-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 rounded-2xl">
+            <span className="transition-transform group-open:rotate-90 text-gray-400">
+              ▶
+            </span>
+            How to audit this domain
+          </summary>
+          <div className="px-6 pb-5 pt-1 border-t border-gray-100 space-y-4">
+            {(
+              [
+                ["Review scope & method", domain.review_scope_method],
+                ["Go to / obtain", domain.evidence_to_obtain],
+                ["Review", domain.review_focus],
+                ["How to verify", domain.how_to_verify],
+              ] as const
+            )
+              .filter(([, value]) => value)
+              .map(([label, value]) => (
+                <div key={label}>
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1.5">
+                    {label}
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                    {value}
+                  </p>
+                </div>
+              ))}
+          </div>
+        </details>
+      )}
+
       {/* Frameworks table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">

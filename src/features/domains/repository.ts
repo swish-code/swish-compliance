@@ -5,6 +5,7 @@ import type { Domain, DomainFramework } from "./types";
 const DOMAIN_SELECT = `
   d.id, d.code, d.name, d.description, d.sort_order,
   d.is_active, d.created_at, d.updated_at,
+  d.review_scope_method, d.evidence_to_obtain, d.review_focus, d.how_to_verify,
   (SELECT COUNT(*)::int FROM frameworks f WHERE f.domain_id = d.id) AS framework_count
 FROM domains d
 `;
