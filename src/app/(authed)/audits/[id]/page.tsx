@@ -9,13 +9,15 @@ import {
   listAuditAttachments,
 } from "@/features/audits/repository";
 import {
-  submitAuditAction,
   closeAuditAction,
   reopenAuditAction,
   cancelAuditAction,
 } from "@/features/audits/actions";
 import AuditQuestionRow from "@/features/audits/AuditQuestionRow";
 import AuditAttachments from "@/features/audits/AuditAttachments";
+import { AuditAnswersProvider } from "@/features/audits/AuditAnswersContext";
+import AuditSaveAllBar from "@/features/audits/AuditSaveAllBar";
+import AuditSubmitSection from "@/features/audits/AuditSubmitSection";
 import {
   AUDIT_STATUS_LABEL,
   AUDIT_STATUS_TONE,
@@ -80,6 +82,24 @@ export default async function AuditDetailPage({
   const uniqueFailed = new Set(
     scopeRows.filter((r) => r.response === "fail").map((r) => r.item_id)
   ).size;
+
+  // Seed for the shared answer state — one entry per DISTINCT item, for the
+  // same reason the progress counters dedupe: audit_responses is unique on
+  // (audit_id, item_id), so a question shown under three tests is still a
+  // single answer. Feeding duplicates in would make the "answered X of Y"
+  // counter overcount.
+  const answerSeed = [
+    ...new Map(
+      scopeRows.map((r) => [
+        r.item_id,
+        {
+          itemId: r.item_id,
+          response: r.response as "pass" | "fail" | "na" | null,
+          notes: r.notes,
+        },
+      ])
+    ).values(),
+  ];
 
   const headerTitle = audit.template_name
     ? `${audit.template_name} — #${audit.id}`
@@ -286,7 +306,15 @@ export default async function AuditDetailPage({
         </div>
       )}
 
-      {/* ─── Tests → Checklists → Questions ─── */}
+      {/* ─── Tests → Checklists → Questions ───
+          Everything from here down shares one AuditAnswersProvider so a
+          single "Save all answers" bar (and Submit) can write every
+          answer at once, instead of a Save per question. */}
+      <AuditAnswersProvider
+        auditId={audit.id}
+        canEdit={isOpen}
+        initial={answerSeed}
+      >
       {grouped.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center text-gray-400">
           No tests linked to this audit. Pick tests when creating the audit
@@ -372,15 +400,11 @@ export default async function AuditDetailPage({
                       {tpl.items.map((item, idx) => (
                         <AuditQuestionRow
                           key={`${test.test_id}-${item.item_id}`}
-                          auditId={audit.id}
                           itemId={item.item_id}
                           question={item.question}
                           weight={item.weight}
                           isCritical={item.is_critical}
                           itemNo={idx + 1}
-                          initialResponse={item.response}
-                          initialNotes={item.notes}
-                          canEdit={isOpen}
                         />
                       ))}
                     </tbody>
@@ -389,6 +413,9 @@ export default async function AuditDetailPage({
               ))}
             </div>
           ))}
+
+          {/* The one Save for every question above. */}
+          <AuditSaveAllBar />
         </div>
       )}
 
@@ -406,68 +433,21 @@ export default async function AuditDetailPage({
             canEdit={canEdit}
           />
 
-          <form action={submitAuditAction} className="space-y-4">
-            <input type="hidden" name="id" value={audit.id} />
-            <textarea
-              name="summary"
-              placeholder="Summary / overall observations (optional)"
-              rows={3}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            {/* No longer a choice — every failed question ALWAYS becomes a
-                CAPA on submit (compliance-score rule). Kept as an info box
-                so the auditor knows what will happen. */}
-            <div className="flex items-start gap-3 p-3 border border-amber-200 bg-amber-50 rounded-lg text-sm">
-              <span className="mt-0.5">⚠️</span>
-              <div>
-                <div className="font-medium text-amber-900">
-                  Every failed question becomes a CAPA automatically
-                </div>
-                <div className="text-xs text-amber-700">
-                  On submit, each fail opens an unassigned corrective action
-                  (critical questions → critical severity). They count
-                  against the compliance score until resolved.
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className="bg-brand-700 hover:bg-brand-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium"
-              >
-                Submit audit
-              </button>
-              <Link
-                href="/audits"
-                className="text-sm text-gray-500 hover:text-gray-700 self-center"
-              >
-                Back to list
-              </Link>
-              {/* Cancel — available while the audit is in_progress
-                  (gate also enforced server-side). Confirmed twice via
-                  the native form prompt since cancel is one-way. */}
-              {(isOwner ||
-                user.role === "admin" ||
-                user.role === "compliance" ||
-                user.role === "business_excellence") && (
-                <form
-                  action={cancelAuditAction}
-                  className="ml-auto"
-                >
-                  <input type="hidden" name="id" value={audit.id} />
-                  <button
-                    type="submit"
-                    className="text-sm text-red-600 hover:text-red-700 border border-red-200 hover:border-red-300 bg-white px-4 py-2 rounded-lg"
-                    title="Mark this audit as cancelled. Cannot be undone."
-                  >
-                    Cancel audit
-                  </button>
-                </form>
-              )}
-            </div>
-          </form>
+          {/* Submit flushes any unsaved answers first — see
+              AuditSubmitSection. */}
+          <AuditSubmitSection
+            auditId={audit.id}
+            canCancel={
+              isOwner ||
+              user.role === "admin" ||
+              user.role === "compliance" ||
+              user.role === "business_excellence"
+            }
+            cancelAction={cancelAuditAction}
+          />
         </div>
       )}
+      </AuditAnswersProvider>
 
       {/* Cancelled banner — replaces all action UI. */}
       {audit.status === "cancelled" && (

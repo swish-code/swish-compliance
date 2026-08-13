@@ -1,78 +1,48 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { saveResponseAction } from "./actions";
-
-type Response = "pass" | "fail" | "na" | null;
+import { useAuditAnswers, type AnswerValue } from "./AuditAnswersContext";
 
 /**
- * Lightweight per-question row matching the checklist-template UX
- * (Yes / No / N/A radios + optional Note + Save). Used in the new
- * Test → Checklist → Questions audit layout.
+ * One question row: Yes / No / N/A radios plus an optional note.
  *
- * The same item can appear under multiple tests (one row each) — they
- * all share the same audit_responses row because the UNIQUE constraint
- * is (audit_id, item_id). Saving one updates the underlying response;
- * the others reflect it on next page refresh.
+ * Deliberately has no Save button of its own — every answer lives in
+ * AuditAnswersProvider and is written by the single "Save all answers"
+ * bar at the end of the questions (or by Submit, which flushes first).
+ * An unsaved row is marked instead, so the auditor can see at a glance
+ * what the next save will write.
  */
 export default function AuditQuestionRow({
-  auditId,
   itemId,
   question,
   weight,
   isCritical,
   itemNo,
-  initialResponse,
-  initialNotes,
-  canEdit,
 }: {
-  auditId: number;
   itemId: number;
   question: string;
   weight: number;
   isCritical: boolean;
   itemNo: number;
-  initialResponse: Response;
-  initialNotes: string | null;
-  canEdit: boolean;
 }) {
-  const [response, setResponse] = useState<Response>(initialResponse);
-  const [notes, setNotes] = useState(initialNotes ?? "");
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { get, setResponse, setNotes, canEdit, dirtyIds, saving } =
+    useAuditAnswers();
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!response) {
-      setError("Pick Yes, No, or N/A first.");
-      return;
-    }
-    setError(null);
-    const fd = new FormData();
-    fd.append("audit_id", String(auditId));
-    fd.append("item_id", String(itemId));
-    fd.append("response", response);
-    fd.append("notes", notes);
-    startTransition(async () => {
-      try {
-        await saveResponseAction(fd);
-        setSavedAt(Date.now());
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to save.");
-      }
-    });
-  }
+  const { response, notes } = get(itemId);
+  const isDirty = dirtyIds.includes(itemId);
 
   // pass/fail/na is the DB enum; Yes/No/N/A is what the auditor reads.
-  const labels: Record<NonNullable<Response>, string> = {
+  const labels: Record<AnswerValue, string> = {
     pass: "Yes",
     fail: "No",
     na: "N/A",
   };
 
   return (
-    <tr className="border-t border-gray-100 align-top">
+    <tr
+      className={`border-t border-gray-100 align-top ${
+        isDirty ? "bg-amber-50/40" : ""
+      }`}
+    >
       <td className="px-3 py-2.5 text-xs text-gray-400 w-12">{itemNo}</td>
       <td className="px-3 py-2.5">
         <div className="text-sm text-gray-900">
@@ -88,7 +58,7 @@ export default function AuditQuestionRow({
         ×{weight}
       </td>
       <td className="px-3 py-2.5 min-w-[360px]">
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-start gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
             {(["pass", "fail", "na"] as const).map((r) => (
               <label
@@ -108,8 +78,8 @@ export default function AuditQuestionRow({
                   name={`r-${itemId}`}
                   value={r}
                   checked={response === r}
-                  onChange={() => setResponse(r)}
-                  disabled={!canEdit || pending}
+                  onChange={() => setResponse(itemId, r)}
+                  disabled={!canEdit || saving}
                   className="accent-brand-700"
                 />
                 <span className="font-medium">{labels[r]}</span>
@@ -119,27 +89,17 @@ export default function AuditQuestionRow({
           <input
             type="text"
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={(e) => setNotes(itemId, e.target.value)}
             placeholder="Note (optional)"
-            disabled={!canEdit || pending}
+            disabled={!canEdit || saving}
             className="flex-1 min-w-[140px] px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
           />
-          {canEdit && (
-            <button
-              type="submit"
-              disabled={pending}
-              className="bg-brand-700 hover:bg-brand-800 text-white px-3 py-1 rounded text-xs font-medium disabled:opacity-60"
-            >
-              {pending ? "…" : "Save"}
-            </button>
+          {isDirty && (
+            <span className="text-[10px] text-amber-700 whitespace-nowrap">
+              Unsaved
+            </span>
           )}
-          {savedAt && !pending && !error && (
-            <span className="text-[10px] text-emerald-600 self-center">Saved ✓</span>
-          )}
-          {error && (
-            <span className="text-[10px] text-red-600 self-center">{error}</span>
-          )}
-        </form>
+        </div>
       </td>
     </tr>
   );

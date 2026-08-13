@@ -66,6 +66,19 @@ const ResponseSchema = z.object({
   notes: z.string().trim().optional().nullable(),
 });
 
+const BulkResponsesSchema = z.object({
+  auditId: z.coerce.number().int().positive(),
+  answers: z
+    .array(
+      z.object({
+        itemId: z.coerce.number().int().positive(),
+        response: z.enum(["pass", "fail", "na"]),
+        notes: z.string().trim(),
+      })
+    )
+    .max(2000),
+});
+
 const SubmitSchema = z.object({
   id: z.coerce.number().int().positive(),
   summary: z.string().optional().nullable(),
@@ -361,6 +374,55 @@ export async function saveResponseAction(formData: FormData) {
     update_evidence: updateEvidence || explicitRemove,
   });
   revalidatePath(`/audits/${parsed.audit_id}`);
+}
+
+/**
+ * Save many answers at once — what the single "Save all answers" button
+ * (and Submit) calls, instead of one round-trip per question.
+ *
+ * Evidence columns are deliberately untouched here: this path only ever
+ * carries the Yes/No/N-A choice and the note. Per-question evidence is
+ * uploaded through saveResponseAction, and upsertResponse's
+ * update_evidence flag defaults to false so a bulk save can't wipe a file
+ * the auditor already attached.
+ *
+ * The auth/status gate is checked ONCE for the audit rather than per
+ * answer — they all belong to the same audit, so re-fetching it for each
+ * row would just be N identical queries.
+ */
+export async function saveResponsesBulkAction(input: {
+  auditId: number;
+  answers: { itemId: number; response: "pass" | "fail" | "na"; notes: string }[];
+}): Promise<{ ok: true; saved: number } | { ok: false; error: string }> {
+  const user = await requireUser();
+
+  const parsed = BulkResponsesSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Some answers were not in a valid format." };
+  }
+
+  const audit = await getAudit(parsed.data.auditId);
+  if (!audit) return { ok: false, error: "Audit not found." };
+  try {
+    assertCanEditAudit(audit, user);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Not allowed." };
+  }
+  if (audit.status !== "in_progress") {
+    return { ok: false, error: "This audit is no longer in progress." };
+  }
+
+  for (const a of parsed.data.answers) {
+    await upsertResponse({
+      audit_id: parsed.data.auditId,
+      item_id: a.itemId,
+      response: a.response,
+      notes: a.notes || null,
+    });
+  }
+
+  revalidatePath(`/audits/${parsed.data.auditId}`);
+  return { ok: true, saved: parsed.data.answers.length };
 }
 
 export async function submitAuditAction(formData: FormData) {
