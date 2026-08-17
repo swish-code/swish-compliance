@@ -21,6 +21,10 @@ const IMPORT_USER_ID = Number(process.env.IMPORT_USER_ID ?? 1);
 const wb = XLSX.readFile(WORKBOOK);
 const sheet = (name) => XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
 
+// 'HTML Maps' is optional — earlier workbook revisions don't have it.
+const sheetIfPresent = (name) =>
+  wb.Sheets[name] ? sheet(name) : [];
+
 const rows = {
   departments: sheet('Departments'),
   domains: sheet('Domains'),
@@ -29,7 +33,14 @@ const rows = {
   controls: sheet('Controls'),
   tests: sheet('Tests & Evidences'),
   checklists: sheet('Checklists'),
-  questions: sheet('Questions'),
+  // Trailing blank rows are common in these sheets (Excel keeps the row
+  // once it has been touched). A row with no checklist and no question
+  // text carries nothing, and would otherwise abort the import on the
+  // "unknown checklist null" guard below.
+  questions: sheet('Questions').filter(
+    (r) => r['CHECKLIST ID'] || r['QUESTION'],
+  ),
+  htmlMaps: sheetIfPresent('HTML Maps'),
 };
 
 const txt = (v) => {
@@ -145,6 +156,28 @@ async function main() {
       if (deptId) sopDeptByCode.set(sopCode, deptId);
     }
 
+    // The HTML Maps sheet points each SOP at its review artifact on Drive.
+    // A SOP can have several rows — the primary map plus "Supporting Source
+    // Artifact" ones — so prefer the plain 'Current' row and only fall back
+    // to a supporting artifact when that's all there is. Per Rule 14 this
+    // is a derived review artifact, not the original SOP document, so it
+    // populates file_url (an external link) and nothing claims it is the
+    // source file.
+    const sopUrlByCode = new Map();
+    for (const r of rows.htmlMaps) {
+      const code = txt(r['SOP CODE']);
+      const url = txt(r['DRIVE URL']);
+      if (!code || !url) continue;
+      const isPrimary = (txt(r.STATUS) ?? '').toLowerCase() === 'current';
+      const existing = sopUrlByCode.get(code);
+      if (!existing || (isPrimary && !existing.isPrimary)) {
+        sopUrlByCode.set(code, { url, isPrimary });
+      }
+    }
+    if (rows.htmlMaps.length) {
+      log.push(`HTML review maps: ${sopUrlByCode.size} SOPs with a Drive URL`);
+    }
+
     // SOPs ---------------------------------------------------------------
     const sopIdByCode = new Map();
     const sopReviewNotes = [];
@@ -167,14 +200,16 @@ async function main() {
            owner_id, created_by, approved_by, approved_at,
            effective_date, review_date,
            purpose, scope, process_flow, roles_responsibilities, inputs_outputs,
-           tools_forms, kpis, ownership_review, appendices, signatures_approval
+           tools_forms, kpis, ownership_review, appendices, signatures_approval,
+           file_url
          ) VALUES (
            $1,$2,$3,$4,'approved',
            NULL,$5,TRUE,FALSE,
            $6,$6,$6,NOW(),
            $7,$8,
            $9,$10,$11,$12,$13,
-           $14,$15,$16,$17,$18
+           $14,$15,$16,$17,$18,
+           $19
          )
          ON CONFLICT (code) DO UPDATE SET
            title = EXCLUDED.title, description = EXCLUDED.description,
@@ -187,7 +222,9 @@ async function main() {
            roles_responsibilities = EXCLUDED.roles_responsibilities,
            inputs_outputs = EXCLUDED.inputs_outputs, tools_forms = EXCLUDED.tools_forms,
            kpis = EXCLUDED.kpis, ownership_review = EXCLUDED.ownership_review,
-           appendices = EXCLUDED.appendices, signatures_approval = EXCLUDED.signatures_approval
+           appendices = EXCLUDED.appendices, signatures_approval = EXCLUDED.signatures_approval,
+           -- Don't blank an existing link when the workbook has no map row.
+           file_url = COALESCE(EXCLUDED.file_url, sops.file_url)
          RETURNING id`,
         [
           // DESCRIPTION isn't a column in this workbook revision; PURPOSE is
@@ -202,6 +239,7 @@ async function main() {
           txt(r['TOOLS & FORMS']), txt(r['KEY PERFORMANCE INDICATORS (KPIS)']),
           ownership, txt(r['APPENDICES - READY TO USE FORMS']),
           txt(r['SIGNATURES & APPROVAL']),
+          sopUrlByCode.get(code)?.url ?? null,
         ],
       );
       sopIdByCode.set(code, res.rows[0].id);
@@ -260,13 +298,14 @@ async function main() {
       );
       const res = await client.query(
         `INSERT INTO controls (code, name, description, framework_id, category, is_active,
-                               health_status, requirement, clause_reference)
-         VALUES ($1,$2,$3,$4,$5,TRUE,'unknown',$6,$7)
+                               health_status, requirement, clause_reference, reviewer_prompt)
+         VALUES ($1,$2,$3,$4,$5,TRUE,'unknown',$6,$7,$8)
          ON CONFLICT (code) DO UPDATE SET
            name = EXCLUDED.name, description = EXCLUDED.description,
            framework_id = EXCLUDED.framework_id, category = EXCLUDED.category,
            is_active = TRUE, requirement = EXCLUDED.requirement,
-           clause_reference = EXCLUDED.clause_reference
+           clause_reference = EXCLUDED.clause_reference,
+           reviewer_prompt = EXCLUDED.reviewer_prompt
          RETURNING id`,
         [
           code, txt(r['CONTROL NAME']), description,
@@ -274,6 +313,7 @@ async function main() {
           txt(r['CONTROL OWNER']),
           txt(r['CONTROL OBJECTIVE']),
           txt(r['RELATED PROCESS STEP']),
+          txt(r['REVIEWER PROMPT / WHAT TO ASK FOR']),
         ],
       );
       ctlIdByCode.set(code, res.rows[0].id);

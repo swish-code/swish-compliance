@@ -45,6 +45,7 @@ const UpdateSchema = z.object({
   requirement: z.string().trim().optional().nullable(),
   clause_reference: z.string().trim().optional().nullable(),
   evidence_required: z.string().trim().optional().nullable(),
+  reviewer_prompt: z.string().trim().optional().nullable(),
 });
 
 /**
@@ -65,7 +66,8 @@ export async function updateControlAction(formData: FormData) {
     `UPDATE controls SET
        name = $2, description = $3, category = $4, control_type = $5,
        frequency = $6, risk_weight = $7::int, owner_user_id = $8::int,
-       requirement = $9, clause_reference = $10, evidence_required = $11
+       requirement = $9, clause_reference = $10, evidence_required = $11,
+       reviewer_prompt = $12
      WHERE id = $1::int`,
     [
       parsed.id, parsed.name, parsed.description ?? null,
@@ -74,6 +76,7 @@ export async function updateControlAction(formData: FormData) {
       parsed.owner_user_id ?? null,
       parsed.requirement ?? null, parsed.clause_reference ?? null,
       parsed.evidence_required ?? null,
+      parsed.reviewer_prompt ?? null,
     ]
   );
   await execute(

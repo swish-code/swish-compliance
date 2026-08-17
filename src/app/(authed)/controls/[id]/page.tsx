@@ -344,6 +344,17 @@ export default async function ControlDetailPage({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Reviewer prompt · what to ask for
+                </label>
+                <textarea
+                  name="reviewer_prompt"
+                  rows={3}
+                  defaultValue={ctrl.reviewer_prompt ?? ""}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
             </div>
             <div className="flex justify-end">
               <button
@@ -355,6 +366,20 @@ export default async function ControlDetailPage({
             </div>
           </form>
         </details>
+      )}
+
+      {/* What the reviewer asks for first — deliberately its own panel
+          above the GRC details, since it's the opening move of a review
+          rather than reference material read afterwards. */}
+      {ctrl.reviewer_prompt && (
+        <div className="bg-blue-50/60 rounded-xl border border-blue-200 p-4 mb-3">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-blue-700 font-semibold mb-1.5">
+            Reviewer prompt · what to ask for
+          </div>
+          <div className="text-sm text-gray-800 whitespace-pre-wrap">
+            {ctrl.reviewer_prompt}
+          </div>
+        </div>
       )}
 
       {/* GRC details panel — requirement, clause, evidence */}

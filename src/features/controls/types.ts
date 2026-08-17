@@ -23,6 +23,8 @@ export type Control = {
   requirement: string | null;
   clause_reference: string | null;
   evidence_required: string | null;
+  /** What the reviewer should ask the department for (migration 050). */
+  reviewer_prompt: string | null;
   risk_weight: number | null;
   control_type: string | null;
   frequency: string | null;
