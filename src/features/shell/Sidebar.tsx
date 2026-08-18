@@ -433,50 +433,41 @@ export default function Sidebar({
     ];
   }
 
-  // Open / closed state per section. Initialized empty for SSR; the effect
-  // below opens the section that contains the active page (or restores the
-  // user's preference from localStorage).
-  const [openMap, setOpenMap] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    sections.forEach((s) => {
-      init[s.label] = false;
-    });
-    return init;
-  });
+  // Accordion: at most ONE section open at a time (user spec 2026-08-17—
+  // opening a section like Workspace closes whichever other one was open).
+  // Initialized null for SSR; the effect below opens the section that
+  // contains the active page (or restores the user's last choice from
+  // localStorage).
+  const [openSection, setOpenSection] = useState<string | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
     setHasMounted(true);
-    let stored: Record<string, boolean> = {};
+    // The section holding the current page always wins — a stale
+    // "last opened" section from localStorage shouldn't hide where the
+    // user actually is.
+    const active = sections.find((s) => sectionHasActiveItem(pathname, s));
+    if (active) {
+      setOpenSection(active.label);
+      return;
+    }
     try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) stored = JSON.parse(raw);
+      const stored = localStorage.getItem(LS_KEY);
+      if (stored && sections.some((s) => s.label === stored)) {
+        setOpenSection(stored);
+      }
     } catch {
       // ignore
     }
-    const next: Record<string, boolean> = {};
-    sections.forEach((s) => {
-      if (typeof stored[s.label] === "boolean") {
-        next[s.label] = stored[s.label];
-      } else {
-        // First time → open the section that contains the active page
-        next[s.label] = sectionHasActiveItem(pathname, s);
-      }
-    });
-    // Always make sure the section with the active item is open so the user
-    // can see where they are.
-    sections.forEach((s) => {
-      if (sectionHasActiveItem(pathname, s)) next[s.label] = true;
-    });
-    setOpenMap(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   function toggleSection(label: string) {
-    setOpenMap((prev) => {
-      const next = { ...prev, [label]: !prev[label] };
+    setOpenSection((prev) => {
+      const next = prev === label ? null : label;
       try {
-        localStorage.setItem(LS_KEY, JSON.stringify(next));
+        if (next) localStorage.setItem(LS_KEY, next);
+        else localStorage.removeItem(LS_KEY);
       } catch {
         // ignore
       }
@@ -484,24 +475,15 @@ export default function Sidebar({
     });
   }
 
-  function expandAll() {
-    const next: Record<string, boolean> = {};
-    sections.forEach((s) => (next[s.label] = true));
-    setOpenMap(next);
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(next));
-    } catch { /* ignore */ }
-  }
+  const anyOpen = openSection !== null;
   function collapseAll() {
-    const next: Record<string, boolean> = {};
-    sections.forEach((s) => (next[s.label] = false));
-    setOpenMap(next);
+    setOpenSection(null);
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify(next));
-    } catch { /* ignore */ }
+      localStorage.removeItem(LS_KEY);
+    } catch {
+      // ignore
+    }
   }
-
-  const anyOpen = Object.values(openMap).some(Boolean);
 
   // Desktop collapse — hides the whole rail so the content spans full width.
   // Persisted, and mirrored onto <html data-sidebar-collapsed> so the CSS
@@ -645,14 +627,19 @@ export default function Sidebar({
             Navigation
           </span>
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={anyOpen ? collapseAll : expandAll}
-              className="text-[10px] text-white/70 hover:text-white transition-colors uppercase tracking-wider"
-              aria-label={anyOpen ? "Collapse all sections" : "Expand all sections"}
-            >
-              {anyOpen ? "Collapse all" : "Expand all"}
-            </button>
+            {/* Accordion mode: at most one section is ever open, so
+                there's nothing to "expand all" — only collapse the one
+                that's open, and only show the control when that's true. */}
+            {anyOpen && (
+              <button
+                type="button"
+                onClick={collapseAll}
+                className="text-[10px] text-white/70 hover:text-white transition-colors uppercase tracking-wider"
+                aria-label="Collapse section"
+              >
+                Collapse
+              </button>
+            )}
             {/* Desktop-only: hide the whole rail */}
             <button
               type="button"
@@ -674,7 +661,7 @@ export default function Sidebar({
             <CollapsibleSection
               key={section.label}
               section={section}
-              isOpen={hasMounted ? openMap[section.label] : sectionHasActiveItem(pathname, section)}
+              isOpen={hasMounted ? openSection === section.label : sectionHasActiveItem(pathname, section)}
               onToggle={() => toggleSection(section.label)}
               pathname={pathname}
             />

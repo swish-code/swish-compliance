@@ -56,9 +56,15 @@ export default function DomainAccordionGrid({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
-                    {d.code}
-                  </div>
+                  {/* Code + description only make sense while browsing the
+                      collapsed grid — once a card is open its own detail
+                      content (SOPs, departments, frameworks) already
+                      identifies it, so both would just be repeated. */}
+                  {!isOpen && (
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
+                      {d.code}
+                    </div>
+                  )}
                   <h3 className="text-lg font-bold text-gray-900 group-hover:text-brand-700">
                     {d.name}
                   </h3>
@@ -91,27 +97,20 @@ export default function DomainAccordionGrid({
 
             {isOpen && (
               <div className="border-t border-gray-100 p-6 pt-5 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  {d.description && (
-                    <p className="text-sm text-gray-600 max-w-3xl">
-                      {d.description}
-                    </p>
+                <div className="flex items-center justify-end gap-3">
+                  <Link
+                    href={`/domains/${d.id}`}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    Open full page ↗
+                  </Link>
+                  {canDelete && (
+                    <DeleteEntityButton
+                      entityType="domain"
+                      entityId={d.id}
+                      label="Domain"
+                    />
                   )}
-                  <div className="shrink-0 flex items-center gap-3">
-                    <Link
-                      href={`/domains/${d.id}`}
-                      className="text-xs text-gray-400 hover:text-gray-600"
-                    >
-                      Open full page ↗
-                    </Link>
-                    {canDelete && (
-                      <DeleteEntityButton
-                        entityType="domain"
-                        entityId={d.id}
-                        label="Domain"
-                      />
-                    )}
-                  </div>
                 </div>
 
                 {(d.review_scope_method ||
@@ -225,7 +224,11 @@ export default function DomainAccordionGrid({
                   </table>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* items-start: without it, CSS grid stretches both cells
+                    to match the taller one, so opening the SOPs <details>
+                    visually drags Departments open too even though it's
+                    still collapsed. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
                   <details className="group bg-white rounded-xl border border-gray-200">
                     <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                       <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
