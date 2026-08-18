@@ -1,17 +1,47 @@
 import Link from "next/link";
-import { requireUser, canEditSops } from "@/lib/auth/guard";
+import { requireUser, canEditSops, canDeleteOrArchive } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
-import { listDomains } from "@/features/domains/repository";
+import {
+  listDomains,
+  listFrameworksByDomain,
+  listSopsByDomain,
+} from "@/features/domains/repository";
 import { getUserScope } from "@/lib/auth/access";
+import DomainAccordionGrid from "@/features/domains/DomainAccordionGrid";
 
 export default async function DomainsPage() {
   const user = await requireUser();
-  const allDomains = await listDomains();
+  const [allDomains, frameworksByDomain, sopsByDomain] = await Promise.all([
+    listDomains(),
+    listFrameworksByDomain(),
+    listSopsByDomain(),
+  ]);
+
   // Access scoping: non-privileged users only see their mapped domains.
   const scope = await getUserScope(user.id, user.role);
   const domains = scope.full
     ? allDomains
     : allDomains.filter((d) => scope.domainIds.includes(d.id));
+
+  // Assemble each domain's expand-in-place data once here, server-side,
+  // so DomainAccordionGrid only ever renders — it never fetches.
+  const domainsWithDetail = domains.map((d) => {
+    const sops = sopsByDomain.get(d.id) ?? [];
+    const departments = [
+      ...new Map(
+        sops
+          .filter((s) => s.department_id != null)
+          .map((s) => [s.department_id as number, { id: s.department_id as number, name: s.department_name! }])
+      ).values(),
+    ].sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      ...d,
+      frameworks: frameworksByDomain.get(d.id) ?? [],
+      sops,
+      departments,
+    };
+  });
 
   return (
     <Workspace
@@ -23,7 +53,7 @@ export default async function DomainsPage() {
       <div className="flex items-start justify-between gap-4 mb-4">
         <p className="text-sm text-gray-600 max-w-2xl">
           Domains group frameworks by responsibility area. Click a domain to
-          see every framework that belongs to it.
+          expand it and see every framework, SOP and department linked to it.
         </p>
         {canEditSops(user.role) && (
           <Link
@@ -42,43 +72,11 @@ export default async function DomainsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {domains.map((d) => (
-          <Link
-            key={d.id}
-            href={`/domains/${d.id}`}
-            className="group bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-brand-300 transition-all p-6 flex flex-col gap-3"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
-                  {d.code}
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 group-hover:text-brand-700">
-                  {d.name}
-                </h3>
-              </div>
-              <div className="shrink-0 w-12 h-12 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center font-bold text-sm">
-                {d.framework_count}
-              </div>
-            </div>
-            {d.description && (
-              <p className="text-sm text-gray-600 line-clamp-3">
-                {d.description}
-              </p>
-            )}
-            <div className="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-gray-100 mt-auto">
-              <span>
-                {d.framework_count} framework
-                {d.framework_count === 1 ? "" : "s"}
-              </span>
-              <span className="text-brand-700 group-hover:underline">
-                View frameworks →
-              </span>
-            </div>
-          </Link>
-        ))}
-      </div>
+      <DomainAccordionGrid
+        domains={domainsWithDetail}
+        canEdit={canEditSops(user.role)}
+        canDelete={canDeleteOrArchive(user.role)}
+      />
     </Workspace>
   );
 }

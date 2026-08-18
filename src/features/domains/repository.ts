@@ -65,3 +65,55 @@ export async function listFrameworksForDomain(
     [domainId]
   );
 }
+
+export type DomainFrameworkRow = DomainFramework & { domain_id: number };
+export type DomainSopRow = {
+  domain_id: number;
+  id: number;
+  code: string | null;
+  title: string;
+  department_id: number | null;
+  department_name: string | null;
+};
+
+/**
+ * Frameworks and SOPs for every domain in one round trip each, keyed by
+ * domain_id. Backs the domains list page's inline accordion — expanding a
+ * card needs no extra fetch, everything is already in hand.
+ */
+export async function listFrameworksByDomain(): Promise<
+  Map<number, DomainFramework[]>
+> {
+  const rows = await queryAll<DomainFrameworkRow>(
+    `SELECT id, domain_id, code, name, description, category, is_active
+     FROM frameworks
+     WHERE domain_id IS NOT NULL
+     ORDER BY code, name`
+  );
+  const map = new Map<number, DomainFramework[]>();
+  for (const { domain_id, ...fw } of rows) {
+    (map.get(domain_id) ?? map.set(domain_id, []).get(domain_id)!).push(fw);
+  }
+  return map;
+}
+
+/**
+ * SOPs per domain via home_domain_id (migration 045: each SOP has exactly
+ * ONE home domain, derived from its owning department) — same rule the
+ * per-domain detail page already applies, just for every domain at once.
+ */
+export async function listSopsByDomain(): Promise<Map<number, DomainSopRow[]>> {
+  const rows = await queryAll<DomainSopRow>(
+    `SELECT s.home_domain_id AS domain_id, s.id, s.code, s.title,
+            d.id AS department_id, d.name AS department_name
+     FROM sops s
+     LEFT JOIN departments d ON d.id = s.department_id
+     WHERE s.home_domain_id IS NOT NULL
+     ORDER BY s.code NULLS LAST, s.title`
+  );
+  const map = new Map<number, DomainSopRow[]>();
+  for (const r of rows) {
+    (map.get(r.domain_id) ?? map.set(r.domain_id, []).get(r.domain_id)!).push(r);
+  }
+  return map;
+}
