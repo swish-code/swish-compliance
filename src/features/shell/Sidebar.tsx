@@ -9,7 +9,7 @@ import ThemeToggle from "./ThemeToggle";
 
 type IconKey =
   | "my-work" | "roadmap" | "tests" | "reports"
-  | "sops" | "checklists" | "audits" | "capa"
+  | "sops" | "checklists" | "questions" | "audits" | "capa"
   | "domains" | "frameworks" | "controls" | "policies"
   | "admin-home" | "users" | "brands" | "departments" | "org-units" | "config" | "audit-logs"
   | "logout" | "chevron-right" | "menu" | "close";
@@ -61,6 +61,13 @@ const ICON_PATHS: Record<IconKey, React.ReactNode> = {
     <>
       <circle cx="11" cy="11" r="8" />
       <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </>
+  ),
+  questions: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.1 9a3 3 0 0 1 5.82 1c0 2-3 2-3 4" />
+      <line x1="12" y1="17.5" x2="12.01" y2="17.5" />
     </>
   ),
   capa: (
@@ -208,17 +215,29 @@ const WORKSPACE: Section = {
   ],
 };
 
-// Order + labels per user spec (2026-07-09): Tests moved here from
-// Workspace, SOPs renamed "SOPs & Policies", standalone Policies removed.
-const COMPLIANCE: Section = {
-  label: "Compliance",
+// Navigation mirrors the GRC lifecycle (user spec 2026-08-17):
+//   Compliance Library — master data, "what we must comply with",
+//     ordered as the hierarchy itself: SOP -> Domain -> Framework ->
+//     Control -> Test -> Checklist -> Question.
+//   Assurance — execution & monitoring: Audits, Corrective Actions.
+// Previously both lived in one "Compliance" section; splitting them
+// matches the two-part structure the rest of the org already thinks in.
+const COMPLIANCE_LIBRARY: Section = {
+  label: "Compliance Library",
   items: [
-    { href: "/domains", label: "Domains", icon: "domains" },
     { href: "/sops", label: "SOPs & Policies", icon: "sops" },
+    { href: "/domains", label: "Domains", icon: "domains" },
     { href: "/frameworks", label: "Frameworks", icon: "frameworks" },
     { href: "/controls", label: "Controls", icon: "controls" },
     { href: "/tests", label: "Tests", icon: "tests" },
     { href: "/checklists/templates", label: "Checklists", icon: "checklists" },
+    { href: "/questions", label: "Questions", icon: "questions" },
+  ],
+};
+
+const ASSURANCE: Section = {
+  label: "Assurance",
+  items: [
     { href: "/audits", label: "Audits", icon: "audits" },
     { href: "/capa", label: "Corrective Actions", icon: "capa" },
   ],
@@ -232,7 +251,7 @@ const ADMINISTRATION: Section = {
     { href: "/admin/brands", label: "Brands", icon: "brands" },
     { href: "/admin/departments", label: "Departments", icon: "departments" },
     { href: "/admin/org-units", label: "Org Units", icon: "org-units" },
-    { href: "/admin/config", label: "Config", icon: "config" },
+    { href: "/admin/config", label: "System Configuration", icon: "config" },
     { href: "/admin/audit-logs", label: "Audit Logs", icon: "audit-logs" },
   ],
 };
@@ -399,7 +418,7 @@ export default function Sidebar({
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileOpen]);
 
-  let sections: Section[] = [WORKSPACE, COMPLIANCE];
+  let sections: Section[] = [WORKSPACE, COMPLIANCE_LIBRARY, ASSURANCE];
   if (role === "admin") sections.push(ADMINISTRATION);
 
   // Department managers get a trimmed nav (user spec): their workspace +
@@ -408,8 +427,8 @@ export default function Sidebar({
     sections = [
       WORKSPACE,
       {
-        label: "Compliance",
-        items: COMPLIANCE.items.filter((it) => it.href === "/capa"),
+        label: "Assurance",
+        items: ASSURANCE.items.filter((it) => it.href === "/capa"),
       },
     ];
   }

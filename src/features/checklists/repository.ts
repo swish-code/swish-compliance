@@ -44,6 +44,67 @@ export async function listTemplateItems(templateId: number): Promise<ChecklistIt
   );
 }
 
+export type QuestionRow = {
+  id: number;
+  code: string | null;
+  section: string | null;
+  question: string;
+  weight: number;
+  is_critical: boolean;
+  template_id: number;
+  template_code: string | null;
+  template_name: string;
+  /** Every control this question's checklist is wired to, via its tests
+   *  (check_checklist_items -> checks.control_id). A question can surface
+   *  under more than one control when its checklist is shared. */
+  control_ids: number[];
+};
+
+/**
+ * Every question across every checklist, for the standalone /questions
+ * page (Compliance Library's last hop: SOP -> Domain -> Framework ->
+ * Control -> Test -> Checklist -> Question). control_ids is what access
+ * scoping filters on — the same trimming the Tests page already applies
+ * to checks.control_id.
+ */
+export async function listAllQuestions(filters: {
+  search?: string;
+  templateId?: number;
+} = {}): Promise<QuestionRow[]> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  if (filters.templateId) {
+    params.push(filters.templateId);
+    conditions.push(`i.template_id = $${params.length}`);
+  }
+  if (filters.search) {
+    params.push(`%${filters.search}%`);
+    const idx = params.length;
+    conditions.push(
+      `(i.question ILIKE $${idx} OR i.code ILIKE $${idx} OR t.name ILIKE $${idx})`
+    );
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  return queryAll<QuestionRow>(
+    `SELECT
+       i.id, i.code, i.section, i.question, i.weight, i.is_critical,
+       i.template_id, t.code AS template_code, t.name AS template_name,
+       COALESCE(
+         ARRAY_AGG(DISTINCT ch.control_id) FILTER (WHERE ch.control_id IS NOT NULL),
+         '{}'
+       ) AS control_ids
+     FROM checklist_items i
+     JOIN checklist_templates t ON t.id = i.template_id
+     LEFT JOIN check_checklist_items cci ON cci.checklist_item_id = i.id
+     LEFT JOIN checks ch ON ch.id = cci.check_id
+     ${where}
+     GROUP BY i.id, t.code, t.name
+     ORDER BY t.name, i.sort_order, i.id
+     LIMIT 3000`,
+    params
+  );
+}
+
 export async function createTemplate(input: {
   code?: string | null;
   name: string;
