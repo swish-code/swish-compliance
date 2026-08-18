@@ -11,7 +11,7 @@ type IconKey =
   | "my-work" | "roadmap" | "tests" | "reports"
   | "sops" | "checklists" | "questions" | "audits" | "capa"
   | "domains" | "frameworks" | "controls" | "policies"
-  | "admin-home" | "users" | "brands" | "departments" | "org-units" | "config" | "audit-logs"
+  | "admin-home" | "users" | "brands" | "departments" | "org-units" | "config" | "audit-logs" | "import"
   | "logout" | "chevron-right" | "menu" | "close";
 
 const ICON_PATHS: Record<IconKey, React.ReactNode> = {
@@ -149,6 +149,13 @@ const ICON_PATHS: Record<IconKey, React.ReactNode> = {
       <polyline points="12 7 12 12 16 14" />
     </>
   ),
+  import: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </>
+  ),
   logout: (
     <>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -247,6 +254,7 @@ const ADMINISTRATION: Section = {
   label: "Administration",
   items: [
     { href: "/admin", label: "Admin Home", icon: "admin-home" },
+    { href: "/admin/import", label: "Import Data", icon: "import" },
     { href: "/admin/users", label: "Users", icon: "users" },
     { href: "/admin/brands", label: "Brands", icon: "brands" },
     { href: "/admin/departments", label: "Departments", icon: "departments" },

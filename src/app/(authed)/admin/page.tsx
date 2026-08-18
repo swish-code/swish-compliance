@@ -24,6 +24,13 @@ export default async function AdminHomePage() {
 
   const tiles = [
     {
+      href: "/admin/import",
+      title: "Import Data",
+      desc: "Upload a filled SOP_GRC workbook — adds SOPs, Domains, Frameworks, Controls, Tests and Questions, linked into the existing tree.",
+      value: "Preview before saving",
+      tone: "from-teal-500 to-teal-700",
+    },
+    {
       href: "/admin/users",
       title: "Users",
       desc: "Add, edit, deactivate users. Reset passwords and assign roles.",
