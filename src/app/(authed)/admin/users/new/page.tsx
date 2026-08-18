@@ -113,7 +113,7 @@ export default async function NewUserPage() {
               Create user
             </button>
             <Link
-              href="/admin/users"
+              href="/admin/config?tab=users"
               className="text-sm text-gray-500 hover:text-gray-700"
             >
               Cancel

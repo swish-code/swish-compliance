@@ -255,11 +255,9 @@ const ADMINISTRATION: Section = {
   items: [
     { href: "/admin", label: "Admin Home", icon: "admin-home" },
     { href: "/admin/import", label: "Import Data", icon: "import" },
-    { href: "/admin/users", label: "Users", icon: "users" },
-    { href: "/admin/brands", label: "Brands", icon: "brands" },
-    { href: "/admin/departments", label: "Departments", icon: "departments" },
-    { href: "/admin/org-units", label: "Org Units", icon: "org-units" },
-    { href: "/admin/config", label: "System Configuration", icon: "config" },
+    // Users, Brands, Departments and Org Units are tabs on this one page
+    // now (user spec 2026-08-17) — no separate nav entries for each.
+    { href: "/admin/config", label: "Config", icon: "config" },
     { href: "/admin/audit-logs", label: "Audit Logs", icon: "audit-logs" },
   ],
 };

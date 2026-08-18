@@ -12,6 +12,7 @@ export default async function AdminHomePage() {
     active_users: number;
     brands: number;
     departments: number;
+    org_units: number;
     audit_events: number;
   }>(
     `SELECT
@@ -19,8 +20,19 @@ export default async function AdminHomePage() {
        (SELECT COUNT(*)::int FROM users WHERE is_active)       AS active_users,
        (SELECT COUNT(*)::int FROM brands WHERE is_active)      AS brands,
        (SELECT COUNT(*)::int FROM departments WHERE is_active) AS departments,
+       (SELECT COUNT(*)::int FROM org_units WHERE is_active)   AS org_units,
        (SELECT COUNT(*)::int FROM audit_logs)                  AS audit_events`
   );
+
+  // Users, Brands, Departments, Org Units and Config all live under one
+  // tabbed page now (user spec 2026-08-17) — one tile linking there, with
+  // a mini stat row instead of four separate tiles.
+  const configStats = [
+    { label: "Users", value: `${stats?.active_users ?? 0}/${stats?.users ?? 0}`, tab: "users" },
+    { label: "Brands", value: stats?.brands ?? 0, tab: "brands" },
+    { label: "Departments", value: stats?.departments ?? 0, tab: "departments" },
+    { label: "Org Units", value: stats?.org_units ?? 0, tab: "org-units" },
+  ] as const;
 
   const tiles = [
     {
@@ -29,34 +41,6 @@ export default async function AdminHomePage() {
       desc: "Upload a filled SOP_GRC workbook — adds SOPs, Domains, Frameworks, Controls, Tests and Questions, linked into the existing tree.",
       value: "Preview before saving",
       tone: "from-teal-500 to-teal-700",
-    },
-    {
-      href: "/admin/users",
-      title: "Users",
-      desc: "Add, edit, deactivate users. Reset passwords and assign roles.",
-      value: `${stats?.active_users ?? 0} active / ${stats?.users ?? 0} total`,
-      tone: "from-emerald-500 to-emerald-700",
-    },
-    {
-      href: "/admin/brands",
-      title: "Brands",
-      desc: "Manage the company's restaurant and service brands.",
-      value: `${stats?.brands ?? 0} active`,
-      tone: "from-indigo-500 to-indigo-700",
-    },
-    {
-      href: "/admin/departments",
-      title: "Departments",
-      desc: "Manage the company's functional departments.",
-      value: `${stats?.departments ?? 0} active`,
-      tone: "from-amber-500 to-amber-700",
-    },
-    {
-      href: "/admin/config",
-      title: "Config",
-      desc: "Edit dropdown options used across the app (categories, etc.).",
-      value: "System-wide lookup lists",
-      tone: "from-purple-500 to-purple-700",
     },
     {
       href: "/admin/audit-logs",
@@ -79,6 +63,41 @@ export default async function AdminHomePage() {
       sessionLabel="Session"
       userLabel={user.displayName}
     >
+      {/* Config — Users, Brands, Departments, Org Units, Config in one
+          tabbed page. Full-width so the stat row has room to breathe. */}
+      <Link
+        href="/admin/config"
+        className="group block bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md hover:border-gray-300 transition-all mb-5"
+      >
+        <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-purple-700" />
+        <div className="p-6">
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Config</h2>
+              <p className="text-sm text-gray-500 leading-relaxed mt-1">
+                Users, Brands, Departments, Org Units and dropdown options —
+                all in one tabbed page.
+              </p>
+            </div>
+            <span className="text-gray-400 group-hover:text-gray-600 transition-colors shrink-0">
+              →
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+            {configStats.map((s) => (
+              <div key={s.tab} className="bg-gray-50 rounded-lg px-3 py-2.5 text-center">
+                <div className="text-lg font-semibold text-gray-900 tabular-nums">
+                  {s.value}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 mt-0.5">
+                  {s.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Link>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
         {tiles.map((t) => (
           <Link

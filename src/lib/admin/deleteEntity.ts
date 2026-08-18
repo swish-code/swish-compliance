@@ -56,7 +56,7 @@ export const ENTITY_LIST_PATH: Record<EntityType, string> = {
   checklist_template: "/checklists/templates",
   audit: "/audits",
   capa: "/capa",
-  brand: "/admin/brands",
+  brand: "/admin/config?tab=brands",
 };
 
 export type ImpactRow = {

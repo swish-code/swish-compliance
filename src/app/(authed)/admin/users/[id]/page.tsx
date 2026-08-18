@@ -125,7 +125,7 @@ export default async function EditUserPage({
             >
               Save changes
             </button>
-            <Link href="/admin/users" className="text-sm text-gray-500 hover:text-gray-700">
+            <Link href="/admin/config?tab=users" className="text-sm text-gray-500 hover:text-gray-700">
               Back to list
             </Link>
           </div>

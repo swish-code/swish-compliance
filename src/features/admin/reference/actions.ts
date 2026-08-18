@@ -77,8 +77,8 @@ function makeActions(table: Table, revalidatePathStr: string) {
   };
 }
 
-const brandActions = makeActions("brands", "/admin/brands");
-const deptActions = makeActions("departments", "/admin/departments");
+const brandActions = makeActions("brands", "/admin/config");
+const deptActions = makeActions("departments", "/admin/config");
 
 export async function createBrandAction(fd: FormData) { return brandActions.create(fd); }
 export async function renameBrandAction(fd: FormData) { return brandActions.rename(fd); }

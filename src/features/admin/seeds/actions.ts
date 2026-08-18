@@ -293,7 +293,7 @@ export async function seedPlaybookDepartmentsAction(): Promise<void> {
 
   if (toCreate.length === 0) {
     // Nothing to do — every department is already present.
-    revalidatePath("/admin/departments");
+    revalidatePath("/admin/config");
     return;
   }
 
@@ -323,7 +323,7 @@ export async function seedPlaybookDepartmentsAction(): Promise<void> {
     );
   }
 
-  revalidatePath("/admin/departments");
+  revalidatePath("/admin/config");
   revalidatePath("/sops");
 }
 

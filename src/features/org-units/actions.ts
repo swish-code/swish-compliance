@@ -60,7 +60,7 @@ export async function createOrgUnitAction(formData: FormData) {
      VALUES ($1, $2, 'create', 'org_unit', $3, $4)`,
     [user.id, user.email, id, JSON.stringify({ code: parsed.code, name: parsed.name })]
   );
-  revalidatePath("/admin/org-units");
+  revalidatePath("/admin/config");
 }
 
 export async function updateOrgUnitAction(formData: FormData) {
@@ -74,7 +74,7 @@ export async function updateOrgUnitAction(formData: FormData) {
     is_active: raw.is_active === "on" || raw.is_active === "true",
   });
   await updateOrgUnit(parsed.id, parsed);
-  revalidatePath("/admin/org-units");
+  revalidatePath("/admin/config");
 }
 
 export async function deleteOrgUnitAction(formData: FormData) {
@@ -87,5 +87,5 @@ export async function deleteOrgUnitAction(formData: FormData) {
      VALUES ($1, $2, 'delete', 'org_unit', $3, $4)`,
     [user.id, user.email, parsed.id, JSON.stringify({ id: parsed.id })]
   );
-  revalidatePath("/admin/org-units");
+  revalidatePath("/admin/config");
 }

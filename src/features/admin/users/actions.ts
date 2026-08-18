@@ -105,7 +105,7 @@ export async function createUserAction(formData: FormData) {
     severity: "info",
   });
 
-  revalidatePath("/admin/users");
+  revalidatePath("/admin/config");
   redirect(`/admin/users/${newId}`);
 }
 
@@ -174,7 +174,7 @@ export async function updateUserAction(formData: FormData) {
     });
   }
 
-  revalidatePath("/admin/users");
+  revalidatePath("/admin/config");
   revalidatePath(`/admin/users/${parsed.id}`);
 }
 

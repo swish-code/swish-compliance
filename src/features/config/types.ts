@@ -21,6 +21,7 @@ export type ConfigKind = {
   usedOn: string[];          // user-facing labels of pages where this appears
   editable: boolean;         // false = informational only (locked in code)
   managedAt?: string;        // for locked / external lists, where to go instead
+  managedAtLabel?: string;   // human label for the managedAt link, e.g. "Brands tab"
   note?: string;
 };
 
@@ -62,7 +63,8 @@ export const CONFIG_KINDS: ConfigKind[] = [
       "Brands appear in many dropdowns (SOPs, Audits, CAPAs, Users, Controls…).",
     usedOn: ["Everywhere with a Brand filter or selector"],
     editable: false,
-    managedAt: "/admin/brands",
+    managedAt: "/admin/config?tab=brands",
+    managedAtLabel: "the Brands tab",
   },
   {
     key: "_departments",
@@ -71,7 +73,8 @@ export const CONFIG_KINDS: ConfigKind[] = [
       "Departments are referenced in SOPs, Audits, CAPAs, Users and reports.",
     usedOn: ["Everywhere with a Department filter or selector"],
     editable: false,
-    managedAt: "/admin/departments",
+    managedAt: "/admin/config?tab=departments",
+    managedAtLabel: "the Departments tab",
   },
   {
     key: "_roles",
