@@ -7,14 +7,8 @@ import MultiSelect from "@/features/admin/users/MultiSelect";
 
 export default async function NewUserPage() {
   const me = await requireAdmin();
-  const brands = await queryAll<{ id: number; name: string }>(
-    `SELECT id, name FROM brands WHERE is_active ORDER BY name`
-  );
   const departments = await queryAll<{ id: number; name: string }>(
     `SELECT id, name FROM departments WHERE is_active ORDER BY name`
-  );
-  const domains = await queryAll<{ id: number; name: string }>(
-    `SELECT id, name FROM domains WHERE is_active ORDER BY name`
   );
 
   return (
@@ -97,29 +91,18 @@ export default async function NewUserPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MultiSelect
-              name="brand_ids"
-              label="Brands (multi-select)"
-              options={brands}
-              placeholder="Select one or more brands…"
-            />
-            <MultiSelect
-              name="department_ids"
-              label="Departments (multi-select)"
-              options={departments}
-              placeholder="Select one or more departments…"
-            />
-            <MultiSelect
-              name="domain_ids"
-              label="Domains (multi-select)"
-              options={domains}
-              placeholder="Select one or more domains…"
-            />
-          </div>
+          <MultiSelect
+            name="department_ids"
+            label="Departments (multi-select)"
+            options={departments}
+            placeholder="Select one or more departments…"
+          />
           <p className="text-xs text-gray-500 -mt-2">
-            Department + Domain define what a non-privileged user can see. Leave empty for
-            admin / compliance / viewer roles that don&apos;t need scoping.
+            Department defines what a non-privileged user can see — their
+            domains, frameworks, controls and tests all follow from it
+            automatically. Brands are unrestricted unless assigned
+            elsewhere. Leave empty for admin / compliance / viewer roles
+            that don&apos;t need scoping.
           </p>
 
           <div className="flex items-center gap-3 pt-2">

@@ -52,9 +52,12 @@ export default async function NewAuditPage() {
       loadScopeGraph(),
     ]);
 
-  const brands = scope.full
-    ? allBrands
-    : allBrands.filter((b) => scope.brandIds.includes(b.id));
+  // Empty brandIds means no restriction (every brand in scope), not "no
+  // brands visible" — see the doc comment on UserScope.brandIds.
+  const brands =
+    scope.full || scope.brandIds.length === 0
+      ? allBrands
+      : allBrands.filter((b) => scope.brandIds.includes(b.id));
   const departments = scope.full
     ? allDepartments
     : allDepartments.filter((d) => scope.departmentIds.includes(d.id));

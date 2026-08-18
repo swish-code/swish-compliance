@@ -20,17 +20,9 @@ export default async function EditUserPage({
   const u = await getUserById(Number(id));
   if (!u) notFound();
 
-  const brands = await queryAll<{ id: number; name: string }>(
-    `SELECT id, name FROM brands WHERE is_active OR id = ANY($1) ORDER BY name`,
-    [u.brand_ids]
-  );
   const departments = await queryAll<{ id: number; name: string }>(
     `SELECT id, name FROM departments WHERE is_active OR id = ANY($1) ORDER BY name`,
     [u.department_ids]
-  );
-  const domains = await queryAll<{ id: number; name: string }>(
-    `SELECT id, name FROM domains WHERE is_active OR id = ANY($1) ORDER BY name`,
-    [u.domain_ids]
   );
 
   const isSelf = u.id === me.id;
@@ -94,29 +86,19 @@ export default async function EditUserPage({
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MultiSelect
-              name="brand_ids"
-              label="Brands (multi-select)"
-              options={brands}
-              defaultSelected={u.brand_ids}
-              placeholder="Select brands…"
-            />
-            <MultiSelect
-              name="department_ids"
-              label="Departments (multi-select)"
-              options={departments}
-              defaultSelected={u.department_ids}
-              placeholder="Select departments…"
-            />
-            <MultiSelect
-              name="domain_ids"
-              label="Domains (multi-select)"
-              options={domains}
-              defaultSelected={u.domain_ids}
-              placeholder="Select domains…"
-            />
-          </div>
+          <MultiSelect
+            name="department_ids"
+            label="Departments (multi-select)"
+            options={departments}
+            defaultSelected={u.department_ids}
+            placeholder="Select departments…"
+          />
+          <p className="text-xs text-gray-500 -mt-2">
+            Department defines what a non-privileged user can see — their
+            domains, frameworks, controls and tests all follow from it
+            automatically. Brands are unrestricted unless assigned
+            elsewhere.
+          </p>
 
           <div>
             <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer ${isSelf ? "opacity-60 cursor-not-allowed" : ""}`}>

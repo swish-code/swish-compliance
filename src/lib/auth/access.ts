@@ -22,12 +22,30 @@ export type UserScope = {
   full: boolean;
   departmentIds: number[];
   domainIds: number[];
+  /** Empty means NO restriction — every brand is in scope — not "no
+   *  brands visible". Only a non-empty list narrows it. Callers must
+   *  branch on `.length === 0`, not use it as a plain filter set. */
   brandIds: number[];
 };
 
 /**
  * Resolve a user's access scope from the mapping tables. Full-visibility
  * roles short-circuit (no filtering). One round-trip.
+ *
+ * Domain scope is no longer assigned by hand (user spec 2026-08-17): the
+ * user admin UI dropped its Domains picker, so domainIds is derived
+ * automatically from departmentIds via domains.department_id — a
+ * department manager's domains follow their department the moment either
+ * changes, instead of needing a parallel manual mapping kept in sync.
+ * Any pre-existing user_domains rows still count too (belt-and-braces for
+ * data written before this change), but new grants never come from there.
+ *
+ * Brand scope works the opposite way on purpose: an EMPTY brandIds means
+ * "no brand restriction" (all brands), not "no brands visible" — see the
+ * brandIds doc comment below and the one call site that reads it
+ * (audits/new). Assigning specific brands narrows it; the admin UI no
+ * longer offers that picker either, so in practice this is always empty
+ * and always means "all".
  */
 export async function getUserScope(
   userId: number,
@@ -54,6 +72,16 @@ export async function getUserScope(
     else if (r.kind === "domain") dom.add(r.id);
     else if (r.kind === "brand") br.add(r.id);
   }
+
+  // Auto-derive domain scope from department scope.
+  if (dep.size > 0) {
+    const autoDomains = await queryAll<{ id: number }>(
+      `SELECT id FROM domains WHERE department_id = ANY($1)`,
+      [[...dep]]
+    );
+    for (const d of autoDomains) dom.add(d.id);
+  }
+
   return {
     full: false,
     departmentIds: [...dep],
