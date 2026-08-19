@@ -105,7 +105,6 @@ export default async function AuditLogsPage({
                 </td>
                 <td className="px-5 py-3 text-gray-600 text-xs">
                   {r.entity ?? "—"}
-                  {r.entity_id ? <span className="text-gray-400"> #{r.entity_id}</span> : null}
                 </td>
                 <td className="px-5 py-3 font-mono text-[11px] text-gray-500 max-w-md truncate">
                   {r.details ? JSON.stringify(r.details) : "—"}

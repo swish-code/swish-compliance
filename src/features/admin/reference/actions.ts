@@ -14,6 +14,11 @@ const ToggleSchema = z.object({
   is_active: z.string().optional(),
 });
 
+const SetManagerSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  manager_id: z.coerce.number().int().positive().optional().nullable(),
+});
+
 type Table = "brands" | "departments";
 
 async function audit(
@@ -87,3 +92,22 @@ export async function toggleBrandAction(fd: FormData) { return brandActions.togg
 export async function createDepartmentAction(fd: FormData) { return deptActions.create(fd); }
 export async function renameDepartmentAction(fd: FormData) { return deptActions.rename(fd); }
 export async function toggleDepartmentAction(fd: FormData) { return deptActions.toggle(fd); }
+
+/** Set (or clear) the department's manager — the default Auditee on any
+ *  audit created for this department. */
+export async function setDepartmentManagerAction(fd: FormData) {
+  const admin = await requireAdmin();
+  const raw = Object.fromEntries(fd.entries());
+  const parsed = SetManagerSchema.parse({
+    ...raw,
+    manager_id: raw.manager_id === "" ? null : raw.manager_id,
+  });
+  await execute(`UPDATE departments SET manager_id = $2 WHERE id = $1`, [
+    parsed.id,
+    parsed.manager_id ?? null,
+  ]);
+  await audit(admin.id, admin.email, "set_manager", "departments", parsed.id, {
+    manager_id: parsed.manager_id ?? null,
+  });
+  revalidatePath("/admin/config");
+}

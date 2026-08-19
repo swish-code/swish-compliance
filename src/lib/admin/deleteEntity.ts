@@ -325,7 +325,7 @@ export async function getDeleteImpact(
 
   return {
     exists: true,
-    title: row.title ?? `#${id}`,
+    title: row.title ?? "this record",
     rows: rows.filter((r) => r.count > 0),
     blockedReason,
   };

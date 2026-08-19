@@ -594,7 +594,7 @@ export async function assignControlCapasAction(formData: FormData) {
     ]
   );
 
-  const controlLabel = parsed.control_label || `Audit #${parsed.audit_id}`;
+  const controlLabel = parsed.control_label || "this audit";
   const capaListHref = `/capa?audit_id=${parsed.audit_id}`;
 
   if (parsed.assigned_to !== user.id) {

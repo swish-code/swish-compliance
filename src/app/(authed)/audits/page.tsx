@@ -70,7 +70,6 @@ export default async function AuditsPage({
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
-              <th className="text-left px-5 py-3 font-medium">#</th>
               <th className="text-left px-5 py-3 font-medium">Audit Scope</th>
               <th className="text-left px-5 py-3 font-medium">Brand / Dept</th>
               <th className="text-left px-5 py-3 font-medium">Location</th>
@@ -83,14 +82,13 @@ export default async function AuditsPage({
           <tbody>
             {audits.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-5 py-12 text-center text-gray-400">
+                <td colSpan={7} className="px-5 py-12 text-center text-gray-400">
                   No audits yet. Click <span className="font-medium text-brand-700">+ New Audit</span> to start one.
                 </td>
               </tr>
             )}
             {audits.map((a) => (
               <tr key={a.id} className="border-t border-gray-100 hover:bg-gray-50">
-                <td className="px-5 py-3 font-mono text-xs text-gray-400">#{a.id}</td>
                 <td className="px-5 py-3">
                   {/* Two render paths depending on how the audit was
                       created:
@@ -103,7 +101,8 @@ export default async function AuditsPage({
                     href={`/audits/${a.id}`}
                     className="font-medium text-brand-700 hover:underline"
                   >
-                    {a.control_name ?? a.framework_name ?? a.template_name ?? `Audit #${a.id}`}
+                    {a.control_name ?? a.framework_name ?? a.template_name ??
+                      `Audit — ${a.department_name ?? "Unscoped"} (${new Date(a.audit_date).toLocaleDateString()})`}
                   </Link>
                   {(a.domain_name || a.framework_code || a.test_count > 0) ? (
                     <div className="text-[11px] text-gray-500 mt-0.5 truncate max-w-md">

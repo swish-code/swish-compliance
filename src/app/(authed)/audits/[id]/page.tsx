@@ -101,9 +101,10 @@ export default async function AuditDetailPage({
     ).values(),
   ];
 
+  const auditFallbackLabel = `Audit — ${audit.department_name ?? "Unscoped"} (${new Date(audit.audit_date).toLocaleDateString()})`;
   const headerTitle = audit.template_name
-    ? `${audit.template_name} — #${audit.id}`
-    : `Audit #${audit.id}`;
+    ? `${audit.template_name} — ${audit.department_name ?? "Unscoped"}`
+    : auditFallbackLabel;
 
   return (
     <Workspace

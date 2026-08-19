@@ -21,13 +21,25 @@ export default async function NewAuditPage() {
   const scope = await getUserScope(user.id, user.role);
   const scopedIds = await getScopedIds(scope);
 
-  const [allBrands, allDepartments, policies, assignees, fullGraph] =
+  const [allBrands, allDepartments, policies, assignees, reviewerUsers, fullGraph] =
     await Promise.all([
       queryAll<{ id: number; name: string }>(
         `SELECT id, name FROM brands WHERE is_active ORDER BY name`
       ),
-      queryAll<{ id: number; name: string }>(
-        `SELECT id, name FROM departments WHERE is_active ORDER BY name`
+      // Only departments that have a manager set are shown further down,
+      // but we need every active department + its manager here so the
+      // "has an approved SOP" filter (below) and the auditee default
+      // both have what they need.
+      queryAll<{
+        id: number;
+        name: string;
+        manager_id: number | null;
+        manager_name: string | null;
+      }>(
+        `SELECT d.id, d.name, d.manager_id, u.display_name AS manager_name
+         FROM departments d
+         LEFT JOIN users u ON u.id = d.manager_id
+         WHERE d.is_active ORDER BY d.name`
       ),
       // Policies = approved SOPs. An audit is always run against a
       // published policy, never a draft.
@@ -43,6 +55,18 @@ export default async function NewAuditPage() {
          ORDER BY code NULLS LAST, title
          LIMIT 500`
       ),
+      // Assigned Auditor is limited to the roles that actually conduct
+      // audits (user spec 2026-08-19) — auditors plus the two reviewer
+      // teams who also run them in practice.
+      queryAll<{ id: number; display_name: string; role: string }>(
+        `SELECT id, display_name, role
+         FROM users
+         WHERE is_active = TRUE
+           AND role IN ('auditor', 'compliance', 'business_excellence')
+         ORDER BY role, display_name`
+      ),
+      // Reviewer / Approver keeps the full active-user list — unlike the
+      // auditor field, this one wasn't part of the role restriction spec.
       queryAll<{ id: number; display_name: string; role: string }>(
         `SELECT id, display_name, role
          FROM users
@@ -58,9 +82,19 @@ export default async function NewAuditPage() {
     scope.full || scope.brandIds.length === 0
       ? allBrands
       : allBrands.filter((b) => scope.brandIds.includes(b.id));
-  const departments = scope.full
+
+  // Audited Department only lists departments that actually have an
+  // approved SOP to audit against — otherwise picking it would just lead
+  // to an empty policy dropdown (user spec 2026-08-19).
+  const departmentIdsWithSops = new Set(
+    policies.map((p) => p.department_id).filter((id): id is number => id != null)
+  );
+  const scopedDepartments = scope.full
     ? allDepartments
     : allDepartments.filter((d) => scope.departmentIds.includes(d.id));
+  const departments = scopedDepartments.filter((d) =>
+    departmentIdsWithSops.has(d.id)
+  );
 
   // Narrow the scope graph to what this user may audit. The picker walks
   // SOP → domain → framework → control → test entirely off this graph, so
@@ -102,6 +136,7 @@ export default async function NewAuditPage() {
             action={createAuditAction}
             departments={departments}
             users={assignees}
+            reviewerUsers={reviewerUsers}
             brands={brands}
             policies={policies}
             graph={graph}

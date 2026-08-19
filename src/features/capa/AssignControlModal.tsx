@@ -81,7 +81,7 @@ export default function AssignControlModal({
     fd.append(
       "control_label",
       [control.controlCode, control.controlName].filter(Boolean).join(" ") ||
-        `Audit #${control.auditId}`
+        control.auditTitle
     );
     fd.append("severity", severity);
     fd.append("assigned_to", assignedTo);

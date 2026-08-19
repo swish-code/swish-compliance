@@ -134,7 +134,7 @@ export async function recordResultAction(formData: FormData) {
   if (parsed.status === "failing" && parsed.spawn_capa === "on") {
     const capaId = await createCapa({
       title: `Remediation: ${check?.name ?? "failing check"}`,
-      description: `Auto-generated from failing check #${parsed.check_id}.${parsed.notes ? "\n\nNote: " + parsed.notes : ""}`,
+      description: `Auto-generated from failing test "${check?.name ?? "unknown"}".${parsed.notes ? "\n\nNote: " + parsed.notes : ""}`,
       severity: "high",
       source_audit_id: null,
       source_item_id: null,

@@ -248,9 +248,6 @@ export default async function CapaPage({
                   <span className="text-gray-400 transition-transform group-open:rotate-90 select-none">
                     ▶
                   </span>
-                  <span className="font-mono text-xs bg-white border border-brand-200 text-brand-700 px-2 py-0.5 rounded">
-                    Audit #{audit.audit_id}
-                  </span>
                   {audit.framework_code && (
                     <span className="text-xs font-mono text-emerald-700">
                       {audit.framework_code}
@@ -480,8 +477,7 @@ function groupFindings(rows: AuditFinding[]): AuditGroup[] {
 
 function buildAuditTitle(audit: AuditGroup): string {
   const bits = [
-    `Audit #${audit.audit_id}`,
-    audit.framework_name ?? "",
+    audit.framework_name ?? `Audit (${new Date(audit.audit_date).toLocaleDateString()})`,
     audit.audit_brand_name ?? "",
     audit.audit_department_name ?? "",
     audit.audit_location ?? "",

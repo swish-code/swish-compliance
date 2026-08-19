@@ -52,6 +52,8 @@ export type Audit = {
   objective: string | null;
   notes: string | null;
   auditee_id: number | null;
+  auditee_custom_name: string | null;
+  /** COALESCE(auditee_custom_name, <linked user's display name>). */
   auditee_name: string | null;
   reviewer_id: number | null;
   reviewer_name: string | null;

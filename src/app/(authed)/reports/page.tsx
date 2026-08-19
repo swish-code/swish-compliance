@@ -538,9 +538,6 @@ export default async function ReportsPage() {
                       <div className="text-gray-800 truncate">
                         <span className="font-medium">{row.user_name}</span>{" "}
                         <span className="text-gray-500">{label}</span>
-                        {row.entity_id && (
-                          <span className="text-gray-400 ml-1">#{row.entity_id}</span>
-                        )}
                       </div>
                       <div className="text-[11px] text-gray-400">
                         {timeAgo(row.created_at)}

@@ -44,32 +44,6 @@ export default async function ControlDetailPage({
       )
     : null;
 
-  // Default owner rule (user spec): when no explicit owner is set, the
-  // owner is the DEPARTMENT HEAD of the department that owns this
-  // control's SOP (control → linked SOP → department → its manager).
-  const defaultOwner = !ctrl.owner_user_id
-    ? await queryOne<{ display_name: string; department_name: string }>(
-        `SELECT u.display_name, d.name AS department_name
-         FROM control_links cl
-         JOIN sops s ON s.id = cl.entity_id AND cl.entity_type = 'sop'
-         JOIN departments d ON d.id = s.department_id
-         JOIN users u ON u.department_id = d.id
-           AND u.role = 'department_manager' AND u.is_active
-         WHERE cl.control_id = $1
-         ORDER BY cl.id
-         LIMIT 1`,
-        [id]
-      )
-    : null;
-
-  // Owner dropdown options for the edit panel.
-  const allUsers = canEdit
-    ? await queryAll<{ id: number; display_name: string; role: string }>(
-        `SELECT id, display_name, role FROM users
-         WHERE is_active = TRUE ORDER BY role, display_name`
-      )
-    : [];
-
   const STANDARD_FREQUENCIES = [
     "Daily", "Weekly", "Monthly", "Quarterly", "Annual", "On demand",
   ];
@@ -192,20 +166,6 @@ export default async function ControlDetailPage({
               </Link>
             ) : "—"}
           </Field>
-          <Field label="Owner">
-            {ctrl.owner_name ? (
-              ctrl.owner_name
-            ) : defaultOwner ? (
-              <span>
-                {defaultOwner.display_name}
-                <span className="text-xs text-gray-400 ml-1">
-                  (Department Head — default)
-                </span>
-              </span>
-            ) : (
-              "—"
-            )}
-          </Field>
           <Field label="Category">{ctrl.category ?? "—"}</Field>
           <Field label="Control type">{ctrl.control_type ?? "—"}</Field>
           <Field label="Frequency">{ctrl.frequency ?? "—"}</Field>
@@ -233,6 +193,11 @@ export default async function ControlDetailPage({
           </summary>
           <form action={updateControlAction} className="px-6 pb-6 pt-2 space-y-4 border-t border-gray-100">
             <input type="hidden" name="id" value={ctrl.id} />
+            {/* Owner isn't shown in the UI anymore, but round-trip its
+                existing value so saving other fields doesn't clear it. */}
+            {ctrl.owner_user_id != null && (
+              <input type="hidden" name="owner_user_id" value={ctrl.owner_user_id} />
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
@@ -297,26 +262,6 @@ export default async function ControlDetailPage({
                   <option value="3">3 — Medium</option>
                   <option value="4">4 — High</option>
                   <option value="5">5 — Critical</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                  Owner
-                  <span className="ml-1 text-[10px] text-gray-400 normal-case">
-                    (empty = department head by default)
-                  </span>
-                </label>
-                <select
-                  name="owner_user_id"
-                  defaultValue={ctrl.owner_user_id ?? ""}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="">— Department head (default) —</option>
-                  {allUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.display_name} · {u.role}
-                    </option>
-                  ))}
                 </select>
               </div>
               <div className="md:col-span-2">
@@ -565,7 +510,7 @@ function LinkPanel({
           {links.map((l) => (
             <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
               <Link href={`${hrefBase[type]}/${l.entity_id}`} className="text-gray-800 hover:text-brand-700 hover:underline truncate">
-                {l.label ?? `#${l.entity_id}`}
+                {l.label ?? "Untitled record"}
               </Link>
               <div className="flex items-center gap-2">
                 {l.status && <span className="text-[10px] uppercase tracking-wider text-gray-500">{l.status}</span>}

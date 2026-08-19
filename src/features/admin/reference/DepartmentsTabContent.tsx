@@ -3,6 +3,7 @@ import {
   createDepartmentAction,
   renameDepartmentAction,
   toggleDepartmentAction,
+  setDepartmentManagerAction,
 } from "./actions";
 
 type Row = {
@@ -14,6 +15,8 @@ type Row = {
   division_name: string | null;
   division_code: string | null;
   parent_name: string | null;
+  manager_id: number | null;
+  manager_name: string | null;
 };
 type Staff = { department_id: number; id: number; display_name: string; role: string };
 
@@ -24,10 +27,12 @@ export default async function DepartmentsTabContent() {
   const rows = await queryAll<Row>(
     `SELECT d.id, d.name, d.code, d.is_active, d.created_at,
             dv.name AS division_name, dv.code AS division_code,
-            pd.name AS parent_name
+            pd.name AS parent_name,
+            d.manager_id, mu.display_name AS manager_name
      FROM departments d
      LEFT JOIN divisions dv ON dv.id = d.division_id
      LEFT JOIN departments pd ON pd.id = d.parent_department_id
+     LEFT JOIN users mu ON mu.id = d.manager_id
      ORDER BY dv.sort_order NULLS LAST, d.name`
   );
   // Staff mapped to each department (from the user_departments junction).
@@ -43,6 +48,13 @@ export default async function DepartmentsTabContent() {
     list.push(s);
     staffByDept.set(s.department_id, list);
   }
+  // Candidate managers: prefer department_manager role, but any active
+  // user can be picked (some departments are represented by a compliance
+  // or BE lead instead).
+  const allUsers = await queryAll<{ id: number; display_name: string; role: string }>(
+    `SELECT id, display_name, role FROM users WHERE is_active ORDER BY
+       (role = 'department_manager') DESC, display_name`
+  );
 
   return (
     <div>
@@ -75,6 +87,7 @@ export default async function DepartmentsTabContent() {
             <tr>
               <th className="text-left px-5 py-3 font-medium">Division</th>
               <th className="text-left px-5 py-3 font-medium">Name</th>
+              <th className="text-left px-5 py-3 font-medium">Manager</th>
               <th className="text-left px-5 py-3 font-medium">Staff</th>
               <th className="text-left px-5 py-3 font-medium">Status</th>
               <th className="text-right px-5 py-3 font-medium w-48">Actions</th>
@@ -83,7 +96,7 @@ export default async function DepartmentsTabContent() {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-5 py-12 text-center text-gray-400">
+                <td colSpan={6} className="px-5 py-12 text-center text-gray-400">
                   No departments yet — add the first one above.
                 </td>
               </tr>
@@ -119,6 +132,29 @@ export default async function DepartmentsTabContent() {
                   </form>
                   {row.parent_name && (
                     <div className="text-[10px] text-gray-400 mt-0.5 px-2">↳ under {row.parent_name}</div>
+                  )}
+                </td>
+                <td className="px-5 py-3">
+                  <form action={setDepartmentManagerAction} className="flex items-center gap-2">
+                    <input type="hidden" name="id" value={row.id} />
+                    <select
+                      name="manager_id"
+                      defaultValue={row.manager_id ?? ""}
+                      className="px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 max-w-[180px]"
+                    >
+                      <option value="">— None —</option>
+                      {allUsers.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.display_name} · {u.role.replace("_", " ")}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="submit" className="text-xs text-brand-700 hover:underline whitespace-nowrap">
+                      Save
+                    </button>
+                  </form>
+                  {!row.manager_id && (
+                    <div className="text-[10px] text-amber-600 mt-0.5">No manager set</div>
                   )}
                 </td>
                 <td className="px-5 py-3">

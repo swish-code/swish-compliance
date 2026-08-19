@@ -51,6 +51,7 @@ const CreateSchema = z.object({
     message: "Assigned auditor is required.",
   }),
   auditee_id: z.coerce.number().int().positive().optional().nullable(),
+  auditee_custom_name: z.string().trim().max(200).optional().nullable(),
   reviewer_id: z.coerce.number().int().positive().optional().nullable(),
   objective: z.string().trim().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
@@ -105,16 +106,19 @@ type AuditGuardActor = { id: number; role: string };
  * so a fallback chain stops the UI from rendering "Audit "null"".
  */
 function auditTitle(audit: {
-  id: number;
   template_name?: string | null;
   control_name?: string | null;
   framework_name?: string | null;
+  department_name?: string | null;
+  audit_date?: string | null;
 }): string {
   return (
     audit.template_name ||
     audit.control_name ||
     audit.framework_name ||
-    `#${audit.id}`
+    `Audit — ${audit.department_name ?? "Unscoped"}${
+      audit.audit_date ? ` (${new Date(audit.audit_date).toLocaleDateString()})` : ""
+    }`
   );
 }
 
@@ -149,6 +153,7 @@ export async function createAuditAction(formData: FormData) {
     start_at: blank(raw.start_at),
     end_at: blank(raw.end_at),
     auditee_id: blank(raw.auditee_id),
+    auditee_custom_name: blank(raw.auditee_custom_name),
     reviewer_id: blank(raw.reviewer_id),
     objective: blank(raw.objective),
     notes: blank(raw.notes),
@@ -197,7 +202,9 @@ export async function createAuditAction(formData: FormData) {
     assigned_to: parsed.assigned_to,
     auditor_id: user.id,
     scope_type: parsed.scope_type,
-    auditee_id: parsed.auditee_id,
+    // A typed-in name overrides picking a system user as the auditee.
+    auditee_id: parsed.auditee_custom_name ? null : parsed.auditee_id,
+    auditee_custom_name: parsed.auditee_custom_name,
     reviewer_id: parsed.reviewer_id,
     objective: parsed.objective,
     notes: parsed.notes,

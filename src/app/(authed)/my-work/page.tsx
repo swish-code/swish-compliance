@@ -465,13 +465,13 @@ export default async function MyWorkPage() {
             <ul className="divide-y divide-gray-100">
               {myAudits.map((a) => {
                 // Title fallback chain: template_name → control_name →
-                // framework_name → "#id". Mirrors auditTitle() in
-                // features/audits/actions.ts so my-work reads the same.
+                // framework_name → department + date. Mirrors auditTitle()
+                // in features/audits/actions.ts so my-work reads the same.
                 const title =
                   a.template_name ||
                   a.control_name ||
                   a.framework_name ||
-                  `Audit #${a.id}`;
+                  `Audit — ${a.department_name ?? "Unscoped"} (${new Date(a.audit_date).toLocaleDateString()})`;
                 // Final score for submitted/closed; live progress for
                 // in_progress. Submitted always renders a number even if
                 // score is "0", so check status, not the value.

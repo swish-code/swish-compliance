@@ -25,7 +25,8 @@ const AUDIT_SELECT = `
   a.start_at, a.end_at,
   -- SOP-first scoping + wider cast (migration 042)
   a.scope_type, a.objective, a.notes,
-  a.auditee_id,  u_ae.display_name AS auditee_name,
+  a.auditee_id,  a.auditee_custom_name,
+  COALESCE(a.auditee_custom_name, u_ae.display_name) AS auditee_name,
   a.reviewer_id, u_rv.display_name AS reviewer_name,
   -- How many tests are pinned to this audit (audit_tests rows).
   -- Used by the list page so we can render the scope summary without
@@ -244,6 +245,8 @@ export async function createAudit(input: {
   /** SOP-first scoping + the wider cast. Added in migration 042. */
   scope_type?: string | null;
   auditee_id?: number | null;
+  /** Free-text override — takes priority over auditee_id when set. */
+  auditee_custom_name?: string | null;
   reviewer_id?: number | null;
   objective?: string | null;
   notes?: string | null;
@@ -253,9 +256,9 @@ export async function createAudit(input: {
        (template_id, brand_id, department_id, location, auditor_id, audit_date,
         policy_id, framework_id, domain_id, control_id,
         start_at, end_at, assigned_to,
-        scope_type, auditee_id, reviewer_id, objective, notes)
+        scope_type, auditee_id, reviewer_id, objective, notes, auditee_custom_name)
      VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7, $8, $9, $10, $11, $12, $13,
-             $14, $15, $16, $17, $18)
+             $14, $15, $16, $17, $18, $19)
      RETURNING id`,
     [
       input.template_id ?? null,
@@ -276,6 +279,7 @@ export async function createAudit(input: {
       input.reviewer_id ?? null,
       input.objective ?? null,
       input.notes ?? null,
+      input.auditee_custom_name ?? null,
     ]
   );
   return row!.id;

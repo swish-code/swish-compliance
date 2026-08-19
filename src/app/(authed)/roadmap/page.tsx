@@ -405,9 +405,6 @@ export default async function RoadmapPage({
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-gray-500 flex-wrap">
-                      <span className="font-mono text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                        Audit #{f.audit_id}
-                      </span>
                       {f.framework_code && (
                         <span className="text-emerald-700 font-mono">
                           {f.framework_code}

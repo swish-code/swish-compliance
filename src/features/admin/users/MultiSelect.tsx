@@ -63,7 +63,7 @@ export default function MultiSelect({
             key={id}
             className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 border border-brand-200 rounded-md px-2 py-0.5 text-xs"
           >
-            {optionById.get(id) ?? `#${id}`}
+            {optionById.get(id) ?? "(inactive)"}
             <button
               type="button"
               onClick={(e) => {

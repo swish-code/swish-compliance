@@ -121,7 +121,7 @@ export default async function CapaDetailPage({
                 href={`/audits/${capa.source_audit_id}`}
                 className="text-brand-700 hover:underline"
               >
-                Audit #{capa.source_audit_id}
+                {auditor?.framework_name ?? "View source audit"} →
               </Link>
             </Field>
           )}

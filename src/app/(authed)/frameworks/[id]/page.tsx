@@ -5,10 +5,7 @@ import DeleteEntityButton from "@/features/admin/delete/DeleteEntityButton";
 import Workspace from "@/features/shell/Workspace";
 import { getFramework } from "@/features/frameworks/repository";
 import { listControls } from "@/features/controls/repository";
-import {
-  toggleFrameworkAction,
-  setFrameworkOwnerAction,
-} from "@/features/frameworks/actions";
+import { toggleFrameworkAction } from "@/features/frameworks/actions";
 import { queryAll, queryOne } from "@/lib/db";
 import { HEALTH_LABEL, HEALTH_TONE, HEALTH_DOT } from "@/features/controls/types";
 
@@ -31,32 +28,6 @@ export default async function FrameworkDetailPage({
      JOIN frameworks f ON f.domain_id = d.id WHERE f.id = $1`,
     [id]
   );
-
-  // Default owner rule (user spec): with no explicit owner, the
-  // framework's owner is the department head derived from its
-  // controls' SOPs (framework → controls → SOP → department → manager).
-  const defaultOwner = !fw.owner_user_id
-    ? await queryOne<{ display_name: string }>(
-        `SELECT u.display_name
-         FROM controls c
-         JOIN control_links cl ON cl.control_id = c.id AND cl.entity_type = 'sop'
-         JOIN sops s ON s.id = cl.entity_id
-         JOIN departments d ON d.id = s.department_id
-         JOIN users u ON u.department_id = d.id
-           AND u.role = 'department_manager' AND u.is_active
-         WHERE c.framework_id = $1
-         GROUP BY u.id, u.display_name
-         ORDER BY COUNT(*) DESC
-         LIMIT 1`,
-        [id]
-      )
-    : null;
-
-  const users = isAdmin
-    ? await queryAll<{ id: number; display_name: string }>(
-        `SELECT id, display_name FROM users WHERE is_active ORDER BY display_name`
-      )
-    : [];
 
   // Cross-references (user spec): SOPs whose home domain is this
   // framework's domain (one-home-domain-per-SOP model) + their departments.
@@ -135,43 +106,6 @@ export default async function FrameworkDetailPage({
             ) : "—"}
           </Field>
           <Field label="Controls">{fw.control_count} ({fw.active_control_count} active)</Field>
-          <Field label="Owner">
-            {isAdmin ? (
-              <form action={setFrameworkOwnerAction} className="flex items-center gap-2">
-                <input type="hidden" name="id" value={fw.id} />
-                <select
-                  name="owner_user_id"
-                  defaultValue={fw.owner_user_id ?? ""}
-                  className="px-2 py-1 text-xs border border-gray-300 rounded-md"
-                >
-                  <option value="">
-                    {defaultOwner
-                      ? `${defaultOwner.display_name} (dept head)`
-                      : "— Department head (default) —"}
-                  </option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>{u.display_name}</option>
-                  ))}
-                </select>
-                <button type="submit" className="text-xs text-brand-700 hover:underline">Save</button>
-              </form>
-            ) : fw.owner_name ? (
-              fw.owner_name
-            ) : defaultOwner ? (
-              <span>
-                {defaultOwner.display_name}
-                <span className="text-xs text-gray-500 ml-1">(Department Head — default)</span>
-              </span>
-            ) : (
-              "—"
-            )}
-            {/* owner_label is the role/team string from the source
-                spreadsheet ("IT Security / IT Manager"); coexists with
-                the user FK above. */}
-            {fw.owner_label && (
-              <div className="text-xs text-gray-500 mt-1">{fw.owner_label}</div>
-            )}
-          </Field>
           {/* Prefer audit_frequency (from migration 031) over the legacy
               review_frequency. Fall back so older imported frameworks
               that only have review_frequency still display something. */}
@@ -225,7 +159,6 @@ export default async function FrameworkDetailPage({
             <tr>
               <th className="text-left px-5 py-3 font-medium">Code</th>
               <th className="text-left px-5 py-3 font-medium">Name</th>
-              <th className="text-left px-5 py-3 font-medium">Owner</th>
               <th className="text-left px-5 py-3 font-medium">Health</th>
               <th className="text-left px-5 py-3 font-medium">Links</th>
             </tr>
@@ -233,7 +166,7 @@ export default async function FrameworkDetailPage({
           <tbody>
             {controls.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-gray-400">
+                <td colSpan={4} className="px-5 py-10 text-center text-gray-400">
                   No controls under this framework yet.
                 </td>
               </tr>
@@ -246,7 +179,6 @@ export default async function FrameworkDetailPage({
                     {c.name}
                   </Link>
                 </td>
-                <td className="px-5 py-3 text-gray-600">{c.owner_name ?? "—"}</td>
                 <td className="px-5 py-3">
                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${HEALTH_TONE[c.health_status]}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${HEALTH_DOT[c.health_status]}`} />

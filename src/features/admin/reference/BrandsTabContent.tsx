@@ -45,7 +45,6 @@ export default async function BrandsTabContent() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
-              <th className="text-left px-5 py-3 font-medium w-16">ID</th>
               <th className="text-left px-5 py-3 font-medium">Name</th>
               <th className="text-left px-5 py-3 font-medium">Status</th>
               <th className="text-right px-5 py-3 font-medium w-48">Actions</th>
@@ -54,14 +53,13 @@ export default async function BrandsTabContent() {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-5 py-12 text-center text-gray-400">
+                <td colSpan={3} className="px-5 py-12 text-center text-gray-400">
                   No brands yet — add the first one above.
                 </td>
               </tr>
             )}
             {rows.map((row) => (
               <tr key={row.id} className="border-t border-gray-100">
-                <td className="px-5 py-3 font-mono text-xs text-gray-400">{row.id}</td>
                 <td className="px-5 py-3">
                   <form action={renameBrandAction} className="flex items-center gap-2">
                     <input type="hidden" name="id" value={row.id} />
