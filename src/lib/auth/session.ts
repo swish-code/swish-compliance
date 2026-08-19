@@ -53,6 +53,26 @@ export async function authenticate(
   };
 }
 
+export type ChangePasswordResult = "ok" | "wrong_current";
+
+/** Self-service password change: verifies the current password first. */
+export async function changeOwnPassword(
+  userId: number,
+  currentPassword: string,
+  newPassword: string
+): Promise<ChangePasswordResult> {
+  const user = await queryOne<{ password_hash: string }>(
+    `SELECT password_hash FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (!user || !bcrypt.compareSync(currentPassword, user.password_hash)) {
+    return "wrong_current";
+  }
+  const hash = bcrypt.hashSync(newPassword, 10);
+  await queryOne(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, userId]);
+  return "ok";
+}
+
 /** Sign a JWT and write it to an HTTP-only cookie. */
 export async function createSession(user: SessionUser): Promise<void> {
   const token = await new SignJWT({ ...user })

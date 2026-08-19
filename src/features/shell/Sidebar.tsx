@@ -677,7 +677,10 @@ export default function Sidebar({
 
       {/* User card + sign out */}
       <div className="p-3 border-t border-white/[0.06]">
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg mb-2">
+        <Link
+          href="/account"
+          className="flex items-center gap-3 px-2 py-2 rounded-lg mb-2 hover:bg-white/[0.08] transition-colors"
+        >
           <div className="relative shrink-0">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-700 flex items-center justify-center text-white text-xs font-bold ring-1 ring-white/10 shadow">
               {initialsFrom(displayName)}
@@ -692,7 +695,7 @@ export default function Sidebar({
               {roleLabel(role)}
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* Theme toggle — segmented Light / System / Dark */}
         <div className="mb-2">
