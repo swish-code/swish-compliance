@@ -460,11 +460,14 @@ export async function submitAuditAction(formData: FormData) {
 
   // Every failed question becomes a CAPA — ALWAYS (user spec), no
   // longer behind the spawn_capa checkbox. Idempotent set-based insert;
-  // findings that already have a CAPA are skipped. The CAPAs land as
-  // 'open' / unassigned so they surface on /capa and in the compliance
-  // score until someone assigns and resolves them.
+  // findings that already have a CAPA are skipped. CAPAs land assigned
+  // to the audited department's manager (user spec) — unassigned only
+  // when that department has no manager set yet.
   if (failedItemIds.length > 0) {
-    const spawned = await autoCreateCapasForAudit(parsed.id, user.id);
+    const { count: spawned, assignedManagerIds } = await autoCreateCapasForAudit(
+      parsed.id,
+      user.id
+    );
     if (spawned > 0) {
       await execute(
         `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
@@ -473,9 +476,20 @@ export async function submitAuditAction(formData: FormData) {
           user.id,
           user.email,
           parsed.id,
-          JSON.stringify({ capa_count: spawned }),
+          JSON.stringify({ capa_count: spawned, assigned_manager_ids: assignedManagerIds }),
         ]
       );
+    }
+    for (const managerId of assignedManagerIds) {
+      await notify({
+        audience: { userIds: [managerId] },
+        actor: { id: user.id, name: user.displayName, role: user.role },
+        kind: "capa:assigned",
+        title: `📋 New corrective action(s) for your department`,
+        body: `Audit "${auditTitle(audit)}" failed one or more questions. As department manager you've been assigned to resolve them.`,
+        severity: "warning",
+        entity: { type: "audit", id: parsed.id, href: `/capa?audit_id=${parsed.id}` },
+      });
     }
   }
 

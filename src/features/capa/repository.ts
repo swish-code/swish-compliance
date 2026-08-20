@@ -406,33 +406,46 @@ export async function listBulkAssignableFindings(
  * 'medium'. Whoever later assigns the CAPA picks the real severity in
  * the assignment modal (upsert overwrites it).
  */
+/**
+ * Auto-created CAPAs land directly on the audited department's manager
+ * (departments.manager_id) — user spec: a CAPA should reach the
+ * department manager without anyone having to assign it by hand.
+ * Departments with no manager set still fall back to 'open'/unassigned.
+ */
 export async function autoCreateCapasForAudit(
   auditId: number,
   createdBy: number | null
-): Promise<number> {
-  const rows = await queryAll<{ id: number }>(
+): Promise<{ count: number; assignedManagerIds: number[] }> {
+  const rows = await queryAll<{ id: number; assigned_to: number | null }>(
     `INSERT INTO corrective_actions
        (code, title, severity, source_audit_id, source_item_id,
-        brand_id, department_id, created_by, status)
+        brand_id, department_id, assigned_to, created_by, status)
      SELECT
        'CAPA-AUD' || a.id || '-' ||
          LPAD((base.n + ROW_NUMBER() OVER (ORDER BY i.sort_order, i.id))::text, 3, '0'),
        LEFT(i.question, 250),
        CASE WHEN i.is_critical THEN 'critical' ELSE 'medium' END,
-       a.id, i.id, a.brand_id, a.department_id, $2::int, 'open'
+       a.id, i.id, a.brand_id, a.department_id, d.manager_id, $2::int,
+       CASE WHEN d.manager_id IS NOT NULL THEN 'in_progress' ELSE 'open' END
      FROM audits a
      JOIN audit_responses r ON r.audit_id = a.id AND r.response = 'fail'
      JOIN checklist_items i ON i.id = r.item_id
+     LEFT JOIN departments d ON d.id = a.department_id
      CROSS JOIN (SELECT COUNT(*)::int AS n
                  FROM corrective_actions WHERE source_audit_id = $1) base
      WHERE a.id = $1
        AND NOT EXISTS (SELECT 1 FROM corrective_actions ca
                        WHERE ca.source_audit_id = a.id
                          AND ca.source_item_id = i.id)
-     RETURNING id`,
+     RETURNING id, assigned_to`,
     [auditId, createdBy]
   );
-  return rows.length;
+  const assignedManagerIds = [
+    ...new Set(
+      rows.map((r) => r.assigned_to).filter((id): id is number => id != null)
+    ),
+  ];
+  return { count: rows.length, assignedManagerIds };
 }
 
 /** Brand/department scope of an audit — copied onto bulk-created CAPAs. */
