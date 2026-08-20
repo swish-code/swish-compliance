@@ -117,13 +117,10 @@ export default async function CapaPage({
           method="get"
           className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 text-xs"
         >
-          <input
-            type="number"
-            name="audit_id"
-            defaultValue={sp.audit_id ?? ""}
-            placeholder="Audit ID"
-            className="px-2 py-1.5 border border-gray-300 rounded"
-          />
+          {/* audit_id stays a supported query param for deep links from
+              other pages (e.g. Roadmap's "Audit" link) — just no manual
+              ID-entry box in the filter bar (user spec: no visible IDs). */}
+          {sp.audit_id && <input type="hidden" name="audit_id" value={sp.audit_id} />}
           <select
             name="status"
             defaultValue={sp.status ?? ""}

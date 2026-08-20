@@ -77,16 +77,6 @@ export const CONFIG_KINDS: ConfigKind[] = [
     managedAtLabel: "the Departments tab",
   },
   {
-    key: "_roles",
-    title: "User roles",
-    description:
-      "Roles are wired to permissions in the application code and can't be edited from the UI. Add a new role by changing the code in src/lib/auth/guard.ts.",
-    usedOn: ["Administration → Users → New / Edit user"],
-    editable: false,
-    note:
-      "Locked. Changing role names or adding new roles affects security logic across the whole app.",
-  },
-  {
     key: "_sop_status",
     title: "SOP workflow statuses",
     description:
