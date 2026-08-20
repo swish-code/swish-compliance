@@ -497,9 +497,6 @@ export default async function ReportsPage() {
                     href={`/controls/${c.id}`}
                     className="text-sm text-gray-800 hover:text-brand-700 hover:underline flex-1 truncate"
                   >
-                    {c.code && (
-                      <span className="font-mono text-xs text-gray-400 mr-2">{c.code}</span>
-                    )}
                     {c.name}
                   </Link>
                   <span

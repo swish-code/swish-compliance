@@ -58,7 +58,7 @@ export default async function ControlsPage({
           >
             <option value="">All frameworks</option>
             {frameworks.map((f) => (
-              <option key={f.id} value={f.id}>{f.code}</option>
+              <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
           <select
@@ -95,7 +95,6 @@ export default async function ControlsPage({
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
-              <th className="text-left px-5 py-3 font-medium">Code</th>
               <th className="text-left px-5 py-3 font-medium">Name</th>
               <th className="text-left px-5 py-3 font-medium">Framework</th>
               <th className="text-left px-5 py-3 font-medium">Owner</th>
@@ -106,22 +105,21 @@ export default async function ControlsPage({
           <tbody>
             {controls.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-gray-400">
+                <td colSpan={5} className="px-5 py-12 text-center text-gray-400">
                   No controls match the filter.
                 </td>
               </tr>
             )}
             {controls.map((c) => (
               <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
-                <td className="px-5 py-3 font-mono text-xs text-gray-500">{c.code ?? "—"}</td>
                 <td className="px-5 py-3">
                   <Link href={`/controls/${c.id}`} className="font-medium text-brand-700 hover:underline">
                     {c.name}
                   </Link>
                 </td>
                 <td className="px-5 py-3 text-gray-600 text-xs">
-                  {c.framework_code ? (
-                    <Link href={`/frameworks/${c.framework_id}`} className="hover:underline">{c.framework_code}</Link>
+                  {c.framework_name ? (
+                    <Link href={`/frameworks/${c.framework_id}`} className="hover:underline">{c.framework_name}</Link>
                   ) : "—"}
                 </td>
                 <td className="px-5 py-3 text-gray-600">{c.owner_name ?? "—"}</td>

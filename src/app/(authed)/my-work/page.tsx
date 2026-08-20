@@ -364,7 +364,6 @@ export default async function MyWorkPage() {
                         {s.title}
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
-                        {s.code && <span className="font-mono">{s.code}</span>}
                         {s.approved_at && (
                           <span>
                             approved {new Date(s.approved_at).toLocaleDateString()}
@@ -608,7 +607,6 @@ export default async function MyWorkPage() {
                         {s.title}
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
-                        {s.code && <span className="font-mono">{s.code}</span>}
                         <span className="capitalize">{s.status.replace(/_/g, " ")}</span>
                       </div>
                     </div>

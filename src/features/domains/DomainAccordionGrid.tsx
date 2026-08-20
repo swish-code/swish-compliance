@@ -56,15 +56,6 @@ export default function DomainAccordionGrid({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  {/* Code + description only make sense while browsing the
-                      collapsed grid — once a card is open its own detail
-                      content (SOPs, departments, frameworks) already
-                      identifies it, so both would just be repeated. */}
-                  {!isOpen && (
-                    <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
-                      {d.code}
-                    </div>
-                  )}
                   <h3 className="text-lg font-bold text-gray-900 group-hover:text-brand-700">
                     {d.name}
                   </h3>
@@ -165,7 +156,6 @@ export default function DomainAccordionGrid({
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 text-gray-600 text-[10px] uppercase tracking-wider">
                       <tr>
-                        <th className="text-left px-4 py-2 font-medium w-32">Code</th>
                         <th className="text-left px-4 py-2 font-medium">Name</th>
                         <th className="text-left px-4 py-2 font-medium w-28">Category</th>
                         <th className="text-left px-4 py-2 font-medium w-20">Status</th>
@@ -174,7 +164,7 @@ export default function DomainAccordionGrid({
                     <tbody>
                       {d.frameworks.length === 0 && (
                         <tr>
-                          <td colSpan={4} className="px-4 py-8 text-center text-gray-400 text-sm">
+                          <td colSpan={3} className="px-4 py-8 text-center text-gray-400 text-sm">
                             No frameworks linked to this domain yet.
                           </td>
                         </tr>
@@ -186,9 +176,6 @@ export default function DomainAccordionGrid({
                             fw.is_active ? "" : "opacity-60"
                           }`}
                         >
-                          <td className="px-4 py-2.5 font-mono text-xs text-gray-700">
-                            {fw.code}
-                          </td>
                           <td className="px-4 py-2.5">
                             <Link
                               href={`/frameworks/${fw.id}`}
@@ -241,7 +228,6 @@ export default function DomainAccordionGrid({
                       {d.sops.map((s) => (
                         <li key={s.id} className="px-4 py-2 text-sm">
                           <Link href={`/sops/${s.id}`} className="text-brand-700 hover:underline">
-                            {s.code ? `${s.code} · ` : ""}
                             {s.title}
                           </Link>
                         </li>

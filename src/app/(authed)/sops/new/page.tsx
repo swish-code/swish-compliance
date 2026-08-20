@@ -27,27 +27,15 @@ export default async function NewSopPage() {
     >
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 max-w-4xl">
         <form action={createSopAction} className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-1">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Code (optional)
-              </label>
-              <input
-                name="code"
-                placeholder="SOP-001"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Title <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="title"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              name="title"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
           </div>
 
           <div>

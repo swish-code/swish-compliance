@@ -57,7 +57,7 @@ export default async function QuestionsPage({
           type="text"
           name="search"
           defaultValue={sp.search ?? ""}
-          placeholder="Search by question, code, or checklist…"
+          placeholder="Search by question or checklist…"
           className="flex-1 min-w-[220px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
         <select
@@ -89,7 +89,6 @@ export default async function QuestionsPage({
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
-              <th className="text-left px-4 py-3 font-medium w-32">Code</th>
               <th className="text-left px-4 py-3 font-medium">Question</th>
               <th className="text-left px-4 py-3 font-medium w-56">Checklist</th>
               <th className="text-left px-4 py-3 font-medium w-32">Section</th>
@@ -99,23 +98,19 @@ export default async function QuestionsPage({
           <tbody>
             {questions.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
+                <td colSpan={4} className="px-4 py-12 text-center text-gray-400">
                   No questions match this filter.
                 </td>
               </tr>
             )}
             {questions.map((q) => (
               <tr key={q.id} className="border-t border-gray-100 hover:bg-gray-50 align-top">
-                <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                  {q.code ?? "—"}
-                </td>
                 <td className="px-4 py-3 text-gray-900">{q.question}</td>
                 <td className="px-4 py-3">
                   <Link
                     href={`/checklists/templates/${q.template_id}`}
                     className="text-brand-700 hover:underline"
                   >
-                    {q.template_code ? `${q.template_code} · ` : ""}
                     {q.template_name}
                   </Link>
                 </td>

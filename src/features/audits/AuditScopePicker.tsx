@@ -210,7 +210,6 @@ export default function AuditScopePicker({
             </option>
             {availablePolicies.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.code ? `${p.code} — ` : ""}
                 {p.title}
               </option>
             ))}
@@ -271,7 +270,7 @@ export default function AuditScopePicker({
               </option>
               {availableDomains.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.code} · {d.name}
+                  {d.name}
                 </option>
               ))}
             </select>

@@ -148,7 +148,6 @@ export default async function TestsPage({
                     <Link href={`/tests/${ch.id}`} className="font-medium text-brand-700 hover:underline">
                       {ch.name}
                     </Link>
-                    {ch.code && <div className="text-[11px] font-mono text-gray-400">{ch.code}</div>}
                   </td>
                   <td className="px-5 py-3 text-gray-600 text-xs">
                     {ch.checklist_template_id ? (
@@ -192,10 +191,7 @@ export default async function TestsPage({
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Create a new check</h3>
           <form action={createCheckAction} className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <input name="code" placeholder="Code (CHK-FS-01)" className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-              <input name="name" required placeholder="Name * (e.g. Weekly fridge temperature log)" className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            </div>
+            <input name="name" required placeholder="Name * (e.g. Weekly fridge temperature log)" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             <input name="description" placeholder="Description (optional)" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>

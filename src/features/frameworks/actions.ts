@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { requireAdmin, requireUser, canDeleteOrArchive, canEditSops } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
@@ -14,12 +15,6 @@ import {
 import { notify } from "@/features/notifications/service";
 
 const CreateSchema = z.object({
-  code: z
-    .string()
-    .trim()
-    .min(1, "Code is required")
-    .max(40)
-    .regex(/^[A-Za-z0-9._-]+$/, "Use letters, numbers, dots, dashes or underscores only"),
   name: z.string().trim().min(1, "Name is required"),
   description: z.string().trim().optional().nullable(),
   category: z.string().trim().optional().nullable(),
@@ -101,33 +96,30 @@ export async function createFrameworkAction(formData: FormData) {
   const parsed = CreateSchema.parse(nullEmpty(Object.fromEntries(formData.entries())));
   const isActive = parsed.is_active === "true" || parsed.is_active === "on";
 
-  let id: number;
-  try {
-    id = await createFramework({
-      code: parsed.code.toUpperCase(),
-      name: parsed.name,
-      description: parsed.description ?? null,
-      category: parsed.category ?? null,
-      domain_id: parsed.domain_id ?? null,
-      owner_user_id: parsed.owner_user_id ?? null,
-      owner_label: parsed.owner_label ?? null,
-      audit_frequency: parsed.audit_frequency ?? null,
-      is_active: isActive,
-      created_by: user.id,
-      sop_id: parsed.sop_id ?? null,
-      department_id: parsed.department_id ?? null,
-    });
-  } catch (e) {
-    if (e instanceof Error && /duplicate key/i.test(e.message)) {
-      throw new Error(`Framework code "${parsed.code.toUpperCase()}" is already in use.`);
-    }
-    throw e;
-  }
+  // frameworks.code is NOT NULL/UNIQUE but is no longer a user-facing field
+  // (user spec: no codes anywhere in the UI) — generate an opaque internal
+  // one so the form never has to ask for it.
+  const code = `AUTO-${randomUUID()}`;
+
+  const id = await createFramework({
+    code,
+    name: parsed.name,
+    description: parsed.description ?? null,
+    category: parsed.category ?? null,
+    domain_id: parsed.domain_id ?? null,
+    owner_user_id: parsed.owner_user_id ?? null,
+    owner_label: parsed.owner_label ?? null,
+    audit_frequency: parsed.audit_frequency ?? null,
+    is_active: isActive,
+    created_by: user.id,
+    sop_id: parsed.sop_id ?? null,
+    department_id: parsed.department_id ?? null,
+  });
 
   await execute(
     `INSERT INTO audit_logs (user_id, user_email, action, entity, entity_id, details)
      VALUES ($1, $2, 'create', 'framework', $3, $4)`,
-    [user.id, user.email, id, JSON.stringify({ code: parsed.code, name: parsed.name })]
+    [user.id, user.email, id, JSON.stringify({ name: parsed.name })]
   );
 
   revalidatePath("/frameworks");

@@ -55,11 +55,6 @@ export default async function ChecklistTemplatesPage({
             className="block bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 transition-all p-6"
           >
             <div className="flex items-start justify-between gap-3 mb-2">
-              {t.code && (
-                <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                  {t.code}
-                </span>
-              )}
               {!t.is_active && (
                 <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                   Inactive

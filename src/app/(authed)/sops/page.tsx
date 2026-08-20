@@ -57,7 +57,7 @@ export default async function SopsPage({
             type="text"
             name="search"
             defaultValue={sp.search ?? ""}
-            placeholder="Search by title or code…"
+            placeholder="Search by title…"
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
           />
           <select
@@ -108,7 +108,6 @@ export default async function SopsPage({
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
-              <th className="text-left px-5 py-3 font-medium">Code</th>
               <th className="text-left px-5 py-3 font-medium">Title</th>
               <th className="text-left px-5 py-3 font-medium">Brand</th>
               <th className="text-left px-5 py-3 font-medium">Department</th>
@@ -120,16 +119,13 @@ export default async function SopsPage({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-gray-400">
+                <td colSpan={6} className="px-5 py-12 text-center text-gray-400">
                   No SOPs match the current filters.
                 </td>
               </tr>
             )}
             {rows.map((sop) => (
               <tr key={sop.id} className="border-t border-gray-100 hover:bg-gray-50">
-                <td className="px-5 py-3 font-mono text-xs text-gray-500">
-                  {sop.code ?? "—"}
-                </td>
                 <td className="px-5 py-3">
                   <Link
                     href={`/sops/${sop.id}`}

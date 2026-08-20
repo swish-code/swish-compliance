@@ -89,8 +89,7 @@ function Card({
         active ? "border-emerald-300 ring-1 ring-emerald-200" : "border-gray-200 hover:border-gray-300"
       }`}
     >
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{f.code}</span>
+      <div className="flex items-start justify-end gap-3 mb-2">
         {active && (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

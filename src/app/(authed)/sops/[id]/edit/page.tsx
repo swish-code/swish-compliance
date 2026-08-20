@@ -43,11 +43,6 @@ export default async function EditSopPage({
     >
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 max-w-4xl">
         <div className="flex items-center gap-3 mb-5">
-          {sop.code && (
-            <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-              {sop.code}
-            </span>
-          )}
           <span
             className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${SOP_STATUS_TONE[sop.status]}`}
           >
@@ -58,30 +53,20 @@ export default async function EditSopPage({
 
         <form action={updateSopAction} className="space-y-5">
           <input type="hidden" name="id" value={sop.id} />
+          {/* Code isn't shown or editable in the UI anymore, but round-trip
+              its existing value so saving other fields doesn't clear it. */}
+          {sop.code && <input type="hidden" name="code" value={sop.code} />}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-1">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Code (optional)
-              </label>
-              <input
-                name="code"
-                defaultValue={sop.code ?? ""}
-                placeholder="SOP-001"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Title <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="title"
-                required
-                defaultValue={sop.title}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              name="title"
+              required
+              defaultValue={sop.title}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
           </div>
 
           <div>

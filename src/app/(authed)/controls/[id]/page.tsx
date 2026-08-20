@@ -133,14 +133,13 @@ export default async function ControlDetailPage({
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              {ctrl.code && <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{ctrl.code}</span>}
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${HEALTH_TONE[ctrl.health_status]}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${HEALTH_DOT[ctrl.health_status]}`} />
                 {HEALTH_LABEL[ctrl.health_status]}
               </span>
-              {ctrl.framework_code && (
+              {ctrl.framework_name && (
                 <Link href={`/frameworks/${ctrl.framework_id}`} className="text-xs text-brand-700 hover:underline">
-                  {ctrl.framework_code}
+                  {ctrl.framework_name}
                 </Link>
               )}
             </div>
@@ -378,11 +377,6 @@ export default async function ControlDetailPage({
               >
                 <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 flex-wrap hover:bg-gray-50">
                   <span className="transition-transform group-open:rotate-90 text-gray-400 shrink-0">▶</span>
-                  {t.code && (
-                    <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">
-                      {t.code}
-                    </span>
-                  )}
                   <span className="text-sm font-medium text-gray-900">{t.name}</span>
                   <span className="ml-auto flex items-center gap-3 text-xs">
                     <span className="text-gray-500 capitalize">{t.frequency.replace("_", " ")}</span>

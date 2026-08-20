@@ -67,7 +67,6 @@ export default async function CheckDetailPage({
       {/* Header */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3">
         <div className="flex items-center gap-3 mb-2">
-          {check.code && <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{check.code}</span>}
           {check.last_status ? (
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${CHECK_STATUS_TONE[check.last_status]}`}>
               {CHECK_STATUS_LABEL[check.last_status]}

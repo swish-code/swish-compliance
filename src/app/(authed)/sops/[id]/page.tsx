@@ -120,11 +120,6 @@ export default async function SopDetailPage({
         <div className="flex items-start justify-between gap-6 mb-6">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2 flex-wrap">
-              {sop.code && (
-                <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                  {sop.code}
-                </span>
-              )}
               <span
                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${SOP_STATUS_TONE[sop.status]}`}
               >
@@ -568,7 +563,7 @@ export default async function SopDetailPage({
             {sopFrameworks.map((f) => (
               <li key={f.id} className="px-4 py-2 text-sm">
                 <Link href={`/frameworks/${f.id}`} className="text-brand-700 hover:underline">
-                  {f.code ? `${f.code} · ` : ""}{f.name}
+                  {f.name}
                 </Link>
               </li>
             ))}

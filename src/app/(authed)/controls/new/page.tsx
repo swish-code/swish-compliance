@@ -33,17 +33,11 @@ export default async function NewControlPage({
     >
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 max-w-2xl">
         <form action={createControlAction} className="space-y-5">
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Code</label>
-              <input name="code" placeholder="CTL-FS-01" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Name <span className="text-red-500">*</span>
-              </label>
-              <input name="name" required placeholder="e.g. Maintain cold chain integrity" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              Name <span className="text-red-500">*</span>
+            </label>
+            <input name="name" required placeholder="e.g. Maintain cold chain integrity" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
 
           <div>
@@ -56,7 +50,7 @@ export default async function NewControlPage({
               <label className="block text-xs font-medium text-gray-600 mb-1.5">Framework</label>
               <select name="framework_id" defaultValue={presetFramework ?? ""} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
                 <option value="">— None —</option>
-                {frameworks.map((f) => (<option key={f.id} value={f.id}>{f.code} — {f.name}</option>))}
+                {frameworks.map((f) => (<option key={f.id} value={f.id}>{f.name}</option>))}
               </select>
             </div>
             <div>

@@ -49,7 +49,7 @@ export default async function DomainDetailPage({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
-              Domain · {domain.code}
+              Domain
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               {domain.name}
@@ -128,7 +128,6 @@ export default async function DomainDetailPage({
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
-              <th className="text-left px-5 py-3 font-medium w-40">Code</th>
               <th className="text-left px-5 py-3 font-medium">Name</th>
               <th className="text-left px-5 py-3 font-medium w-40">Category</th>
               <th className="text-left px-5 py-3 font-medium w-24">Status</th>
@@ -138,7 +137,7 @@ export default async function DomainDetailPage({
             {frameworks.length === 0 && (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={3}
                   className="px-5 py-12 text-center text-gray-400"
                 >
                   No frameworks linked to this domain yet.
@@ -152,9 +151,6 @@ export default async function DomainDetailPage({
                   fw.is_active ? "" : "opacity-60"
                 }`}
               >
-                <td className="px-5 py-3 font-mono text-xs text-gray-700">
-                  {fw.code}
-                </td>
                 <td className="px-5 py-3">
                   <Link
                     href={`/frameworks/${fw.id}`}
@@ -202,7 +198,7 @@ export default async function DomainDetailPage({
             {sops.map((s) => (
               <li key={s.id} className="px-4 py-2 text-sm">
                 <Link href={`/sops/${s.id}`} className="text-brand-700 hover:underline">
-                  {s.code ? `${s.code} · ` : ""}{s.title}
+                  {s.title}
                 </Link>
               </li>
             ))}

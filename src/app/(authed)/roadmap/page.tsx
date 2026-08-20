@@ -37,8 +37,7 @@ type FrameworkAuditScore = {
 
 type OpenFindingRow = {
   audit_id: number;
-  framework_code: string | null;
-  control_code: string | null;
+  framework_name: string | null;
   control_name: string | null;
   item_id: number;
   question: string;
@@ -180,8 +179,8 @@ export default async function RoadmapPage({
   const openFindings = await queryAll<OpenFindingRow>(
     `SELECT
        a.id AS audit_id,
-       fw.code AS framework_code,
-       ctrl.code AS control_code, ctrl.name AS control_name,
+       fw.name AS framework_name,
+       ctrl.name AS control_name,
        i.id AS item_id, i.question, i.is_critical,
        ca.id AS capa_id, ca.code AS capa_code,
        ca.status AS capa_status, ca.severity AS capa_severity,
@@ -293,7 +292,6 @@ export default async function RoadmapPage({
             >
               <div className="flex items-center justify-between mb-3 gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{f.code}</span>
                   <h4 className="text-base font-semibold text-gray-900">{f.name}</h4>
                   {!f.is_active && <span className="text-xs text-gray-400">(inactive)</span>}
                 </div>
@@ -405,14 +403,14 @@ export default async function RoadmapPage({
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-gray-500 flex-wrap">
-                      {f.framework_code && (
-                        <span className="text-emerald-700 font-mono">
-                          {f.framework_code}
+                      {f.framework_name && (
+                        <span className="text-emerald-700">
+                          {f.framework_name}
                         </span>
                       )}
-                      {f.control_code && (
-                        <span className="text-amber-700 font-mono">
-                          {f.control_code}
+                      {f.control_name && (
+                        <span className="text-amber-700">
+                          {f.control_name}
                         </span>
                       )}
                       {f.capa_code && (
@@ -598,23 +596,18 @@ export default async function RoadmapPage({
                               >
                                 {ev.check_name}
                               </Link>
-                              {ev.check_code && (
-                                <span className="font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                                  {ev.check_code}
-                                </span>
-                              )}
                             </div>
                             <div className="flex items-center gap-2 text-[11px] text-gray-500 flex-wrap">
-                              {ev.framework_code && (
-                                <span className="text-emerald-700 font-mono">
-                                  {ev.framework_code}
+                              {ev.framework_name && (
+                                <span className="text-emerald-700">
+                                  {ev.framework_name}
                                 </span>
                               )}
-                              {ev.control_code && (
+                              {ev.control_name && (
                                 <>
                                   <span className="text-gray-300">·</span>
-                                  <span className="text-amber-700 font-mono">
-                                    {ev.control_code}
+                                  <span className="text-amber-700">
+                                    {ev.control_name}
                                   </span>
                                 </>
                               )}

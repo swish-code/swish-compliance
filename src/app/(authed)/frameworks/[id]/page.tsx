@@ -60,7 +60,6 @@ export default async function FrameworkDetailPage({
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{fw.code}</span>
               {fw.is_active ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
@@ -157,7 +156,6 @@ export default async function FrameworkDetailPage({
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
             <tr>
-              <th className="text-left px-5 py-3 font-medium">Code</th>
               <th className="text-left px-5 py-3 font-medium">Name</th>
               <th className="text-left px-5 py-3 font-medium">Health</th>
               <th className="text-left px-5 py-3 font-medium">Links</th>
@@ -166,14 +164,13 @@ export default async function FrameworkDetailPage({
           <tbody>
             {controls.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-5 py-10 text-center text-gray-400">
+                <td colSpan={3} className="px-5 py-10 text-center text-gray-400">
                   No controls under this framework yet.
                 </td>
               </tr>
             )}
             {controls.map((c) => (
               <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
-                <td className="px-5 py-3 font-mono text-xs text-gray-500">{c.code ?? "—"}</td>
                 <td className="px-5 py-3">
                   <Link href={`/controls/${c.id}`} className="font-medium text-brand-700 hover:underline">
                     {c.name}
@@ -206,7 +203,7 @@ export default async function FrameworkDetailPage({
             {fwSops.map((s) => (
               <li key={s.id} className="px-4 py-2 text-sm">
                 <Link href={`/sops/${s.id}`} className="text-brand-700 hover:underline">
-                  {s.code ? `${s.code} · ` : ""}{s.title}
+                  {s.title}
                 </Link>
               </li>
             ))}
