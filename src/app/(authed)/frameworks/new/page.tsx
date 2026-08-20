@@ -34,7 +34,7 @@ export default async function NewFrameworkPage({
 
   return (
     <Workspace
-      section="Compliance / Frameworks"
+      section="Compliance Library / Frameworks"
       subtitle="New framework"
       sessionLabel="Session"
       userLabel={user.displayName}

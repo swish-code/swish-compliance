@@ -66,7 +66,7 @@ export default async function CapaDetailPage({
 
   return (
     <Workspace
-      section="Compliance / CAPA"
+      section="Assurance / Corrective Actions"
       subtitle={capa.title}
       sessionLabel="Session"
       userLabel={user.displayName}
@@ -411,7 +411,7 @@ export default async function CapaDetailPage({
                 <input type="hidden" name="id" value={capa.id} />
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium"
+                  className="bg-brand-700 hover:bg-brand-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium"
                 >
                   Submit for review
                 </button>
@@ -443,7 +443,7 @@ export default async function CapaDetailPage({
               />
               <button
                 type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+                className="w-full bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-semibold"
               >
                 ✓ Approve & Close
               </button>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
+import EmptyState from "@/features/shell/EmptyState";
 import { queryAll, queryOne } from "@/lib/db";
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -485,7 +486,7 @@ export default async function ReportsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4 mb-6">
         <ChartCard title="Controls needing attention" eyebrow="Risk register">
           {topFailingControls.length === 0 ? (
-            <EmptyHint icon="🛡️" text="All controls are healthy or not yet measured." />
+            <EmptyState icon="🛡️" text="All controls are healthy or not yet measured." />
           ) : (
             <ul className="space-y-2">
               {topFailingControls.map((c) => (
@@ -519,7 +520,7 @@ export default async function ReportsPage() {
 
         <ChartCard title="Recent activity" eyebrow="Last events">
           {activity.length === 0 ? (
-            <EmptyHint icon="📡" text="Nothing logged yet." />
+            <EmptyState icon="📡" text="Nothing logged yet." />
           ) : (
             <ul className="space-y-2.5">
               {activity.map((row, i) => {
@@ -604,7 +605,7 @@ export default async function ReportsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ChartCard title="CAPAs by status" eyebrow="Workflow distribution">
           {capaByStatus.length === 0 ? (
-            <EmptyHint icon="✅" text="No CAPAs in the system yet." />
+            <EmptyState icon="✅" text="No CAPAs in the system yet." />
           ) : (
             <ul className="space-y-2">
               {capaByStatus.map((r) => {
@@ -824,15 +825,6 @@ function ChartCard({
   );
 }
 
-function EmptyHint({ icon, text }: { icon: string; text: string }) {
-  return (
-    <div className="py-8 text-center text-sm text-gray-400">
-      <div className="text-2xl mb-1">{icon}</div>
-      {text}
-    </div>
-  );
-}
-
 function InventoryRow({
   icon,
   label,
@@ -886,7 +878,7 @@ function BrandLeaderboard({
   return (
     <ChartCard title={title} eyebrow={eyebrow}>
       {rows.length === 0 ? (
-        <EmptyHint icon="📊" text="No data yet." />
+        <EmptyState icon="📊" text="No data yet." />
       ) : (
         <ol className="space-y-2.5">
           {rows.map((r, i) => {
@@ -938,7 +930,7 @@ function BrandLeaderboard({
 }
 
 function ChecklistUsageList({ rows }: { rows: ChecklistUsage[] }) {
-  if (rows.length === 0) return <EmptyHint icon="📑" text="No checklists in use yet." />;
+  if (rows.length === 0) return <EmptyState icon="📑" text="No checklists in use yet." />;
   const max = Math.max(1, ...rows.map((r) => r.audit_count));
   return (
     <ul className="space-y-2.5">
@@ -991,7 +983,7 @@ function Donut({
   emptyLabel?: string;
 }) {
   const total = data.reduce((a, b) => a + b.n, 0);
-  if (total === 0) return <EmptyHint icon="◯" text={emptyLabel} />;
+  if (total === 0) return <EmptyState icon="◯" text={emptyLabel} />;
 
   const radius = 60;
   const stroke = 16;

@@ -36,7 +36,7 @@ export default async function EditSopPage({
 
   return (
     <Workspace
-      section="Compliance / SOPs"
+      section="Compliance Library / SOPs & Policies"
       subtitle={`Edit: ${sop.title}`}
       sessionLabel="Session"
       userLabel={user.displayName}

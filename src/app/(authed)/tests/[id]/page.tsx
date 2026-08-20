@@ -59,13 +59,13 @@ export default async function CheckDetailPage({
 
   return (
     <Workspace
-      section="Workspace / Tests"
+      section="Compliance Library / Tests"
       subtitle={check.name}
       sessionLabel="Session"
       userLabel={user.displayName}
     >
       {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
         <div className="flex items-center gap-3 mb-2">
           {check.last_status ? (
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${CHECK_STATUS_TONE[check.last_status]}`}>
@@ -111,7 +111,7 @@ export default async function CheckDetailPage({
           only when at least one field is filled (i.e. tests imported from
           the ECS GRC bundle or seeded from framework.xlsx). */}
       {(check.procedure_steps || check.evidence_needed || check.method || check.performer_role || check.reviewer_role || check.pass_criteria || check.fail_criteria || check.frequency_label) && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3 space-y-3">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-1">
             How to perform this test
           </h3>
@@ -229,7 +229,7 @@ export default async function CheckDetailPage({
                 return (
                   <details
                     key={tpl.template_id}
-                    className="group bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+                    className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
                   >
                     <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 flex-wrap hover:bg-gray-50">
                       <span className="transition-transform group-open:rotate-90 text-gray-400 shrink-0">▶</span>
@@ -296,7 +296,7 @@ export default async function CheckDetailPage({
 
       {/* Record new result — collapsed by default (native <details>) so the
           form + evidence dropzone don't sit open taking a full screen. */}
-      <details className="group bg-white rounded-xl border border-gray-200 shadow-sm mb-3">
+      <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm mb-4">
         <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
           <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
           ➕ Record a new result
@@ -369,7 +369,7 @@ export default async function CheckDetailPage({
       </details>
 
       {/* History */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-700">Result history ({results.length})</h3>
         </div>

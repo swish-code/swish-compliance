@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import Workspace from "@/features/shell/Workspace";
+import EmptyState from "@/features/shell/EmptyState";
 import { queryOne, queryAll } from "@/lib/db";
 import { listSopsAwaitingAck } from "@/features/sops/acknowledgments/repository";
 
@@ -218,7 +219,7 @@ export default async function MyWorkPage() {
 
   return (
     <Workspace
-      section="Workspace"
+      section="Workspace / My Work"
       subtitle="Your personal command centre"
       sessionLabel="Session"
       userLabel={user.displayName}
@@ -347,7 +348,7 @@ export default async function MyWorkPage() {
           actionHref="/sops"
         >
           {sopsAwaitingAck.length === 0 ? (
-            <Empty icon="✓" text="You've acknowledged every active SOP." />
+            <EmptyState icon="✓" text="You've acknowledged every active SOP." />
           ) : (
             <ul className="divide-y divide-gray-100">
               {sopsAwaitingAck.map((s) => (
@@ -390,7 +391,7 @@ export default async function MyWorkPage() {
           actionHref="/capa"
         >
           {myCapas.length === 0 ? (
-            <Empty icon="🎉" text="No CAPAs assigned to you." />
+            <EmptyState icon="🎉" text="No CAPAs assigned to you." />
           ) : (
             <ul className="divide-y divide-gray-100">
               {myCapas.map((c) => {
@@ -459,7 +460,7 @@ export default async function MyWorkPage() {
           actionHref="/audits"
         >
           {myAudits.length === 0 ? (
-            <Empty icon="📋" text="No active audits assigned to you." />
+            <EmptyState icon="📋" text="No active audits assigned to you." />
           ) : (
             <ul className="divide-y divide-gray-100">
               {myAudits.map((a) => {
@@ -590,7 +591,7 @@ export default async function MyWorkPage() {
           actionHref="/sops"
         >
           {mySopsInWip.length === 0 ? (
-            <Empty icon="✓" text="No SOPs need your action." />
+            <EmptyState icon="✓" text="No SOPs need your action." />
           ) : (
             <ul className="divide-y divide-gray-100">
               {mySopsInWip.map((s) => (
@@ -749,11 +750,3 @@ function Card({
   );
 }
 
-function Empty({ icon, text }: { icon: string; text: string }) {
-  return (
-    <div className="py-8 text-center text-sm text-gray-400">
-      <div className="text-2xl mb-1">{icon}</div>
-      {text}
-    </div>
-  );
-}

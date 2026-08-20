@@ -38,7 +38,7 @@ export default async function NotificationsPage({
 
   return (
     <Workspace
-      section="Workspace"
+      section="Workspace / Notifications"
       subtitle={`Notifications${unread > 0 ? ` (${unread} unread)` : ""}`}
       sessionLabel="Session"
       userLabel={user.displayName}

@@ -45,7 +45,7 @@ export default async function SopsPage({
 
   return (
     <Workspace
-      section="Compliance"
+      section="Compliance Library / SOPs & Policies"
       subtitle="Standard Operating Procedures (SOPs) register"
       sessionLabel="Session"
       userLabel={user.displayName}

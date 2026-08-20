@@ -20,7 +20,7 @@ export default async function NewSopPage() {
 
   return (
     <Workspace
-      section="Compliance / SOPs"
+      section="Compliance Library / SOPs & Policies"
       subtitle="Create a new Standard Operating Procedure"
       sessionLabel="Session"
       userLabel={user.displayName}

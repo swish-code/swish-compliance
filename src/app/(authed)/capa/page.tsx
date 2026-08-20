@@ -5,6 +5,8 @@ import { listAuditFindings } from "@/features/capa/repository";
 import {
   CAPA_STATUS_LABEL,
   CAPA_STATUS_TONE,
+  CAPA_UNASSIGNED_TONE,
+  CAPA_UNASSIGNED_LABEL,
   SEVERITY_LABEL,
   SEVERITY_TONE,
   type CapaStatus,
@@ -106,7 +108,7 @@ export default async function CapaPage({
 
   return (
     <Workspace
-      section="Compliance / Corrective Actions"
+      section="Assurance / Corrective Actions"
       subtitle={`${findings.length} failed findings · ${totalOpenCapas} open CAPAs · ${totalUnassigned} unassigned`}
       sessionLabel="Session"
       userLabel={user.displayName}
@@ -548,8 +550,8 @@ function FindingRow({
                 {CAPA_STATUS_LABEL[finding.capa_status]}
               </span>
             ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                Not Assigned
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${CAPA_UNASSIGNED_TONE}`}>
+                {CAPA_UNASSIGNED_LABEL}
               </span>
             )}
             {finding.capa_severity && (

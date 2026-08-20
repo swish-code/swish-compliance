@@ -39,7 +39,7 @@ export default async function DomainDetailPage({
 
   return (
     <Workspace
-      section="Compliance / Domains"
+      section="Compliance Library / Domains"
       subtitle={domain.name}
       sessionLabel="Session"
       userLabel={user.displayName}

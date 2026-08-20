@@ -149,6 +149,11 @@ export const CAPA_STATUS_TONE: Record<CapaStatus, string> = {
   rejected: "bg-red-50 text-red-700 border-red-200",
 };
 
+/** Tone for findings that have no CAPA/assignee yet — shared by the CAPA
+ *  and Roadmap pages so the pill stays identical everywhere. */
+export const CAPA_UNASSIGNED_TONE = "bg-gray-100 text-gray-600 border-gray-200";
+export const CAPA_UNASSIGNED_LABEL = "Not Assigned";
+
 export const SEVERITY_LABEL: Record<CapaSeverity, string> = {
   low: "Low",
   medium: "Medium",

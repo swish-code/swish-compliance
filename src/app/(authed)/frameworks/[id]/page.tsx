@@ -48,7 +48,7 @@ export default async function FrameworkDetailPage({
 
   return (
     <Workspace
-      section="Compliance / Frameworks"
+      section="Compliance Library / Frameworks"
       subtitle={fw.name}
       sessionLabel="Session"
       userLabel={user.displayName}
@@ -83,7 +83,7 @@ export default async function FrameworkDetailPage({
                   className={`px-4 py-2 text-sm font-medium rounded-lg ${
                     fw.is_active
                       ? "bg-gray-100 hover:bg-gray-200 text-gray-700"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-brand-700 hover:bg-brand-800 text-white"
                   }`}
                 >
                   {fw.is_active ? "Deactivate" : "Activate"}

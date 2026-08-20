@@ -49,7 +49,7 @@ export default async function TestsPage({
 
   return (
     <Workspace
-      section="Workspace / Tests"
+      section="Compliance Library / Tests"
       subtitle={`Compliance tests (${checks.length})`}
       sessionLabel="Session"
       userLabel={user.displayName}

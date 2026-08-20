@@ -45,7 +45,7 @@ export default async function DomainsPage() {
 
   return (
     <Workspace
-      section="Compliance / Domains"
+      section="Compliance Library / Domains"
       subtitle={`Compliance domains (${domains.length})`}
       sessionLabel="Session"
       userLabel={user.displayName}

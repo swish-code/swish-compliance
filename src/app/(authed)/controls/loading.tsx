@@ -2,7 +2,7 @@ import { SkeletonShell, ToolbarSkeleton, TableSkeleton } from "@/features/shell/
 
 export default function Loading() {
   return (
-    <SkeletonShell section="Compliance / Controls" subtitle="Reusable compliance controls">
+    <SkeletonShell section="Compliance Library / Controls" subtitle="Reusable compliance controls">
       <ToolbarSkeleton />
       <TableSkeleton rows={6} columns={6} />
     </SkeletonShell>

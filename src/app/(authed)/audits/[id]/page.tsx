@@ -108,7 +108,7 @@ export default async function AuditDetailPage({
 
   return (
     <Workspace
-      section="Compliance / Audits"
+      section="Assurance / Audits"
       subtitle={headerTitle}
       sessionLabel="Session"
       userLabel={user.displayName}
@@ -500,7 +500,7 @@ export default async function AuditDetailPage({
                 <input type="hidden" name="id" value={audit.id} />
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                  className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
                 >
                   Close audit
                 </button>

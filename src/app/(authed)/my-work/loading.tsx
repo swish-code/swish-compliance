@@ -3,7 +3,7 @@ import { SkeletonShell, KpiGridSkeleton, Card, Bar } from "@/features/shell/Skel
 export default function Loading() {
   return (
     <SkeletonShell
-      section="Workspace"
+      section="Workspace / My Work"
       subtitle="Personal work queue for approvals, reviews, rollout work, and remediation"
     >
       <KpiGridSkeleton count={5} />

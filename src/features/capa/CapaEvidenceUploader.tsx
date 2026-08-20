@@ -129,7 +129,7 @@ export default function CapaEvidenceUploader({
           <button
             type="submit"
             disabled={pending || pickedCount === 0}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-md text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-1.5 rounded-md text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pending
               ? "Uploading…"

@@ -18,7 +18,7 @@ export default async function NewTemplatePage() {
 
   return (
     <Workspace
-      section="Compliance / Checklists"
+      section="Compliance Library / Checklists"
       subtitle="New checklist template"
       sessionLabel="Session"
       userLabel={user.displayName}

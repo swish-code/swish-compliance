@@ -20,7 +20,7 @@ export default async function NewCapaPage() {
 
   return (
     <Workspace
-      section="Compliance / Corrective Actions"
+      section="Assurance / Corrective Actions"
       subtitle="New corrective action"
       sessionLabel="Session"
       userLabel={user.displayName}

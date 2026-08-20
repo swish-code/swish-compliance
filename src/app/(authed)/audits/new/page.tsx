@@ -122,7 +122,7 @@ export default async function NewAuditPage() {
 
   return (
     <Workspace
-      section="Compliance / Audits"
+      section="Assurance / Audits"
       subtitle="Start a new audit"
       sessionLabel="Session"
       userLabel={user.displayName}

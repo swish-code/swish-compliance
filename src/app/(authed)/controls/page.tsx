@@ -37,7 +37,7 @@ export default async function ControlsPage({
 
   return (
     <Workspace
-      section="Compliance / Controls"
+      section="Compliance Library / Controls"
       subtitle={`Reusable compliance controls (${controls.length})`}
       sessionLabel="Session"
       userLabel={user.displayName}

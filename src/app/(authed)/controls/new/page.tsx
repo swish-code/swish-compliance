@@ -26,7 +26,7 @@ export default async function NewControlPage({
 
   return (
     <Workspace
-      section="Compliance / Controls"
+      section="Compliance Library / Controls"
       subtitle="New control"
       sessionLabel="Session"
       userLabel={user.displayName}

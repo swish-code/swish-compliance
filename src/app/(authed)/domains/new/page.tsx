@@ -20,7 +20,7 @@ export default async function NewDomainPage() {
 
   return (
     <Workspace
-      section="Compliance / Domains"
+      section="Compliance Library / Domains"
       subtitle="New domain"
       sessionLabel="Session"
       userLabel={user.displayName}

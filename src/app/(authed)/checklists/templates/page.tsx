@@ -14,7 +14,7 @@ export default async function ChecklistTemplatesPage({
 
   return (
     <Workspace
-      section="Compliance / Checklists"
+      section="Compliance Library / Checklists"
       subtitle={`Audit checklist templates (${templates.length})`}
       sessionLabel="Session"
       userLabel={user.displayName}

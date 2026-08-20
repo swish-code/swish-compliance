@@ -110,7 +110,7 @@ export default async function SopDetailPage({
 
   return (
     <Workspace
-      section="Compliance / SOPs"
+      section="Compliance Library / SOPs & Policies"
       subtitle={sop.title}
       sessionLabel="Session"
       userLabel={user.displayName}
@@ -273,7 +273,7 @@ export default async function SopDetailPage({
                 <input type="hidden" name="sop_id" value={sop.id} />
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm"
+                  className="inline-flex items-center gap-2 bg-brand-700 hover:bg-brand-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm"
                 >
                   ✓ I&rsquo;ve read &amp; understood
                 </button>

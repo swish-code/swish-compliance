@@ -30,7 +30,7 @@ export default async function AuditsPage({
 
   return (
     <Workspace
-      section="Compliance / Audits"
+      section="Assurance / Audits"
       subtitle={`Audit executions (${audits.length})`}
       sessionLabel="Session"
       userLabel={user.displayName}

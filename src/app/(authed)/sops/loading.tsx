@@ -3,7 +3,7 @@ import { SkeletonShell, ToolbarSkeleton, TableSkeleton } from "@/features/shell/
 export default function Loading() {
   return (
     <SkeletonShell
-      section="Compliance"
+      section="Compliance Library / SOPs & Policies"
       subtitle="Standard Operating Procedures (SOPs) register"
     >
       <ToolbarSkeleton />

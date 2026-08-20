@@ -47,7 +47,7 @@ export default async function ChecklistTemplateDetailPage({
 
   return (
     <Workspace
-      section="Compliance / Checklists"
+      section="Compliance Library / Checklists"
       subtitle={tpl.name}
       sessionLabel="Session"
       userLabel={user.displayName}
@@ -241,7 +241,7 @@ export default async function ChecklistTemplateDetailPage({
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                               latest.answer === "yes"
-                                ? "bg-emerald-600 text-white"
+                                ? "bg-brand-700 text-white"
                                 : latest.answer === "no"
                                 ? "bg-red-600 text-white"
                                 : "bg-gray-500 text-white"

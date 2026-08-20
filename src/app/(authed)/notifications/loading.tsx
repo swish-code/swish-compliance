@@ -2,7 +2,7 @@ import { SkeletonShell, Card, Bar } from "@/features/shell/Skeletons";
 
 export default function Loading() {
   return (
-    <SkeletonShell section="Workspace" subtitle="Notifications">
+    <SkeletonShell section="Workspace / Notifications" subtitle="Notifications">
       <Card className="p-4 mb-4 flex items-center justify-between">
         <div className="flex gap-2">
           <Bar className="h-7 w-16 rounded-full" />

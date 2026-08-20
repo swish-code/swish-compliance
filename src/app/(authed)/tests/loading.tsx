@@ -2,7 +2,7 @@ import { SkeletonShell, Bar, Card, TableSkeleton } from "@/features/shell/Skelet
 
 export default function Loading() {
   return (
-    <SkeletonShell section="Workspace / Tests" subtitle="Compliance tests">
+    <SkeletonShell section="Compliance Library / Tests" subtitle="Compliance tests">
       <div className="flex gap-2 mb-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Bar key={i} className="h-7 w-28 rounded-full" />

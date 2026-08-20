@@ -27,7 +27,7 @@ export default async function FrameworksPage() {
 
   return (
     <Workspace
-      section="Compliance / Frameworks"
+      section="Compliance Library / Frameworks"
       subtitle={`Compliance programs (${active.length} active / ${frameworks.length} available)`}
       sessionLabel="Session"
       userLabel={user.displayName}

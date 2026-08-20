@@ -306,7 +306,7 @@ export default function NewAuditForm({
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          className="bg-green-700 hover:bg-green-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium"
+          className="bg-brand-700 hover:bg-brand-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium"
         >
           Start audit
         </button>

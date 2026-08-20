@@ -123,13 +123,13 @@ export default async function ControlDetailPage({
 
   return (
     <Workspace
-      section="Compliance / Controls"
+      section="Compliance Library / Controls"
       subtitle={ctrl.name}
       sessionLabel="Session"
       userLabel={user.displayName}
     >
       {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -185,7 +185,7 @@ export default async function ControlDetailPage({
       {/* Edit panel — native <details> collapse, no client JS. Gated to
           the same roles that may edit SOPs, plus compliance. */}
       {canEdit && (
-        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm mb-3 overflow-hidden">
+        <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
           <summary className="cursor-pointer list-none px-6 py-4 flex items-center gap-2 hover:bg-gray-50">
             <span className="text-gray-400 transition-transform group-open:rotate-90 select-none">▶</span>
             <span className="text-sm font-semibold text-gray-700">✏️ Edit control details</span>
@@ -316,7 +316,7 @@ export default async function ControlDetailPage({
           above the GRC details, since it's the opening move of a review
           rather than reference material read afterwards. */}
       {ctrl.reviewer_prompt && (
-        <div className="bg-blue-50/60 rounded-xl border border-blue-200 p-4 mb-3">
+        <div className="bg-blue-50/60 rounded-2xl border border-blue-200 p-6 mb-4">
           <div className="text-[10px] uppercase tracking-[0.2em] text-blue-700 font-semibold mb-1.5">
             Reviewer prompt · what to ask for
           </div>
@@ -328,7 +328,7 @@ export default async function ControlDetailPage({
 
       {/* GRC details panel — requirement, clause, evidence */}
       {(ctrl.requirement || ctrl.clause_reference || ctrl.evidence_required) && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3 space-y-4">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-4 space-y-4">
           {ctrl.requirement && (
             <div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold mb-1">
@@ -373,7 +373,7 @@ export default async function ControlDetailPage({
             {directChecks.map((t) => (
               <details
                 key={t.id}
-                className="group bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+                className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
               >
                 <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 flex-wrap hover:bg-gray-50">
                   <span className="transition-transform group-open:rotate-90 text-gray-400 shrink-0">▶</span>
@@ -426,7 +426,7 @@ export default async function ControlDetailPage({
       {/* Add new links — collapsed by default (native <details>) so the
           link forms don't sit open taking space. */}
       {canEdit && (
-        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm mb-3">
+        <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm mb-4">
           <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
             <span className="transition-transform group-open:rotate-90 text-gray-400">▶</span>
             🔗 Link new records
@@ -495,7 +495,7 @@ function LinkPanel({
     sop: "/sops", check: "/tests", audit: "/audits", capa: "/capa",
   };
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
       <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-3">{title} ({links.length})</h4>
       {links.length === 0 ? (
         <div className="text-xs text-gray-400 italic">No links yet.</div>
