@@ -3,8 +3,8 @@ import {
   createDepartmentAction,
   renameDepartmentAction,
   toggleDepartmentAction,
-  setDepartmentManagerAction,
 } from "./actions";
+import DepartmentManagerSelect from "./DepartmentManagerSelect";
 
 type Row = {
   id: number;
@@ -135,27 +135,11 @@ export default async function DepartmentsTabContent() {
                   )}
                 </td>
                 <td className="px-5 py-3">
-                  <form action={setDepartmentManagerAction} className="flex items-center gap-2">
-                    <input type="hidden" name="id" value={row.id} />
-                    <select
-                      name="manager_id"
-                      defaultValue={row.manager_id ?? ""}
-                      className="px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 max-w-[180px]"
-                    >
-                      <option value="">— None —</option>
-                      {allUsers.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.display_name} · {u.role.replace("_", " ")}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="submit" className="text-xs text-brand-700 hover:underline whitespace-nowrap">
-                      Save
-                    </button>
-                  </form>
-                  {!row.manager_id && (
-                    <div className="text-[10px] text-amber-600 mt-0.5">No manager set</div>
-                  )}
+                  <DepartmentManagerSelect
+                    departmentId={row.id}
+                    managerId={row.manager_id}
+                    users={allUsers}
+                  />
                 </td>
                 <td className="px-5 py-3">
                   {deptStaff.length === 0 ? (
