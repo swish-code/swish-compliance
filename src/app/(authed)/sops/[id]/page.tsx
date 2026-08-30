@@ -324,8 +324,8 @@ export default async function SopDetailPage({
               />
             </div>
             <div className="text-[11px] text-gray-500 mt-2">
-              {sop.department_name
-                ? `Eligible audience: active members of ${sop.department_name} + administrators.`
+              {sop.department_names.length > 0
+                ? `Eligible audience: active members of ${sop.department_names.join(", ")} + administrators.`
                 : `Eligible audience: all active users (this SOP has no department assigned).`}
             </div>
 
@@ -513,13 +513,24 @@ export default async function SopDetailPage({
               sop.brand_name ?? "—"
             )}
           </Field>
-          <Field label="Department">
+          <Field label={sop.department_names.length > 1 ? "Departments" : "Department"}>
             {sop.is_all_departments ? (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200">
                 ✦ All departments
               </span>
+            ) : sop.department_names.length > 0 ? (
+              <span className="flex flex-wrap gap-1">
+                {sop.department_names.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700 border border-gray-200"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </span>
             ) : (
-              sop.department_name ?? "—"
+              "—"
             )}
           </Field>
           <Field label="Owner">{sop.owner_name ?? "—"}</Field>
