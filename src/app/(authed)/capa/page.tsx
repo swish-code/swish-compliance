@@ -509,6 +509,9 @@ function FindingRow({
         <div className="flex-1 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">
             Finding #{index}
+            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 rounded">
+              {finding.percent}% achieved
+            </span>
             {finding.is_critical && (
               <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 rounded">
                 CRITICAL

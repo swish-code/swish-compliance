@@ -24,11 +24,16 @@ export default function AuditQuestionRow({
   isCritical: boolean;
   itemNo: number;
 }) {
-  const { get, setResponse, setNotes, canEdit, dirtyIds, saving } =
+  const { get, setResponse, setPercent, setNotes, canEdit, dirtyIds, saving } =
     useAuditAnswers();
 
-  const { response, notes } = get(itemId);
+  const { response, percent, notes } = get(itemId);
   const isDirty = dirtyIds.includes(itemId);
+  // N/A is excluded from scoring, so it carries no percentage.
+  const showPercent = response === "pass" || response === "fail";
+  // Mirrors FINDING_THRESHOLD_PERCENT on the server: below this the answer
+  // is treated as a finding and a corrective action is raised.
+  const isShortfall = showPercent && percent !== null && percent < 90;
 
   // pass/fail/na is the DB enum; Yes/No/N/A is what the auditor reads.
   const labels: Record<AnswerValue, string> = {
@@ -86,6 +91,30 @@ export default function AuditQuestionRow({
               </label>
             ))}
           </div>
+          {showPercent && (
+            <label
+              className={`inline-flex items-center gap-1 px-2 py-1 border rounded text-xs whitespace-nowrap ${
+                isShortfall
+                  ? "border-amber-400 bg-amber-50 text-amber-800"
+                  : "border-gray-200 text-gray-700"
+              }`}
+              title="How much of this requirement was met. Below 90% raises a corrective action."
+            >
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={percent ?? ""}
+                onChange={(e) =>
+                  setPercent(itemId, e.target.value === "" ? null : Number(e.target.value))
+                }
+                disabled={!canEdit || saving}
+                className="w-14 px-1 py-0.5 bg-transparent border-0 text-xs text-right tabular-nums focus:outline-none disabled:opacity-60"
+              />
+              <span className="text-gray-500">%</span>
+            </label>
+          )}
           <input
             type="text"
             value={notes}

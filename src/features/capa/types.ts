@@ -116,6 +116,9 @@ export type AuditFinding = {
   item_code: string | null;
   question: string;
   is_critical: boolean;
+  /** What the auditor recorded, 0-100 (migration 053). Below-threshold is
+   *  why this finding exists at all. */
+  percent: number;
   auditor_note: string | null;
   evidence_url: string | null;
   evidence_name: string | null;

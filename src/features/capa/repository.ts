@@ -1,5 +1,6 @@
 import "server-only";
 import { queryAll, queryOne, execute } from "@/lib/db";
+import { FINDING_THRESHOLD_PERCENT } from "@/features/audits/types";
 import type {
   Capa,
   CapaSeverity,
@@ -8,6 +9,18 @@ import type {
   CapaEvidence,
   CapaAuditorContext,
 } from "./types";
+
+/**
+ * What counts as a finding on an audit response aliased `r`.
+ *
+ * Answers are graded 0-100 since migration 053, so a finding is any
+ * answered question that fell short of the threshold — not just an
+ * outright "No". COALESCE covers rows written before percent existed,
+ * where pass/fail meant exactly 100/0.
+ */
+const SHORTFALL_SQL = `r.response IN ('pass','fail')
+       AND COALESCE(r.percent, CASE WHEN r.response = 'pass' THEN 100 ELSE 0 END)
+           < ${FINDING_THRESHOLD_PERCENT}`;
 
 const CAPA_SELECT = `
   c.id, c.code, c.title, c.description, c.severity, c.status,
@@ -266,7 +279,7 @@ export async function listAuditFindings(filters: {
   due_date_before?: string;
   location?: string;
 } = {}): Promise<AuditFinding[]> {
-  const cond: string[] = ["r.response = 'fail'"];
+  const cond: string[] = [SHORTFALL_SQL];
   const params: unknown[] = [];
 
   if (filters.audit_id) {
@@ -337,6 +350,7 @@ export async function listAuditFindings(filters: {
         WHERE at.audit_id = a.id AND cci.checklist_item_id = i.id
         ORDER BY ch.id LIMIT 1) AS test_name,
        i.id AS item_id, i.code AS item_code, i.question, i.is_critical,
+       COALESCE(r.percent, CASE WHEN r.response = 'pass' THEN 100 ELSE 0 END) AS percent,
        r.notes        AS auditor_note,
        r.evidence_url, r.evidence_name, r.evidence_mime,
        ca.id          AS capa_id,
@@ -385,7 +399,7 @@ export async function listBulkAssignableFindings(
      JOIN checklist_items i ON i.id = r.item_id
      LEFT JOIN corrective_actions ca
        ON ca.source_audit_id = a.id AND ca.source_item_id = i.id
-     WHERE r.response = 'fail'
+     WHERE ${SHORTFALL_SQL}
        AND a.id = $1::int
        AND a.control_id IS NOT DISTINCT FROM $2::int
        AND a.status IN ('submitted','closed')
@@ -428,7 +442,7 @@ export async function autoCreateCapasForAudit(
        a.id, i.id, a.brand_id, a.department_id, d.manager_id, $2::int,
        CASE WHEN d.manager_id IS NOT NULL THEN 'in_progress' ELSE 'open' END
      FROM audits a
-     JOIN audit_responses r ON r.audit_id = a.id AND r.response = 'fail'
+     JOIN audit_responses r ON r.audit_id = a.id AND ${SHORTFALL_SQL}
      JOIN checklist_items i ON i.id = r.item_id
      LEFT JOIN departments d ON d.id = a.department_id
      CROSS JOIN (SELECT COUNT(*)::int AS n

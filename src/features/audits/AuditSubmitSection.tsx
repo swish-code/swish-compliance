@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { submitAuditAction } from "./actions";
 import { useAuditAnswers } from "./AuditAnswersContext";
+import { FINDING_THRESHOLD_PERCENT } from "./types";
 
 /**
  * Submit card. Flushes any unsaved answers BEFORE submitting, so the
@@ -76,19 +77,21 @@ export default function AuditSubmitSection({
         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50"
       />
 
-      {/* No longer a choice — every failed question ALWAYS becomes a CAPA
-          on submit (compliance-score rule). Kept as an info box so the
-          auditor knows what will happen. */}
+      {/* No longer a choice — every answer under the threshold ALWAYS
+          becomes a CAPA on submit (compliance-score rule, migration 053:
+          answers are graded 0-100%, not just Pass/Fail). Kept as an info
+          box so the auditor knows what will happen. */}
       <div className="flex items-start gap-3 p-3 border border-amber-200 bg-amber-50 rounded-lg text-sm">
         <span className="mt-0.5">⚠️</span>
         <div>
           <div className="font-medium text-amber-900">
-            Every failed question becomes a CAPA automatically
+            Any answer below {FINDING_THRESHOLD_PERCENT}% becomes a CAPA automatically
           </div>
           <div className="text-xs text-amber-700">
-            On submit, each fail opens an unassigned corrective action
-            (critical questions → critical severity). They count against the
-            compliance score until resolved.
+            On submit, each answer under {FINDING_THRESHOLD_PERCENT}% opens a corrective
+            action assigned to the department manager (critical questions →
+            critical severity). They count against the compliance score
+            until resolved.
           </div>
         </div>
       </div>

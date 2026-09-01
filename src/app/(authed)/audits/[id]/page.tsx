@@ -22,6 +22,7 @@ import {
   AUDIT_STATUS_LABEL,
   AUDIT_STATUS_TONE,
 } from "@/features/audits/types";
+import { FINDING_THRESHOLD_PERCENT } from "@/features/audits/types";
 import type { AuditScopeRow } from "@/features/audits/types";
 
 /** How the audit was scoped (migration 042). Legacy audits have no value. */
@@ -79,8 +80,16 @@ export default async function AuditDetailPage({
     scopeRows.filter((r) => r.response).map((r) => r.item_id)
   ).size;
   const uniqueTotal = new Set(scopeRows.map((r) => r.item_id)).size;
+  // A "finding" is any answered question under the threshold, not just an
+  // outright No — answers are graded 0-100 (migration 053).
   const uniqueFailed = new Set(
-    scopeRows.filter((r) => r.response === "fail").map((r) => r.item_id)
+    scopeRows
+      .filter(
+        (r) =>
+          (r.response === "pass" || r.response === "fail") &&
+          (r.percent ?? (r.response === "pass" ? 100 : 0)) < FINDING_THRESHOLD_PERCENT
+      )
+      .map((r) => r.item_id)
   ).size;
 
   // Seed for the shared answer state — one entry per DISTINCT item, for the
@@ -95,6 +104,7 @@ export default async function AuditDetailPage({
         {
           itemId: r.item_id,
           response: r.response as "pass" | "fail" | "na" | null,
+          percent: r.percent,
           notes: r.notes,
         },
       ])
@@ -264,7 +274,9 @@ export default async function AuditDetailPage({
         <div className="text-xs text-gray-500 pt-3 border-t border-gray-100">
           {isOpen
             ? `Answered ${uniqueAnswered} of ${uniqueTotal} unique items${
-                uniqueFailed > 0 ? ` — ${uniqueFailed} marked No / fail` : ""
+                uniqueFailed > 0
+                  ? ` — ${uniqueFailed} below ${FINDING_THRESHOLD_PERCENT}%`
+                  : ""
               }`
             : audit.summary
             ? (

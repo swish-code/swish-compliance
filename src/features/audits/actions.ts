@@ -61,6 +61,8 @@ const ResponseSchema = z.object({
   audit_id: z.coerce.number().int().positive(),
   item_id: z.coerce.number().int().positive(),
   response: z.enum(["pass", "fail", "na"]).optional().nullable(),
+  /** Degree of compliance 0-100 (migration 053). */
+  percent: z.coerce.number().int().min(0).max(100).optional().nullable(),
   // Notes are now optional. The Test → Checklist quick-answer UI lets
   // the auditor click Yes/No/N/A and move on; they only have to type
   // a note when they actually want to capture context.
@@ -74,6 +76,7 @@ const BulkResponsesSchema = z.object({
       z.object({
         itemId: z.coerce.number().int().positive(),
         response: z.enum(["pass", "fail", "na"]),
+        percent: z.coerce.number().int().min(0).max(100).nullable(),
         notes: z.string().trim(),
       })
     )
@@ -371,6 +374,7 @@ export async function saveResponseAction(formData: FormData) {
     audit_id: parsed.audit_id,
     item_id: parsed.item_id,
     response: parsed.response ?? null,
+    percent: parsed.percent ?? null,
     notes: parsed.notes ?? null,
     // Only touch the evidence columns when the client says it has something
     // new to write (file uploaded OR explicit removal). Plain Pass / notes
@@ -399,7 +403,12 @@ export async function saveResponseAction(formData: FormData) {
  */
 export async function saveResponsesBulkAction(input: {
   auditId: number;
-  answers: { itemId: number; response: "pass" | "fail" | "na"; notes: string }[];
+  answers: {
+    itemId: number;
+    response: "pass" | "fail" | "na";
+    percent: number | null;
+    notes: string;
+  }[];
 }): Promise<{ ok: true; saved: number } | { ok: false; error: string }> {
   const user = await requireUser();
 
@@ -424,6 +433,7 @@ export async function saveResponsesBulkAction(input: {
       audit_id: parsed.data.auditId,
       item_id: a.itemId,
       response: a.response,
+      percent: a.percent,
       notes: a.notes || null,
     });
   }

@@ -4,6 +4,17 @@ export type AuditStatus =
   | "closed"
   | "cancelled"; // assignment was cancelled by creator/admin — no execution
 
+/**
+ * An answer at or above this percentage is treated as compliant. Below it
+ * the question becomes a finding: it counts as a critical failure when the
+ * question is flagged critical, and a corrective action is raised for it
+ * on submission (user spec 2026-08-30).
+ *
+ * Single source of truth — it is interpolated into the SQL that scores an
+ * audit and that spawns CAPAs, so changing it here changes both.
+ */
+export const FINDING_THRESHOLD_PERCENT = 90;
+
 export type Audit = {
   id: number;
   // template_id is nullable since migration 038 — new audits scope by
@@ -84,6 +95,8 @@ export type AuditScopeRow = {
   // Latest response on this item for this audit (shared across all
   // instances of the same item under different tests).
   response: "pass" | "fail" | "na" | null;
+  /** Degree of compliance 0-100 (migration 053). Null for N/A. */
+  percent: number | null;
   notes: string | null;
   evidence_url: string | null;
   evidence_name: string | null;
@@ -95,6 +108,8 @@ export type AuditResponse = {
   audit_id: number;
   item_id: number;
   response: "pass" | "fail" | "na" | null;
+  /** Degree of compliance 0-100 (migration 053). Null for N/A. */
+  percent: number | null;
   notes: string | null;
   evidence_url: string | null;
   evidence_name: string | null;
