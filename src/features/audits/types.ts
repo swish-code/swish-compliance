@@ -15,6 +15,30 @@ export type AuditStatus =
  */
 export const FINDING_THRESHOLD_PERCENT = 90;
 
+/**
+ * SQL fragments shared by every query that scores an audit response or
+ * decides whether it's a finding (migration 054). An answer is recorded as
+ * three sample-distribution percentages — Yes / No / N-A, summing to 100
+ * — rather than one "how compliant" number, so that a question sampled
+ * partly N-A doesn't drag the score down for something not applicable.
+ *
+ * Assumes the audit_responses row is aliased `r` in the query, which every
+ * current call site does.
+ *
+ *   ANSWERED  — the question was answered AND at least one sample was
+ *               actually applicable (not 100% N-A).
+ *   PERFORMANCE — Yes as a share of the applicable (Yes + No) samples,
+ *               only meaningful where ANSWERED holds.
+ *   SHORTFALL — ANSWERED and below the finding threshold; this is what
+ *               "is this a finding" means everywhere in the app.
+ */
+export const AUDIT_RESPONSE_ANSWERED_SQL =
+  `r.yes_percent IS NOT NULL AND (r.yes_percent + r.no_percent) > 0`;
+export const AUDIT_RESPONSE_PERFORMANCE_SQL =
+  `(r.yes_percent * 100.0 / (r.yes_percent + r.no_percent))`;
+export const AUDIT_RESPONSE_SHORTFALL_SQL =
+  `${AUDIT_RESPONSE_ANSWERED_SQL} AND ${AUDIT_RESPONSE_PERFORMANCE_SQL} < ${FINDING_THRESHOLD_PERCENT}`;
+
 export type Audit = {
   id: number;
   // template_id is nullable since migration 038 — new audits scope by
@@ -95,8 +119,11 @@ export type AuditScopeRow = {
   // Latest response on this item for this audit (shared across all
   // instances of the same item under different tests).
   response: "pass" | "fail" | "na" | null;
-  /** Degree of compliance 0-100 (migration 053). Null for N/A. */
-  percent: number | null;
+  /** How the sampled interactions actually broke down (migration 054).
+   *  Sum to 100 together when set; all three null when unanswered. */
+  yes_percent: number | null;
+  no_percent: number | null;
+  na_percent: number | null;
   notes: string | null;
   evidence_url: string | null;
   evidence_name: string | null;
@@ -108,8 +135,11 @@ export type AuditResponse = {
   audit_id: number;
   item_id: number;
   response: "pass" | "fail" | "na" | null;
-  /** Degree of compliance 0-100 (migration 053). Null for N/A. */
-  percent: number | null;
+  /** How the sampled interactions actually broke down (migration 054).
+   *  Sum to 100 together when set; all three null when unanswered. */
+  yes_percent: number | null;
+  no_percent: number | null;
+  na_percent: number | null;
   notes: string | null;
   evidence_url: string | null;
   evidence_name: string | null;

@@ -1,6 +1,10 @@
 import "server-only";
 import { queryAll, queryOne, execute } from "@/lib/db";
-import { FINDING_THRESHOLD_PERCENT } from "./types";
+import {
+  AUDIT_RESPONSE_ANSWERED_SQL,
+  AUDIT_RESPONSE_PERFORMANCE_SQL,
+  AUDIT_RESPONSE_SHORTFALL_SQL,
+} from "./types";
 import type {
   Audit,
   AuditAttachment,
@@ -177,7 +181,8 @@ export async function listAuditScopeItems(
        t.id     AS template_id, t.code AS template_code, t.name AS template_name,
        i.id     AS item_id,    i.code AS item_code, i.sort_order AS item_sort_order,
        i.question, i.weight, i.is_critical,
-       r.response, r.percent, r.notes, r.evidence_url, r.evidence_name, r.evidence_mime
+       r.response, r.yes_percent, r.no_percent, r.na_percent,
+       r.notes, r.evidence_url, r.evidence_name, r.evidence_mime
      FROM audit_tests at
      JOIN checks                ch  ON ch.id = at.check_id
      JOIN check_checklist_items cci ON cci.check_id = at.check_id
@@ -208,7 +213,8 @@ export async function getAuditItems(
        COALESCE(r.id, 0)         AS id,
        $1::int                   AS audit_id,
        i.id                      AS item_id,
-       r.response, r.percent, r.notes, r.evidence_url, r.evidence_name, r.evidence_mime
+       r.response, r.yes_percent, r.no_percent, r.na_percent,
+       r.notes, r.evidence_url, r.evidence_name, r.evidence_mime
      FROM checklist_items i
      LEFT JOIN audit_responses r ON r.item_id = i.id AND r.audit_id = $1
      WHERE i.id IN (
@@ -301,8 +307,12 @@ export async function upsertResponse(input: {
   audit_id: number;
   item_id: number;
   response: "pass" | "fail" | "na" | null;
-  /** Degree of compliance 0-100 (migration 053). Null for N/A. */
-  percent?: number | null;
+  /** How the sampled interactions broke down (migration 054). Must be
+   *  given together — either all three, summing to 100, or none (in
+   *  which case a clean 100/0/0 in the picked direction is assumed). */
+  yes_percent?: number | null;
+  no_percent?: number | null;
+  na_percent?: number | null;
   notes?: string | null;
   evidence_url?: string | null;
   evidence_name?: string | null;
@@ -310,20 +320,31 @@ export async function upsertResponse(input: {
   update_evidence?: boolean;
 }): Promise<void> {
   const updateEv = !!input.update_evidence;
-  // A verdict always stores a percentage so scoring never has to infer one;
-  // N/A stays NULL because it is excluded from the score entirely.
-  const percent =
-    input.response === "na" || input.response === null
-      ? null
-      : input.percent ?? (input.response === "pass" ? 100 : 0);
+
+  let yesPct: number | null = null;
+  let noPct: number | null = null;
+  let naPct: number | null = null;
+  if (input.response) {
+    yesPct = input.yes_percent ?? (input.response === "pass" ? 100 : 0);
+    noPct = input.no_percent ?? (input.response === "fail" ? 100 : 0);
+    naPct = input.na_percent ?? (input.response === "na" ? 100 : 0);
+    if (yesPct + noPct + naPct !== 100) {
+      throw new Error(
+        `Yes/No/N-A percentages must add up to 100 (got ${yesPct + noPct + naPct}).`
+      );
+    }
+  }
 
   await execute(
     `INSERT INTO audit_responses
-       (audit_id, item_id, response, percent, notes, evidence_url, evidence_name, evidence_mime)
-     VALUES ($1, $2, $3, $9, $4, $5, $6, $7)
+       (audit_id, item_id, response, yes_percent, no_percent, na_percent,
+        notes, evidence_url, evidence_name, evidence_mime)
+     VALUES ($1, $2, $3, $9, $10, $11, $4, $5, $6, $7)
      ON CONFLICT (audit_id, item_id) DO UPDATE SET
        response      = EXCLUDED.response,
-       percent       = EXCLUDED.percent,
+       yes_percent   = EXCLUDED.yes_percent,
+       no_percent    = EXCLUDED.no_percent,
+       na_percent    = EXCLUDED.na_percent,
        notes         = EXCLUDED.notes,
        evidence_url  = CASE WHEN $8 THEN EXCLUDED.evidence_url  ELSE audit_responses.evidence_url  END,
        evidence_name = CASE WHEN $8 THEN EXCLUDED.evidence_name ELSE audit_responses.evidence_name END,
@@ -337,7 +358,9 @@ export async function upsertResponse(input: {
       input.evidence_name ?? null,
       input.evidence_mime ?? null,
       updateEv,
-      percent,
+      yesPct,
+      noPct,
+      naPct,
     ]
   );
 }
@@ -357,21 +380,20 @@ export async function computeAuditScore(auditId: number): Promise<{
     // items the audit covers (legacy template + new test links), not just
     // the template. Otherwise audits created from the new tests-first
     // flow would always score 0.
-    // Graded answers (migration 053): a question earns its weight in
-    // proportion to the recorded percentage rather than all-or-nothing.
-    // COALESCE covers any row written before percent existed — pass
-    // scored full weight, fail scored none, which is exactly 100 and 0.
+    // Graded answers (migration 054): a question earns its weight in
+    // proportion to Yes's share of the APPLICABLE (Yes+No) samples — a
+    // question sampled partly N-A isn't penalized for the N-A share.
+    // A 100%-N-A question contributes to neither total nor earned weight,
+    // same as the old plain "na" response did.
     `SELECT
-       COALESCE(SUM(CASE WHEN r.response IN ('pass','fail') THEN i.weight ELSE 0 END), 0)::int AS total_weight,
+       COALESCE(SUM(CASE WHEN ${AUDIT_RESPONSE_ANSWERED_SQL} THEN i.weight ELSE 0 END), 0)::int AS total_weight,
        COALESCE(SUM(
-         CASE WHEN r.response IN ('pass','fail')
-              THEN i.weight * COALESCE(r.percent, CASE WHEN r.response = 'pass' THEN 100 ELSE 0 END) / 100.0
+         CASE WHEN ${AUDIT_RESPONSE_ANSWERED_SQL}
+              THEN i.weight * ${AUDIT_RESPONSE_PERFORMANCE_SQL} / 100.0
               ELSE 0 END
        ), 0)::float AS earned_weight,
        COALESCE(SUM(
-         CASE WHEN r.response IN ('pass','fail')
-               AND i.is_critical
-               AND COALESCE(r.percent, CASE WHEN r.response = 'pass' THEN 100 ELSE 0 END) < ${FINDING_THRESHOLD_PERCENT}
+         CASE WHEN i.is_critical AND ${AUDIT_RESPONSE_SHORTFALL_SQL}
               THEN 1 ELSE 0 END
        ), 0)::int AS critical_failed
      FROM checklist_items i
@@ -415,15 +437,11 @@ export async function submitAudit(
     [id, scorePct, maxScore, criticalFailed, summary]
   );
 
-  // Return the failed item IDs so the caller can spawn CAPAs.
+  // Return the failed item IDs so the caller can spawn CAPAs. A finding is
+  // any applicable answer that fell short of the threshold (migration 054)
+  // — not just an outright "No", and not one that was entirely N-A.
   const failed = await queryAll<{ item_id: number }>(
-    // A finding is now any answered question that fell short of the
-    // threshold, not just an outright "No" (migration 053).
-    `SELECT item_id FROM audit_responses
-     WHERE audit_id = $1
-       AND response IN ('pass','fail')
-       AND COALESCE(percent, CASE WHEN response = 'pass' THEN 100 ELSE 0 END)
-           < ${FINDING_THRESHOLD_PERCENT}`,
+    `SELECT item_id FROM audit_responses r WHERE audit_id = $1 AND ${AUDIT_RESPONSE_SHORTFALL_SQL}`,
     [id]
   );
   return {

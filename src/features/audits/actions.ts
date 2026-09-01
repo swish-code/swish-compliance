@@ -61,26 +61,32 @@ const ResponseSchema = z.object({
   audit_id: z.coerce.number().int().positive(),
   item_id: z.coerce.number().int().positive(),
   response: z.enum(["pass", "fail", "na"]).optional().nullable(),
-  /** Degree of compliance 0-100 (migration 053). */
-  percent: z.coerce.number().int().min(0).max(100).optional().nullable(),
+  /** How the sampled interactions broke down (migration 054). */
+  yes_percent: z.coerce.number().int().min(0).max(100).optional().nullable(),
+  no_percent: z.coerce.number().int().min(0).max(100).optional().nullable(),
+  na_percent: z.coerce.number().int().min(0).max(100).optional().nullable(),
   // Notes are now optional. The Test → Checklist quick-answer UI lets
   // the auditor click Yes/No/N/A and move on; they only have to type
   // a note when they actually want to capture context.
   notes: z.string().trim().optional().nullable(),
 });
 
+const AnswerSplitSchema = z
+  .object({
+    itemId: z.coerce.number().int().positive(),
+    response: z.enum(["pass", "fail", "na"]),
+    yesPercent: z.coerce.number().int().min(0).max(100),
+    noPercent: z.coerce.number().int().min(0).max(100),
+    naPercent: z.coerce.number().int().min(0).max(100),
+    notes: z.string().trim(),
+  })
+  .refine((a) => a.yesPercent + a.noPercent + a.naPercent === 100, {
+    message: "Yes/No/N-A percentages must add up to 100.",
+  });
+
 const BulkResponsesSchema = z.object({
   auditId: z.coerce.number().int().positive(),
-  answers: z
-    .array(
-      z.object({
-        itemId: z.coerce.number().int().positive(),
-        response: z.enum(["pass", "fail", "na"]),
-        percent: z.coerce.number().int().min(0).max(100).nullable(),
-        notes: z.string().trim(),
-      })
-    )
-    .max(2000),
+  answers: z.array(AnswerSplitSchema).max(2000),
 });
 
 const SubmitSchema = z.object({
@@ -374,7 +380,9 @@ export async function saveResponseAction(formData: FormData) {
     audit_id: parsed.audit_id,
     item_id: parsed.item_id,
     response: parsed.response ?? null,
-    percent: parsed.percent ?? null,
+    yes_percent: parsed.yes_percent ?? null,
+    no_percent: parsed.no_percent ?? null,
+    na_percent: parsed.na_percent ?? null,
     notes: parsed.notes ?? null,
     // Only touch the evidence columns when the client says it has something
     // new to write (file uploaded OR explicit removal). Plain Pass / notes
@@ -406,7 +414,9 @@ export async function saveResponsesBulkAction(input: {
   answers: {
     itemId: number;
     response: "pass" | "fail" | "na";
-    percent: number | null;
+    yesPercent: number;
+    noPercent: number;
+    naPercent: number;
     notes: string;
   }[];
 }): Promise<{ ok: true; saved: number } | { ok: false; error: string }> {
@@ -414,7 +424,10 @@ export async function saveResponsesBulkAction(input: {
 
   const parsed = BulkResponsesSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "Some answers were not in a valid format." };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Some answers were not in a valid format.",
+    };
   }
 
   const audit = await getAudit(parsed.data.auditId);
@@ -428,14 +441,20 @@ export async function saveResponsesBulkAction(input: {
     return { ok: false, error: "This audit is no longer in progress." };
   }
 
-  for (const a of parsed.data.answers) {
-    await upsertResponse({
-      audit_id: parsed.data.auditId,
-      item_id: a.itemId,
-      response: a.response,
-      percent: a.percent,
-      notes: a.notes || null,
-    });
+  try {
+    for (const a of parsed.data.answers) {
+      await upsertResponse({
+        audit_id: parsed.data.auditId,
+        item_id: a.itemId,
+        response: a.response,
+        yes_percent: a.yesPercent,
+        no_percent: a.noPercent,
+        na_percent: a.naPercent,
+        notes: a.notes || null,
+      });
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Save failed." };
   }
 
   revalidatePath(`/audits/${parsed.data.auditId}`);

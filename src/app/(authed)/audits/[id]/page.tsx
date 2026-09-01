@@ -80,15 +80,15 @@ export default async function AuditDetailPage({
     scopeRows.filter((r) => r.response).map((r) => r.item_id)
   ).size;
   const uniqueTotal = new Set(scopeRows.map((r) => r.item_id)).size;
-  // A "finding" is any answered question under the threshold, not just an
-  // outright No — answers are graded 0-100 (migration 053).
+  // A "finding" is any applicable answer under the threshold, not just an
+  // outright No, and not one that was entirely N-A (migration 054).
   const uniqueFailed = new Set(
     scopeRows
-      .filter(
-        (r) =>
-          (r.response === "pass" || r.response === "fail") &&
-          (r.percent ?? (r.response === "pass" ? 100 : 0)) < FINDING_THRESHOLD_PERCENT
-      )
+      .filter((r) => {
+        const applicable = (r.yes_percent ?? 0) + (r.no_percent ?? 0);
+        if (applicable === 0) return false;
+        return ((r.yes_percent ?? 0) / applicable) * 100 < FINDING_THRESHOLD_PERCENT;
+      })
       .map((r) => r.item_id)
   ).size;
 
@@ -104,7 +104,9 @@ export default async function AuditDetailPage({
         {
           itemId: r.item_id,
           response: r.response as "pass" | "fail" | "na" | null,
-          percent: r.percent,
+          yesPercent: r.yes_percent,
+          noPercent: r.no_percent,
+          naPercent: r.na_percent,
           notes: r.notes,
         },
       ])

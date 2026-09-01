@@ -24,7 +24,12 @@ export default function AuditSubmitSection({
   canCancel: boolean;
   cancelAction: (formData: FormData) => void | Promise<void>;
 }) {
-  const { dirtyIds, saveAll, saving } = useAuditAnswers();
+  const {
+    dirtyIds,
+    saveAll,
+    saving,
+    error: flushError,
+  } = useAuditAnswers();
   const [summary, setSummary] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, startSubmit] = useTransition();
@@ -39,7 +44,8 @@ export default function AuditSubmitSection({
       const flushed = await saveAll();
       if (!flushed) {
         setError(
-          "Your answers could not be saved, so the audit was not submitted. Fix the error above and try again."
+          flushError ??
+            "Your answers could not be saved, so the audit was not submitted. Fix the error above and try again."
         );
         return;
       }

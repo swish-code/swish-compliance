@@ -1,6 +1,9 @@
 import "server-only";
 import { queryAll, queryOne, execute } from "@/lib/db";
-import { FINDING_THRESHOLD_PERCENT } from "@/features/audits/types";
+import {
+  AUDIT_RESPONSE_SHORTFALL_SQL,
+  AUDIT_RESPONSE_PERFORMANCE_SQL,
+} from "@/features/audits/types";
 import type {
   Capa,
   CapaSeverity,
@@ -10,17 +13,9 @@ import type {
   CapaAuditorContext,
 } from "./types";
 
-/**
- * What counts as a finding on an audit response aliased `r`.
- *
- * Answers are graded 0-100 since migration 053, so a finding is any
- * answered question that fell short of the threshold — not just an
- * outright "No". COALESCE covers rows written before percent existed,
- * where pass/fail meant exactly 100/0.
- */
-const SHORTFALL_SQL = `r.response IN ('pass','fail')
-       AND COALESCE(r.percent, CASE WHEN r.response = 'pass' THEN 100 ELSE 0 END)
-           < ${FINDING_THRESHOLD_PERCENT}`;
+/** What counts as a finding on an audit response aliased `r` — see
+ *  AUDIT_RESPONSE_SHORTFALL_SQL (migration 054) for the exact rule. */
+const SHORTFALL_SQL = AUDIT_RESPONSE_SHORTFALL_SQL;
 
 const CAPA_SELECT = `
   c.id, c.code, c.title, c.description, c.severity, c.status,
@@ -124,6 +119,12 @@ export async function getCapaAuditorContext(
         ORDER BY ch.id LIMIT 1) AS test_name,
        i.question,
        r.response      AS auditor_response,
+       r.yes_percent, r.no_percent, r.na_percent,
+       -- NULL when there's no linked response at all (standalone CAPA) or
+       -- the question was 100% N-A, same "excluded" meaning as elsewhere.
+       CASE WHEN r.yes_percent IS NOT NULL AND (r.yes_percent + r.no_percent) > 0
+            THEN ROUND(r.yes_percent * 100.0 / (r.yes_percent + r.no_percent))::int
+            ELSE NULL END AS performance_percent,
        r.notes         AS auditor_note,
        r.evidence_url  AS auditor_evidence_url,
        r.evidence_name AS auditor_evidence_name,
@@ -350,7 +351,8 @@ export async function listAuditFindings(filters: {
         WHERE at.audit_id = a.id AND cci.checklist_item_id = i.id
         ORDER BY ch.id LIMIT 1) AS test_name,
        i.id AS item_id, i.code AS item_code, i.question, i.is_critical,
-       COALESCE(r.percent, CASE WHEN r.response = 'pass' THEN 100 ELSE 0 END) AS percent,
+       r.yes_percent, r.no_percent, r.na_percent,
+       ROUND(${AUDIT_RESPONSE_PERFORMANCE_SQL})::int AS performance_percent,
        r.notes        AS auditor_note,
        r.evidence_url, r.evidence_name, r.evidence_mime,
        ca.id          AS capa_id,
