@@ -68,6 +68,10 @@ export type Audit = {
   policy_id: number | null;
   policy_title: string | null;
   policy_code: string | null;
+  /** Every SOP this audit covers (migration 055). Empty only for audits
+   *  predating the junction with no policy_id at all. */
+  policy_ids: number[];
+  policy_titles: string[];
   framework_id: number | null;
   framework_name: string | null;
   framework_code: string | null;

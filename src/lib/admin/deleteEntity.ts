@@ -139,8 +139,18 @@ export async function getDeleteImpact(
           cascaded: false,
         },
         {
+          // Counts every audit that names this SOP at all (migration
+          // 055 — an audit can cover several), not just the ones where
+          // it happens to be the first/primary one.
           label: "Audits scoped to this SOP (will be unlinked, kept)",
-          count: await impactCount(`SELECT COUNT(*) n FROM audits WHERE policy_id = $1`, id),
+          count: await impactCount(
+            `SELECT COUNT(*) n FROM (
+               SELECT id FROM audits WHERE policy_id = $1
+               UNION
+               SELECT audit_id FROM audit_sops WHERE sop_id = $1
+             ) x`,
+            id
+          ),
           cascaded: false,
         },
       ];

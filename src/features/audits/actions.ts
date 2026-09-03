@@ -7,6 +7,7 @@ import { requireUser, canDeleteOrArchive } from "@/lib/auth/guard";
 import { execute } from "@/lib/db";
 import {
   createAudit,
+  insertAuditSops,
   upsertResponse,
   submitAudit,
   closeAudit,
@@ -35,9 +36,8 @@ const CreateSchema = z.object({
   }),
   location: z.string().trim().optional().nullable(),
   audit_date: z.string().optional().nullable(),
-  policy_id: z.coerce.number().int().positive({
-    message: "Policy / SOP is required.",
-  }),
+  // sop_ids (one or more) are read separately via selectedSopIds() — a
+  // repeated form field, not a single coercible value.
   // Scope selection. Controls and tests are NOT accepted from the client —
   // resolveScope() derives them from these three fields so a tampered form
   // can't widen an audit beyond what its scope covers.
@@ -94,6 +94,19 @@ const SubmitSchema = z.object({
   summary: z.string().optional().nullable(),
   spawn_capa: z.string().optional(),
 });
+
+/** Pull every selected SOP out of the multi-select — one or more repeated
+ *  "sop_ids" form entries (migration 055). */
+function selectedSopIds(formData: FormData): number[] {
+  const out: number[] = [];
+  for (const v of formData.getAll("sop_ids")) {
+    if (typeof v === "string" && v !== "") {
+      const n = Number(v);
+      if (Number.isInteger(n) && n > 0) out.push(n);
+    }
+  }
+  return Array.from(new Set(out));
+}
 
 /**
  * Editing rules for audits:
@@ -168,12 +181,21 @@ export async function createAuditAction(formData: FormData) {
     notes: blank(raw.notes),
   });
 
+  const sopIds = selectedSopIds(formData);
+  if (sopIds.length === 0) {
+    throw new Error("Pick at least one Policy / SOP.");
+  }
+  // Selecting several SOPs only makes sense as "audit everything under
+  // them" — force Full SOP regardless of what the (hidden, now-disabled)
+  // scope-type field carried over from a single-SOP selection.
+  const scopeType = sopIds.length > 1 ? "full_sop" : parsed.scope_type;
+
   // Derive the scope server-side. This is the authoritative walk — the
   // form only ever sends the *selection*, never the resulting rows.
   const scope = await resolveScope({
-    sopId: parsed.policy_id,
+    sopIds,
     departmentId: parsed.department_id,
-    scopeType: parsed.scope_type,
+    scopeType,
     domainId: parsed.domain_id,
     frameworkId: parsed.framework_id,
   });
@@ -188,7 +210,7 @@ export async function createAuditAction(formData: FormData) {
   // A Framework Audit pins one framework; the broader types cover many, so
   // only record framework_id when it's genuinely singular.
   const frameworkId =
-    parsed.scope_type === "framework"
+    scopeType === "framework"
       ? parsed.framework_id
       : scope.frameworkIds.length === 1
       ? scope.frameworkIds[0]
@@ -200,7 +222,9 @@ export async function createAuditAction(formData: FormData) {
     department_id: parsed.department_id,
     location: parsed.location,
     audit_date: parsed.audit_date,
-    policy_id: parsed.policy_id,
+    // policy_id stays the first selected SOP for backward compat — the
+    // full list lives in audit_sops (migration 055), written just below.
+    policy_id: sopIds[0],
     framework_id: frameworkId,
     domain_id: parsed.domain_id,
     // control_id stays single-valued for backwards compatibility: it only
@@ -210,7 +234,7 @@ export async function createAuditAction(formData: FormData) {
     end_at: parsed.end_at,
     assigned_to: parsed.assigned_to,
     auditor_id: user.id,
-    scope_type: parsed.scope_type,
+    scope_type: scopeType,
     // A typed-in name overrides picking a system user as the auditee.
     auditee_id: parsed.auditee_custom_name ? null : parsed.auditee_id,
     auditee_custom_name: parsed.auditee_custom_name,
@@ -218,6 +242,10 @@ export async function createAuditAction(formData: FormData) {
     objective: parsed.objective,
     notes: parsed.notes,
   });
+
+  // Every SOP this audit covers (migration 055) — policy_id above is just
+  // the first of these.
+  await insertAuditSops(id, sopIds);
 
   // Populate the audit_tests junction — this is what the audit detail page
   // reads to build the question list. Bulk-insert via a single VALUES list
@@ -238,8 +266,8 @@ export async function createAuditAction(formData: FormData) {
       user.email,
       id,
       JSON.stringify({
-        policy_id: parsed.policy_id,
-        scope_type: parsed.scope_type,
+        sop_ids: sopIds,
+        scope_type: scopeType,
         domain_id: parsed.domain_id ?? null,
         framework_id: frameworkId,
         framework_count: scope.frameworkIds.length,

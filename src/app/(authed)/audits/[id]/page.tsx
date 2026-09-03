@@ -150,8 +150,21 @@ export default async function AuditDetailPage({
               Audit scope
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <Field label="Policy / SOP">
-                {audit.policy_id ? (
+              <Field label={audit.policy_ids.length > 1 ? "Policies / SOPs" : "Policy / SOP"}>
+                {audit.policy_ids.length > 1 ? (
+                  <span className="flex flex-wrap gap-x-1.5 gap-y-1">
+                    {audit.policy_ids.map((id, i) => (
+                      <Link
+                        key={id}
+                        href={`/sops/${id}`}
+                        className="text-brand-700 hover:underline"
+                      >
+                        {audit.policy_titles[i]}
+                        {i < audit.policy_ids.length - 1 ? "," : ""}
+                      </Link>
+                    ))}
+                  </span>
+                ) : audit.policy_id ? (
                   <Link
                     href={`/sops/${audit.policy_id}`}
                     className="text-brand-700 hover:underline"

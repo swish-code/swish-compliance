@@ -22,6 +22,20 @@ const AUDIT_SELECT = `
   a.audit_date, a.status, a.score, a.max_score, a.critical_failed, a.summary,
   a.submitted_at, a.closed_at, a.created_at, a.updated_at,
   a.policy_id, p.title AS policy_title, p.code AS policy_code,
+  -- Every SOP this audit covers (migration 055). policy_id above is still
+  -- the first of these, kept for the joins that predate the junction.
+  COALESCE(
+    (SELECT array_agg(asop.sop_id ORDER BY sp.title)
+       FROM audit_sops asop JOIN sops sp ON sp.id = asop.sop_id
+       WHERE asop.audit_id = a.id),
+    ARRAY[]::int[]
+  ) AS policy_ids,
+  COALESCE(
+    (SELECT array_agg(sp.title ORDER BY sp.title)
+       FROM audit_sops asop JOIN sops sp ON sp.id = asop.sop_id
+       WHERE asop.audit_id = a.id),
+    ARRAY[]::text[]
+  ) AS policy_titles,
   a.framework_id, f.name AS framework_name, f.code AS framework_code,
   -- Scope chain (migration 028) + window/assignee (029)
   a.domain_id,  dom.name  AS domain_name,  dom.code  AS domain_code,
@@ -290,6 +304,18 @@ export async function createAudit(input: {
     ]
   );
   return row!.id;
+}
+
+/** Record every SOP an audit covers (migration 055) — policy_id on the
+ *  audits row itself is just the first of these, for backward-compat. */
+export async function insertAuditSops(auditId: number, sopIds: number[]): Promise<void> {
+  if (sopIds.length === 0) return;
+  const placeholders = sopIds.map((_, i) => `($1, $${i + 2})`).join(", ");
+  await execute(
+    `INSERT INTO audit_sops (audit_id, sop_id) VALUES ${placeholders}
+     ON CONFLICT DO NOTHING`,
+    [auditId, ...sopIds]
+  );
 }
 
 /**
