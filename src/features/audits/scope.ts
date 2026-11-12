@@ -65,7 +65,24 @@ export type ScopeGraph = {
   frameworks: ScopeGraphFramework[];
   controls: ScopeGraphControl[];
   tests: ScopeGraphTest[];
+  /** Every department each SOP applies to. A domain/framework that has no
+   *  department of its own is auditable under any of its SOP's. */
+  sopDepartments: { sop_id: number; department_id: number }[];
 };
+
+/**
+ * SQL predicate: does a domain/framework belong to department `param`?
+ * Its own department decides when it has one; with none, it follows the
+ * departments of its SOP — so content linked to a SOP without picking a
+ * department still shows up when that SOP's department is audited.
+ */
+function inDepartmentSql(ownDept: string, sop: string, param: string): string {
+  return `(${ownDept} = ${param} OR (${ownDept} IS NULL AND (
+            EXISTS (SELECT 1 FROM sop_departments sd
+                     WHERE sd.sop_id = ${sop} AND sd.department_id = ${param})
+            OR EXISTS (SELECT 1 FROM sops sx
+                        WHERE sx.id = ${sop} AND sx.department_id = ${param}))))`;
+}
 
 /**
  * The whole compliance graph, small enough (low thousands of rows at the
@@ -74,7 +91,7 @@ export type ScopeGraph = {
  * change.
  */
 export async function loadScopeGraph(): Promise<ScopeGraph> {
-  const [domains, frameworks, controls, tests] = await Promise.all([
+  const [domains, frameworks, controls, tests, sopDepartments] = await Promise.all([
     queryAll<ScopeGraphDomain>(
       `SELECT id, code, name, sop_id, department_id
        FROM domains WHERE is_active
@@ -106,8 +123,13 @@ export async function loadScopeGraph(): Promise<ScopeGraph> {
        ORDER BY ch.code NULLS LAST, ch.name
        LIMIT 3000`
     ),
+    queryAll<{ sop_id: number; department_id: number }>(
+      `SELECT sop_id, department_id FROM sop_departments
+       UNION
+       SELECT id, department_id FROM sops WHERE department_id IS NOT NULL`
+    ),
   ]);
-  return { domains, frameworks, controls, tests };
+  return { domains, frameworks, controls, tests, sopDepartments };
 }
 
 export type ResolveScopeInput = {
@@ -173,7 +195,7 @@ export async function resolveScope(
        WHERE f.id = $1
          AND f.is_active
          AND COALESCE(f.sop_id, d.sop_id) = $2
-         AND COALESCE(f.department_id, d.department_id) = $3`,
+         AND ${inDepartmentSql("COALESCE(f.department_id, d.department_id)", "COALESCE(f.sop_id, d.sop_id)", "$3")}`,
       [input.frameworkId, sopIds[0], departmentId]
     );
     if (frameworkRows.length === 0) {
@@ -192,7 +214,7 @@ export async function resolveScope(
        WHERE d.id = $1
          AND f.is_active
          AND d.sop_id = $2
-         AND d.department_id = $3`,
+         AND ${inDepartmentSql("d.department_id", "d.sop_id", "$3")}`,
       [input.domainId, sopIds[0], departmentId]
     );
   } else {
@@ -205,7 +227,7 @@ export async function resolveScope(
        LEFT JOIN domains d ON d.id = f.domain_id
        WHERE f.is_active
          AND COALESCE(f.sop_id, d.sop_id) = ANY($1::int[])
-         AND COALESCE(f.department_id, d.department_id) = $2`,
+         AND ${inDepartmentSql("COALESCE(f.department_id, d.department_id)", "COALESCE(f.sop_id, d.sop_id)", "$2")}`,
       [sopIds, departmentId]
     );
   }
